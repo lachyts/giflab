@@ -60,6 +60,10 @@ brew install python@3.11 ffmpeg gifsicle
 # Install animately-cli binary to PATH
 ```
 
+**Engine Paths:**
+- Animately engine: `/Users/lachlants/bin/launcher`
+- Gifsicle: `gifsicle`
+
 ### Windows/WSL
 ```bash
 choco install python ffmpeg gifsicle

@@ -79,7 +79,41 @@ giflab/
 
 ---
 
-## 3 Variant Matrix per GIF
+## 3 Compression Engine Architecture
+
+**Important**: All compression parameters (lossy, frame_keep, color_keep) must be applied **in a single pass** by the same engine. This is critical for efficiency since GIF recompilaton is inherently lossy.
+
+### Engine Responsibilities
+
+| Engine      | Handles                                           |
+|-------------|---------------------------------------------------|
+| `gifsicle`  | Lossy compression + frame reduction + color reduction |
+| `animately` | Lossy compression + frame reduction + color reduction |
+
+### Anti-Pattern (❌ Don't Do This)
+```
+1. Reduce frames → save temp.gif
+2. Apply color reduction → save temp2.gif  
+3. Apply lossy compression → save final.gif
+```
+
+### Correct Pattern (✅ Do This)
+```
+1. Single engine call with all parameters:
+   - lossy level
+   - frame_keep_ratio
+   - color_keep_count
+   → save final.gif
+```
+
+This approach:
+- Minimizes quality loss from multiple recompressions
+- Reduces I/O overhead
+- Allows engines to optimize the full parameter space together
+
+---
+
+## 4 Variant Matrix per GIF
 
 | frame_keep_ratio | color_keep_count | lossy values |
 |------------------|------------------|--------------|
@@ -121,9 +155,9 @@ Re-run with `--resume` continues where it left off, using the presence of render
 |---------|--------------------------------------------------------------------|--------|
 | **S0**  | Repo scaffold, Poetry, black/ruff, pytest.                         | ✅     |
 | **S1**  | `meta.py` — extract metadata + SHA + file-name; tests.             | ✅     |
-| **S2**  | `frame_keep.py`.                                                   | ⏳     |
-| **S3**  | `color_keep.py`.                                                   | ⏳     |
-| **S4**  | `lossy.py`.                                                        | ⏳     |
+| **S2**  | `lossy.py`.                                                        | ⏳     |
+| **S3**  | `frame_keep.py`.                                                   | ⏳     |
+| **S4**  | `color_keep.py`.                                                   | ⏳     |
 | **S5**  | `metrics.py`.                                                      | ⏳     |
 | **S6**  | `pipeline.py` + `io.py` (skip, resume, CSV append, move bad gifs). | ⏳     |
 | **S7**  | `cli.py` (`run` subcommand).                                       | ⏳     |
@@ -145,6 +179,10 @@ Re-run with `--resume` continues where it left off, using the presence of render
 |--------------------------------------------|------------------------------------------------|
 | `brew install python@3.11 ffmpeg gifsicle` | `choco install python ffmpeg gifsicle` or WSL2 |
 | Place `animately-cli` binary on PATH       | Same / WSL                                     |
+
+**Engine Paths:**
+- Animately engine: `/Users/lachlants/bin/launcher`
+- Gifsicle: `gifsicle`
 
 ```bash
 git clone https://…/giflab.git
