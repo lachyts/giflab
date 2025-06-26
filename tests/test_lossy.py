@@ -12,7 +12,8 @@ from giflab.lossy import (
     compress_with_gifsicle,
     compress_with_animately,
     validate_lossy_level,
-    apply_compression_with_all_params
+    apply_compression_with_all_params,
+    get_compression_estimate
 )
 
 
@@ -144,6 +145,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 10
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         # Mock successful subprocess
@@ -188,6 +190,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 20
+        mock_meta.orig_n_colors = 256
         mock_metadata.return_value = mock_meta
         
         mock_result = MagicMock()
@@ -224,6 +227,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 10
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         # Mock frame reduction arguments
@@ -259,6 +263,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 5
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -275,6 +280,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 5
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_run.side_effect = subprocess.TimeoutExpired("gifsicle", 300)
@@ -293,6 +299,7 @@ class TestCompressWithGifsicle:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 5
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_run.return_value = MagicMock()
@@ -316,6 +323,7 @@ class TestCompressWithAnimately:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 15
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_result = MagicMock()
@@ -355,6 +363,7 @@ class TestCompressWithAnimately:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 8
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_result = MagicMock()
@@ -381,7 +390,7 @@ class TestCompressWithAnimately:
         mock_exists.return_value = False
         
         with pytest.raises(RuntimeError, match="Animately launcher not found"):
-            compress_with_animately(Path("input.gif"), Path("output.gif"), 0)
+            compress_with_animately(Path("input.gif"), Path("output.gif"), 0, 1.0)
 
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
@@ -393,6 +402,7 @@ class TestCompressWithAnimately:
         # Mock metadata extraction
         mock_meta = MagicMock()
         mock_meta.orig_frames = 5
+        mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
         
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -406,50 +416,104 @@ class TestCompressWithAnimately:
 class TestApplyCompressionWithAllParams:
     """Tests for apply_compression_with_all_params function."""
 
-    @patch('giflab.lossy.apply_lossy_compression')
-    def test_delegates_to_lossy_compression(self, mock_apply_lossy):
-        """Test that function delegates to apply_lossy_compression."""
-        mock_apply_lossy.return_value = {"render_ms": 300, "engine": "gifsicle"}
+    @patch('giflab.lossy.compress_with_gifsicle')
+    @patch('pathlib.Path.exists')
+    def test_gifsicle_with_all_params(self, mock_exists, mock_compress):
+        """Test compression with all parameters using gifsicle."""
+        mock_exists.return_value = True
+        mock_compress.return_value = {
+            "render_ms": 300,
+            "engine": "gifsicle",
+            "lossy_level": 40,
+            "frame_keep_ratio": 0.8,
+            "color_keep_count": 64
+        }
         
         result = apply_compression_with_all_params(
             Path("input.gif"),
             Path("output.gif"),
             40,
             0.8,
-            64,  # color_keep_count (not yet implemented)
+            64,
             LossyEngine.GIFSICLE
         )
         
-        # Should call apply_lossy_compression with lossy and frame params
-        mock_apply_lossy.assert_called_once_with(
+        # Should call compress_with_gifsicle with all params
+        mock_compress.assert_called_once_with(
             Path("input.gif"),
             Path("output.gif"),
             40,
             0.8,
-            LossyEngine.GIFSICLE
+            64
         )
         
-        assert result == {"render_ms": 300, "engine": "gifsicle"}
+        assert result["lossy_level"] == 40
+        assert result["frame_keep_ratio"] == 0.8
+        assert result["color_keep_count"] == 64
 
-    @patch('giflab.lossy.apply_lossy_compression')
-    def test_defaults_work(self, mock_apply_lossy):
-        """Test that default parameters work correctly."""
-        mock_apply_lossy.return_value = {"render_ms": 150}
+    @patch('giflab.lossy.compress_with_animately')
+    @patch('pathlib.Path.exists')
+    def test_animately_with_all_params(self, mock_exists, mock_compress):
+        """Test compression with all parameters using animately."""
+        mock_exists.return_value = True
+        mock_compress.return_value = {
+            "render_ms": 400,
+            "engine": "animately",
+            "lossy_level": 120,
+            "frame_keep_ratio": 0.7,
+            "color_keep_count": 128
+        }
         
         result = apply_compression_with_all_params(
             Path("input.gif"),
             Path("output.gif"),
-            0,
-            1.0
+            120,
+            0.7,
+            128,
+            LossyEngine.ANIMATELY
         )
         
-        mock_apply_lossy.assert_called_once_with(
+        mock_compress.assert_called_once_with(
             Path("input.gif"),
             Path("output.gif"),
-            0,
-            1.0,
-            LossyEngine.GIFSICLE
+            120,
+            0.7,
+            128
         )
+        
+        assert result["engine"] == "animately"
+
+    def test_parameter_validation(self):
+        """Test that all parameters are validated."""
+        # Test invalid lossy level
+        with pytest.raises(ValueError, match="must be non-negative"):
+            apply_compression_with_all_params(
+                Path("input.gif"),
+                Path("output.gif"),
+                -1,
+                0.8,
+                64
+            )
+        
+        # Test invalid frame ratio
+        with pytest.raises(ValueError, match="not in supported ratios"):
+            apply_compression_with_all_params(
+                Path("input.gif"),
+                Path("output.gif"),
+                0,
+                0.33,  # Not in supported ratios
+                64
+            )
+        
+        # Test invalid color count
+        with pytest.raises(ValueError, match="not in supported counts"):
+            apply_compression_with_all_params(
+                Path("input.gif"),
+                Path("output.gif"),
+                0,
+                0.8,
+                32  # Not in supported counts
+            )
 
 
 class TestFrameKeepRatioValidation:
@@ -482,4 +546,130 @@ class TestFrameKeepRatioValidation:
                         0,
                         ratio,
                         LossyEngine.GIFSICLE
-                    ) 
+                    )
+
+
+class TestColorIntegration:
+    """Tests for color reduction integration in compression functions."""
+
+    @patch('giflab.lossy.build_gifsicle_color_args')
+    @patch('giflab.lossy.extract_gif_metadata')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('time.time')
+    def test_gifsicle_with_color_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_color_args):
+        """Test gifsicle compression with color reduction."""
+        mock_time.side_effect = [1000.0, 1000.5]  # 500ms execution
+        
+        # Mock metadata extraction
+        mock_meta = MagicMock()
+        mock_meta.orig_frames = 10
+        mock_meta.orig_n_colors = 256
+        mock_metadata.return_value = mock_meta
+        
+        # Mock color reduction arguments
+        mock_color_args.return_value = ["--colors", "64"]
+        
+        mock_result = MagicMock()
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+        mock_exists.return_value = True
+        
+        result = compress_with_gifsicle(Path("input.gif"), Path("output.gif"), 0, 1.0, 64)
+        
+        # Verify color reduction arguments are included
+        expected_cmd = ["gifsicle", "--optimize", "--colors", "64", "input.gif", "--output", "output.gif"]
+        mock_run.assert_called_once_with(
+            expected_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300
+        )
+        
+        # Verify color args function was called
+        mock_color_args.assert_called_once_with(64, 256)
+        
+        assert result["color_keep_count"] == 64
+        assert result["original_colors"] == 256
+
+    @patch('giflab.lossy.build_animately_color_args')
+    @patch('giflab.lossy.extract_gif_metadata')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('time.time')
+    def test_animately_with_color_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_color_args):
+        """Test animately compression with color reduction."""
+        mock_time.side_effect = [1000.0, 1001.0]  # 1000ms execution
+        
+        # Mock metadata extraction
+        mock_meta = MagicMock()
+        mock_meta.orig_frames = 15
+        mock_meta.orig_n_colors = 128
+        mock_metadata.return_value = mock_meta
+        
+        # Mock color reduction arguments
+        mock_color_args.return_value = ["--colors", "64"]
+        
+        mock_result = MagicMock()
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+        mock_exists.return_value = True
+        
+        result = compress_with_animately(Path("input.gif"), Path("output.gif"), 40, 0.8, 64)
+        
+        # Verify color args function was called
+        mock_color_args.assert_called_once_with(64, 128)
+        
+        assert result["color_keep_count"] == 64
+        assert result["original_colors"] == 128
+
+
+class TestGetCompressionEstimate:
+    """Tests for get_compression_estimate function."""
+
+    @patch('giflab.lossy.extract_gif_metadata')
+    @patch('pathlib.Path.exists')
+    def test_compression_estimate(self, mock_exists, mock_metadata):
+        """Test compression estimation."""
+        mock_exists.return_value = True
+        
+        # Mock metadata
+        mock_meta = MagicMock()
+        mock_meta.orig_frames = 20
+        mock_meta.orig_n_colors = 256
+        mock_meta.orig_kilobytes = 1000.0
+        mock_metadata.return_value = mock_meta
+        
+        estimate = get_compression_estimate(
+            Path("test.gif"),
+            40,    # lossy level
+            0.8,   # frame keep ratio (80% of frames)
+            128    # color keep count
+        )
+        
+        assert estimate["original_size_kb"] == 1000.0
+        assert estimate["estimated_size_kb"] > 0
+        assert estimate["estimated_compression_ratio"] > 1.0
+        assert estimate["frame_reduction_percent"] == 20.0  # 1 - 0.8 = 0.2 = 20%
+        assert estimate["color_reduction_percent"] == 50.0  # (256 - 128) / 256 = 50%
+        assert estimate["target_frames"] == 16  # 80% of 20
+        assert estimate["target_colors"] == 128
+        assert estimate["lossy_level"] == 40
+        assert estimate["quality_loss_estimate"] >= 0
+
+    def test_parameter_validation_in_estimate(self):
+        """Test parameter validation in compression estimate."""
+        with pytest.raises(ValueError, match="not in supported ratios"):
+            get_compression_estimate(Path("test.gif"), 0, 0.33, 128)
+        
+        with pytest.raises(ValueError, match="not in supported counts"):
+            get_compression_estimate(Path("test.gif"), 0, 0.8, 32)
+
+    @patch('pathlib.Path.exists')
+    def test_missing_file_estimate(self, mock_exists):
+        """Test error when input file doesn't exist."""
+        mock_exists.return_value = False
+        
+        with pytest.raises(IOError, match="Input file not found"):
+            get_compression_estimate(Path("missing.gif"), 0, 0.8, 128) 

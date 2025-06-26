@@ -12,6 +12,12 @@ from .frame_keep import (
     validate_frame_keep_ratio,
     get_frame_reduction_info
 )
+from .color_keep import (
+    build_gifsicle_color_args,
+    build_animately_color_args,
+    validate_color_keep_count,
+    count_gif_colors
+)
 from .meta import extract_gif_metadata
 
 
@@ -69,15 +75,17 @@ def compress_with_gifsicle(
     input_path: Path,
     output_path: Path,
     lossy_level: int,
-    frame_keep_ratio: float = 1.0
+    frame_keep_ratio: float = 1.0,
+    color_keep_count: Optional[int] = None
 ) -> Dict[str, Any]:
-    """Compress GIF using gifsicle with lossy and frame reduction options.
+    """Compress GIF using gifsicle with lossy, frame reduction, and color reduction options.
     
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
         lossy_level: Lossy compression level for gifsicle
         frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
+        color_keep_count: Number of colors to keep (optional)
         
     Returns:
         Dictionary with compression metadata
@@ -85,10 +93,11 @@ def compress_with_gifsicle(
     Raises:
         RuntimeError: If gifsicle command fails
     """
-    # Get GIF metadata for frame information
+    # Get GIF metadata for frame and color information
     try:
         metadata = extract_gif_metadata(input_path)
         total_frames = metadata.orig_frames
+        original_colors = metadata.orig_n_colors
     except Exception as e:
         raise RuntimeError(f"Failed to extract metadata from {input_path}: {str(e)}")
     
@@ -103,6 +112,12 @@ def compress_with_gifsicle(
     if frame_keep_ratio < 1.0:
         frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
         cmd.extend(frame_args)
+    
+    # Add color reduction arguments
+    if color_keep_count is not None:
+        validate_color_keep_count(color_keep_count)
+        color_args = build_gifsicle_color_args(color_keep_count, original_colors)
+        cmd.extend(color_args)
     
     # Add input and output
     cmd.extend([str(input_path), "--output", str(output_path)])
@@ -131,7 +146,9 @@ def compress_with_gifsicle(
             "engine": "gifsicle",
             "lossy_level": lossy_level,
             "frame_keep_ratio": frame_keep_ratio,
+            "color_keep_count": color_keep_count,
             "original_frames": total_frames,
+            "original_colors": original_colors,
             "command": " ".join(cmd),
             "stderr": result.stderr if result.stderr else None
         }
@@ -150,15 +167,17 @@ def compress_with_animately(
     input_path: Path,
     output_path: Path,
     lossy_level: int,
-    frame_keep_ratio: float = 1.0
+    frame_keep_ratio: float = 1.0,
+    color_keep_count: Optional[int] = None
 ) -> Dict[str, Any]:
-    """Compress GIF using animately CLI with lossy and frame reduction options.
+    """Compress GIF using animately CLI with lossy, frame reduction, and color reduction options.
     
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
         lossy_level: Lossy compression level for animately
         frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
+        color_keep_count: Number of colors to keep (optional)
         
     Returns:
         Dictionary with compression metadata
@@ -173,10 +192,11 @@ def compress_with_animately(
     if not Path(animately_path).exists():
         raise RuntimeError(f"Animately launcher not found at: {animately_path}")
     
-    # Get GIF metadata for frame information
+    # Get GIF metadata for frame and color information
     try:
         metadata = extract_gif_metadata(input_path)
         total_frames = metadata.orig_frames
+        original_colors = metadata.orig_n_colors
     except Exception as e:
         raise RuntimeError(f"Failed to extract metadata from {input_path}: {str(e)}")
     
@@ -191,6 +211,12 @@ def compress_with_animately(
     if frame_keep_ratio < 1.0:
         frame_args = build_animately_frame_args(frame_keep_ratio, total_frames)
         cmd.extend(frame_args)
+    
+    # Add color reduction arguments
+    if color_keep_count is not None:
+        validate_color_keep_count(color_keep_count)
+        color_args = build_animately_color_args(color_keep_count, original_colors)
+        cmd.extend(color_args)
     
     # Add input and output
     cmd.extend([str(input_path), str(output_path)])
@@ -219,7 +245,9 @@ def compress_with_animately(
             "engine": "animately",
             "lossy_level": lossy_level,
             "frame_keep_ratio": frame_keep_ratio,
+            "color_keep_count": color_keep_count,
             "original_frames": total_frames,
+            "original_colors": original_colors,
             "command": " ".join(cmd),
             "stderr": result.stderr if result.stderr else None
         }
@@ -261,30 +289,109 @@ def apply_compression_with_all_params(
     output_path: Path,
     lossy_level: int,
     frame_keep_ratio: float,
-    color_keep_count: Optional[int] = None,
+    color_keep_count: int,
     engine: LossyEngine = LossyEngine.GIFSICLE
 ) -> Dict[str, Any]:
     """Apply compression with all parameters (lossy, frame, color) in a single pass.
     
-    This function will be extended in stage 4 to include color reduction.
+    This is the main function for single-pass compression with full parameter support.
     
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
         lossy_level: Lossy compression level
         frame_keep_ratio: Ratio of frames to keep
-        color_keep_count: Number of colors to keep (future implementation)
+        color_keep_count: Number of colors to keep
         engine: Compression engine to use
         
     Returns:
         Dictionary with compression metadata
+        
+    Raises:
+        ValueError: If any parameter is invalid
+        IOError: If input file cannot be read or output cannot be written
+        RuntimeError: If compression engine fails
     """
-    # For now, just call the lossy compression with frame reduction
-    # Color reduction will be added in stage 4
-    return apply_lossy_compression(
-        input_path,
-        output_path,
-        lossy_level,
-        frame_keep_ratio,
-        engine
-    ) 
+    # Validate all parameters
+    if lossy_level < 0:
+        raise ValueError(f"lossy_level must be non-negative, got {lossy_level}")
+    
+    validate_frame_keep_ratio(frame_keep_ratio)
+    validate_color_keep_count(color_keep_count)
+    
+    if not input_path.exists():
+        raise IOError(f"Input file not found: {input_path}")
+    
+    # Ensure output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Dispatch to appropriate engine with all parameters
+    if engine == LossyEngine.GIFSICLE:
+        return compress_with_gifsicle(
+            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count
+        )
+    elif engine == LossyEngine.ANIMATELY:
+        return compress_with_animately(
+            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count
+        )
+    else:
+        raise ValueError(f"Unsupported engine: {engine}")
+
+
+def get_compression_estimate(
+    input_path: Path,
+    lossy_level: int,
+    frame_keep_ratio: float,
+    color_keep_count: int
+) -> Dict[str, Any]:
+    """Estimate compression effects without actually compressing the file.
+    
+    Args:
+        input_path: Path to input GIF file
+        lossy_level: Lossy compression level
+        frame_keep_ratio: Ratio of frames to keep
+        color_keep_count: Number of colors to keep
+        
+    Returns:
+        Dictionary with compression estimates
+        
+    Raises:
+        IOError: If input file cannot be read
+        ValueError: If parameters are invalid
+    """
+    validate_frame_keep_ratio(frame_keep_ratio)
+    validate_color_keep_count(color_keep_count)
+    
+    if not input_path.exists():
+        raise IOError(f"Input file not found: {input_path}")
+    
+    try:
+        # Get original metadata
+        metadata = extract_gif_metadata(input_path)
+        
+        # Calculate frame reduction estimate
+        target_frames = max(1, int(metadata.orig_frames * frame_keep_ratio))
+        frame_reduction = (metadata.orig_frames - target_frames) / metadata.orig_frames
+        
+        # Calculate color reduction estimate
+        target_colors = min(color_keep_count, metadata.orig_n_colors)
+        color_reduction = (metadata.orig_n_colors - target_colors) / metadata.orig_n_colors if metadata.orig_n_colors > 0 else 0.0
+        
+        # Rough size estimate (very approximate)
+        size_reduction_estimate = frame_reduction * 0.6 + color_reduction * 0.3 + (lossy_level / 120) * 0.1
+        estimated_size_kb = metadata.orig_kilobytes * (1.0 - size_reduction_estimate)
+        
+        return {
+            "original_size_kb": metadata.orig_kilobytes,
+            "estimated_size_kb": max(0.1, estimated_size_kb),  # Minimum 0.1KB
+            "estimated_compression_ratio": metadata.orig_kilobytes / max(0.1, estimated_size_kb),
+            "frame_reduction_percent": frame_reduction * 100.0,
+            "color_reduction_percent": color_reduction * 100.0,
+            "target_frames": target_frames,
+            "target_colors": target_colors,
+            "lossy_level": lossy_level,
+            "quality_loss_estimate": min(100.0, lossy_level / 120 * 50 + frame_reduction * 30 + color_reduction * 20)
+        }
+        
+    except Exception as e:
+        raise IOError(f"Error estimating compression for {input_path}: {str(e)}") 
