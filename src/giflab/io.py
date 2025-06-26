@@ -1,0 +1,194 @@
+"""I/O utilities for atomic writes, CSV operations, and error logging."""
+
+import csv
+import json
+import logging
+import tempfile
+import shutil
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from contextlib import contextmanager
+from datetime import datetime
+
+
+def setup_logging(log_dir: Path, log_level: str = "INFO") -> logging.Logger:
+    """Set up logging configuration for GifLab.
+    
+    Args:
+        log_dir: Directory to store log files
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+        
+    Returns:
+        Configured logger instance
+    """
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create timestamped log file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"giflab_{timestamp}.log"
+    
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    
+    return logging.getLogger("giflab")
+
+
+@contextmanager
+def atomic_write(target_path: Path, mode: str = "w"):
+    """Context manager for atomic file writes using temporary files.
+    
+    Args:
+        target_path: Final path where file should be written
+        mode: File open mode
+        
+    Yields:
+        File handle for writing
+        
+    Example:
+        with atomic_write(Path("data.json")) as f:
+            json.dump(data, f)
+    """
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Create temporary file in same directory as target
+    temp_dir = target_path.parent
+    with tempfile.NamedTemporaryFile(
+        mode=mode, 
+        dir=temp_dir, 
+        delete=False,
+        suffix=f".tmp_{target_path.name}"
+    ) as temp_file:
+        try:
+            yield temp_file
+            temp_file.flush()
+            # Atomic move on POSIX systems
+            shutil.move(temp_file.name, target_path)
+        except Exception:
+            # Clean up temp file on error
+            Path(temp_file.name).unlink(missing_ok=True)
+            raise
+
+
+def append_csv_row(csv_path: Path, row_data: Dict[str, Any], fieldnames: List[str]) -> None:
+    """Atomically append a row to a CSV file.
+    
+    Args:
+        csv_path: Path to CSV file
+        row_data: Dictionary of row data to append
+        fieldnames: List of CSV column names
+        
+    Raises:
+        IOError: If file cannot be written
+    """
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Check if file exists and has header
+    file_exists = csv_path.exists()
+    
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        
+        # Write header if file is new
+        if not file_exists:
+            writer.writeheader()
+        
+        # Write the row
+        writer.writerow(row_data)
+
+
+def read_csv_as_dicts(csv_path: Path) -> List[Dict[str, Any]]:
+    """Read CSV file and return as list of dictionaries.
+    
+    Args:
+        csv_path: Path to CSV file
+        
+    Returns:
+        List of dictionaries representing CSV rows
+        
+    Raises:
+        IOError: If file cannot be read
+    """
+    rows = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def save_json(data: Dict[str, Any], json_path: Path) -> None:
+    """Atomically save data as JSON file.
+    
+    Args:
+        data: Data to save as JSON
+        json_path: Path where JSON should be saved
+        
+    Raises:
+        IOError: If file cannot be written
+    """
+    with atomic_write(json_path) as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def load_json(json_path: Path) -> Dict[str, Any]:
+    """Load JSON data from file.
+    
+    Args:
+        json_path: Path to JSON file
+        
+    Returns:
+        Parsed JSON data
+        
+    Raises:
+        IOError: If file cannot be read
+        json.JSONDecodeError: If JSON is invalid
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:
+    """Move a corrupted/unreadable GIF to the bad_gifs directory.
+    
+    Args:
+        gif_path: Path to the bad GIF file
+        bad_gifs_dir: Directory for bad GIFs
+        
+    Returns:
+        Path where the bad GIF was moved
+        
+    Raises:
+        IOError: If file cannot be moved
+    """
+    bad_gifs_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Preserve original weird filenames
+    dest_path = bad_gifs_dir / gif_path.name
+    
+    # Handle name conflicts
+    counter = 1
+    while dest_path.exists():
+        stem = gif_path.stem
+        suffix = gif_path.suffix
+        dest_path = bad_gifs_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+    
+    shutil.move(str(gif_path), str(dest_path))
+    return dest_path
+
+
+def ensure_directories(*paths: Path) -> None:
+    """Ensure that all specified directories exist.
+    
+    Args:
+        *paths: Directory paths to create
+    """
+    for path in paths:
+        path.mkdir(parents=True, exist_ok=True) 
