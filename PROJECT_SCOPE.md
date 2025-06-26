@@ -155,7 +155,7 @@ Re-run with `--resume` continues where it left off, using the presence of render
 |---------|--------------------------------------------------------------------|--------|
 | **S0**  | Repo scaffold, Poetry, black/ruff, pytest.                         | ✅     |
 | **S1**  | `meta.py` — extract metadata + SHA + file-name; tests.             | ✅     |
-| **S2**  | `lossy.py`.                                                        | ⏳     |
+| **S2**  | `lossy.py`.                                                        | ✅     |
 | **S3**  | `frame_keep.py`.                                                   | ⏳     |
 | **S4**  | `color_keep.py`.                                                   | ⏳     |
 | **S5**  | `metrics.py`.                                                      | ⏳     |
