@@ -117,19 +117,25 @@ Re-run with `--resume` continues where it left off, using the presence of render
 
 ## 5 Implementation Stages (Cursor Tasks)
 
-| Stage   | Deliverable                                                        |
-|---------|--------------------------------------------------------------------|
-| **S0**  | Repo scaffold, Poetry, black/ruff, pytest.                         |
-| **S1**  | `meta.py` — extract metadata + SHA + file-name; tests.             |
-| **S2**  | `frame_keep.py`.                                                   |
-| **S3**  | `color_keep.py`.                                                   |
-| **S4**  | `lossy.py`.                                                        |
-| **S5**  | `metrics.py`.                                                      |
-| **S6**  | `pipeline.py` + `io.py` (skip, resume, CSV append, move bad gifs). |
-| **S7**  | `cli.py` (`run` subcommand).                                       |
-| **S8**  | `tests/test_resume.py`.                                            |
-| **S9**  | `tagger.py` + `tag_pipeline.py` + `cli tag`.                       |
-| **S10** | notebooks 01 & 02.                                                 |
+| Stage   | Deliverable                                                        | Status |
+|---------|--------------------------------------------------------------------|--------|
+| **S0**  | Repo scaffold, Poetry, black/ruff, pytest.                         | ✅     |
+| **S1**  | `meta.py` — extract metadata + SHA + file-name; tests.             | ✅     |
+| **S2**  | `frame_keep.py`.                                                   | ⏳     |
+| **S3**  | `color_keep.py`.                                                   | ⏳     |
+| **S4**  | `lossy.py`.                                                        | ⏳     |
+| **S5**  | `metrics.py`.                                                      | ⏳     |
+| **S6**  | `pipeline.py` + `io.py` (skip, resume, CSV append, move bad gifs). | ⏳     |
+| **S7**  | `cli.py` (`run` subcommand).                                       | ⏳     |
+| **S8**  | `tests/test_resume.py`.                                            | ⏳     |
+| **S9**  | `tagger.py` + `tag_pipeline.py` + `cli tag`.                       | ⏳     |
+| **S10** | notebooks 01 & 02.                                                 | ⏳     |
+
+**Status Legend:**
+- ⏳ = Not started
+- 🔄 = In progress  
+- ✅ = Completed
+- ❌ = Blocked/Issues
 
 ---
 

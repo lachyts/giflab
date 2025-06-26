@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
+import numpy as np
 
 from PIL import Image
 
@@ -53,9 +54,83 @@ def extract_gif_metadata(file_path: Path) -> GifMetadata:
         ValueError: If file is not a valid GIF
         IOError: If file cannot be read
     """
-    # TODO: Implement GIF metadata extraction
-    # This will be implemented in Stage 1 (S1)
-    raise NotImplementedError("GIF metadata extraction not yet implemented")
+    if not file_path.exists():
+        raise IOError(f"File not found: {file_path}")
+    
+    # Compute file hash and size
+    gif_sha = compute_file_sha256(file_path)
+    file_size_bytes = file_path.stat().st_size
+    orig_kilobytes = file_size_bytes / 1024.0
+    
+    try:
+        # Open GIF with PIL
+        with Image.open(file_path) as img:
+            if img.format != 'GIF':
+                raise ValueError(f"File is not a GIF: {file_path}")
+            
+            # Basic dimensions
+            orig_width, orig_height = img.size
+            
+            # Count frames
+            frame_count = 0
+            durations = []
+            
+            try:
+                while True:
+                    frame_count += 1
+                    # Get frame duration in milliseconds
+                    duration = img.info.get('duration', 100)  # Default 100ms if not specified
+                    durations.append(duration)
+                    img.seek(img.tell() + 1)
+            except EOFError:
+                # End of frames reached
+                pass
+            
+            # Calculate average FPS from frame durations
+            if durations:
+                avg_duration_ms = sum(durations) / len(durations)
+                orig_fps = 1000.0 / avg_duration_ms if avg_duration_ms > 0 else 10.0
+            else:
+                orig_fps = 10.0  # Default fallback
+            
+            # Count unique colors by examining palette
+            img.seek(0)  # Go back to first frame
+            
+            if img.mode == 'P':  # Palette mode
+                # Get palette and count unique colors
+                palette = img.getpalette()
+                if palette:
+                    # Palette is in RGB format, so divide by 3 to get color count
+                    orig_n_colors = len(set(tuple(palette[i:i+3]) for i in range(0, len(palette), 3)))
+                else:
+                    orig_n_colors = 256  # Default max for palette mode
+            else:
+                # Convert to palette mode to count colors
+                quantized = img.quantize(colors=256)
+                palette = quantized.getpalette()
+                if palette:
+                    orig_n_colors = len(set(tuple(palette[i:i+3]) for i in range(0, len(palette), 3)))
+                else:
+                    orig_n_colors = 256
+            
+            # Calculate entropy for the first frame
+            img.seek(0)
+            entropy = calculate_entropy(img)
+            
+    except Exception as e:
+        raise ValueError(f"Error processing GIF {file_path}: {str(e)}")
+    
+    return GifMetadata(
+        gif_sha=gif_sha,
+        orig_filename=file_path.name,
+        orig_kilobytes=orig_kilobytes,
+        orig_width=orig_width,
+        orig_height=orig_height,
+        orig_frames=frame_count,
+        orig_fps=round(orig_fps, 2),
+        orig_n_colors=orig_n_colors,
+        entropy=entropy
+    )
 
 
 def calculate_entropy(image: Image.Image) -> float:
@@ -67,6 +142,32 @@ def calculate_entropy(image: Image.Image) -> float:
     Returns:
         Entropy value as float
     """
-    # TODO: Implement entropy calculation
-    # This will be implemented in Stage 1 (S1)
-    raise NotImplementedError("Entropy calculation not yet implemented") 
+    # Convert to grayscale if needed
+    if image.mode != 'L':
+        gray_image = image.convert('L')
+    else:
+        gray_image = image
+    
+    # Convert to numpy array
+    img_array = np.array(gray_image)
+    
+    # Calculate histogram
+    histogram, _ = np.histogram(img_array, bins=256, range=(0, 256))
+    
+    # Normalize histogram to get probabilities
+    histogram = histogram / histogram.sum()
+    
+    # Remove zero probabilities to avoid log(0)
+    histogram = histogram[histogram > 0]
+    
+    # Handle edge case where image is completely uniform
+    if len(histogram) <= 1:
+        return 0.0
+    
+    # Calculate Shannon entropy: -sum(p * log2(p))
+    entropy = -np.sum(histogram * np.log2(histogram))
+    
+    # Ensure non-negative result (handle floating point precision issues)
+    entropy = max(0.0, entropy)
+    
+    return round(entropy, 3) 
