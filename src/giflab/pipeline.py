@@ -140,17 +140,18 @@ class CompressionPipeline:
                 # Extract metadata
                 metadata = extract_gif_metadata(gif_path)
                 
+                # Create per-GIF folder name: {original_filename}_{gif_sha}
+                folder_name = self._create_gif_folder_name(metadata.orig_filename, metadata.gif_sha)
+                gif_folder = self.path_config.RENDERS_DIR / folder_name
+                
                 # Generate jobs for all compression variants
                 for engine in self.compression_config.ENGINES:
                     for lossy in self.compression_config.LOSSY_LEVELS:
                         for ratio in self.compression_config.FRAME_KEEP_RATIOS:
                             for colors in self.compression_config.COLOR_KEEP_COUNTS:
-                                # Generate output filename
-                                output_name = (
-                                    f"{metadata.gif_sha}_{engine}_"
-                                    f"l{lossy}_r{ratio:.2f}_c{colors}.gif"
-                                )
-                                output_path = self.path_config.RENDERS_DIR / output_name
+                                # Generate clean output filename within the GIF's folder
+                                output_filename = f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+                                output_path = gif_folder / output_filename
                                 
                                 job = CompressionJob(
                                     gif_path=gif_path,
@@ -174,6 +175,33 @@ class CompressionPipeline:
         
         self.logger.info(f"Generated {len(jobs)} compression jobs")
         return jobs
+    
+    def _create_gif_folder_name(self, orig_filename: str, gif_sha: str) -> str:
+        """Create a filesystem-safe folder name for a GIF and its renders.
+        
+        Args:
+            orig_filename: Original filename of the GIF
+            gif_sha: SHA hash of the GIF
+            
+        Returns:
+            Safe folder name in format: {sanitized_filename}_{sha}
+        """
+        # Remove file extension
+        name_without_ext = Path(orig_filename).stem
+        
+        # Sanitize filename for cross-platform compatibility
+        # Replace problematic characters with underscores
+        safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+        sanitized_name = "".join(c if c in safe_chars else "_" for c in name_without_ext)
+        
+        # Trim to reasonable length (keep space for SHA and underscore)
+        max_name_length = 200  # Leave room for SHA (64 chars) + underscore + filesystem limits
+        if len(sanitized_name) > max_name_length:
+            sanitized_name = sanitized_name[:max_name_length].rstrip("_")
+        
+        # Use full SHA for guaranteed uniqueness and reverse lookup capability
+        # This ensures we can always trace back to the original file
+        return f"{sanitized_name}_{gif_sha}"
     
     def _load_existing_csv_records(self, csv_path: Path) -> Set[Tuple[str, str, int, float, int]]:
         """Load existing CSV records to identify completed jobs.
@@ -277,6 +305,9 @@ class CompressionPipeline:
             RuntimeError: If compression or metrics calculation fails
         """
         try:
+            # Ensure the per-GIF folder exists
+            job.output_path.parent.mkdir(parents=True, exist_ok=True)
+            
             # Convert engine string to enum
             engine_enum = LossyEngine.GIFSICLE if job.engine == "gifsicle" else LossyEngine.ANIMATELY
             
@@ -440,6 +471,58 @@ class CompressionPipeline:
             "total_jobs": len(all_jobs),
             "csv_path": str(csv_path)
         }
+    
+    def find_original_gif_by_sha(self, gif_sha: str, raw_dir: Path) -> Optional[Path]:
+        """Find the original GIF file using its SHA hash.
+        
+        Args:
+            gif_sha: SHA256 hash of the GIF content
+            raw_dir: Directory containing original GIF files
+            
+        Returns:
+            Path to original GIF file, or None if not found
+        """
+        for gif_path in raw_dir.glob("*.gif"):
+            try:
+                metadata = extract_gif_metadata(gif_path)
+                if metadata.gif_sha == gif_sha:
+                    return gif_path
+            except Exception:
+                # Skip files that can't be processed
+                continue
+        
+        # Also check uppercase .GIF files
+        for gif_path in raw_dir.glob("*.GIF"):
+            try:
+                metadata = extract_gif_metadata(gif_path)
+                if metadata.gif_sha == gif_sha:
+                    return gif_path
+            except Exception:
+                continue
+        
+        return None
+    
+    def find_original_gif_by_folder_name(self, folder_name: str, raw_dir: Path) -> Optional[Path]:
+        """Find the original GIF file using a render folder name.
+        
+        Args:
+            folder_name: Name of the render folder (e.g., "funny_cat_abc123def...")
+            raw_dir: Directory containing original GIF files
+            
+        Returns:
+            Path to original GIF file, or None if not found
+        """
+        # Extract SHA from folder name (everything after the last underscore)
+        if "_" not in folder_name:
+            return None
+        
+        gif_sha = folder_name.split("_")[-1]
+        
+        # Validate SHA format (64 hex characters)
+        if len(gif_sha) != 64 or not all(c in "0123456789abcdef" for c in gif_sha.lower()):
+            return None
+        
+        return self.find_original_gif_by_sha(gif_sha, raw_dir)
 
 
 def execute_single_job(job: CompressionJob) -> CompressionResult:

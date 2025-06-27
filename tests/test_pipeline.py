@@ -83,6 +83,10 @@ def sample_job(temp_dirs, sample_gif_metadata):
     gif_path = temp_dirs["raw"] / "test.gif"
     gif_path.touch()  # Create empty test file
     
+    # Create path that matches new per-GIF folder structure  
+    gif_folder = temp_dirs["renders"] / "test_abc123def456"
+    output_path = gif_folder / "gifsicle_l0_r1.00_c256.gif"
+    
     return CompressionJob(
         gif_path=gif_path,
         metadata=sample_gif_metadata,
@@ -90,7 +94,7 @@ def sample_job(temp_dirs, sample_gif_metadata):
         lossy=0,
         frame_keep_ratio=1.0,
         color_keep_count=256,
-        output_path=temp_dirs["renders"] / "output.gif"
+        output_path=output_path
     )
 
 
@@ -156,6 +160,30 @@ class TestCompressionPipeline:
         assert first_job.lossy in compression_config.LOSSY_LEVELS
         assert first_job.frame_keep_ratio in compression_config.FRAME_KEEP_RATIOS
         assert first_job.color_keep_count in compression_config.COLOR_KEEP_COUNTS
+        
+        # Check that output path uses per-GIF folder structure
+        assert "test_abc123def456" in str(first_job.output_path)
+        assert first_job.output_path.name.startswith("gifsicle_l")
+        assert first_job.output_path.name.endswith(".gif")
+    
+    def test_create_gif_folder_name(self, test_config):
+        """Test GIF folder name creation."""
+        compression_config, path_config = test_config
+        pipeline = CompressionPipeline(compression_config, path_config)
+        
+        # Test normal filename
+        folder_name = pipeline._create_gif_folder_name("test.gif", "abcdef123456789")
+        assert folder_name == "test_abcdef123456789"
+        
+        # Test filename with special characters
+        folder_name = pipeline._create_gif_folder_name("weird name (2)!@#.gif", "xyz789abc123def")
+        assert folder_name == "weird_name__2_____xyz789abc123def"
+        
+        # Test very long filename
+        long_name = "a" * 250 + ".gif"
+        folder_name = pipeline._create_gif_folder_name(long_name, "123456789abc")
+        assert len(folder_name) <= 264  # 200 + 64 + 1 underscore (full SHA)
+        assert folder_name.endswith("_123456789abc")
     
     @patch('src.giflab.pipeline.move_bad_gif')
     @patch('src.giflab.pipeline.extract_gif_metadata')
@@ -208,7 +236,7 @@ def456,test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,20
         
         csv_path.write_text(csv_content)
         
-        # Create output file to simulate completion
+        # Create output file in per-GIF folder to simulate completion
         sample_job.output_path.parent.mkdir(parents=True, exist_ok=True)
         sample_job.output_path.touch()
         
@@ -254,18 +282,20 @@ def456,test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,20
         with pytest.raises(RuntimeError, match="Job execution failed"):
             pipeline.execute_job(sample_job)
     
+    @patch('src.giflab.pipeline.ProcessPoolExecutor')
     @patch('src.giflab.pipeline.extract_gif_metadata')
-    @patch('src.giflab.pipeline.execute_single_job')
-    def test_run_success(self, mock_execute_job, mock_extract_metadata, 
+    def test_run_success(self, mock_extract_metadata, mock_executor_class, 
                         test_config, temp_dirs, sample_gif_metadata):
         """Test successful pipeline run."""
         compression_config, path_config = test_config
-        pipeline = CompressionPipeline(compression_config, path_config)
+        pipeline = CompressionPipeline(compression_config, path_config, workers=1)
         
-        # Setup mocks
+        # Setup metadata mock
         mock_extract_metadata.return_value = sample_gif_metadata
+        
+        # Create mock result
         mock_result = CompressionResult(
-            gif_sha="abc123",
+            gif_sha="abc123def456",
             orig_filename="test.gif",
             engine="gifsicle",
             lossy=0,
@@ -283,27 +313,92 @@ def456,test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,20
             entropy=4.2,
             timestamp=datetime.now().isoformat()
         )
-        mock_execute_job.return_value = mock_result
+        
+        # Mock ProcessPoolExecutor to avoid multiprocessing
+        mock_executor = MagicMock()
+        mock_executor_class.return_value.__enter__.return_value = mock_executor
+        
+        # Mock future object
+        mock_future = MagicMock()
+        mock_future.result.return_value = mock_result
+        mock_executor.submit.return_value = mock_future
+        
+        # Mock as_completed to return our future
+        with patch('src.giflab.pipeline.as_completed') as mock_as_completed:
+            mock_as_completed.return_value = [mock_future]
+            
+            # Create test GIF file
+            gif_path = temp_dirs["raw"] / "test.gif"
+            gif_path.touch()
+            
+            # Run pipeline with limited jobs (1 engine, 1 lossy, 1 ratio, 1 color)
+            compression_config.ENGINES = ["gifsicle"]
+            compression_config.LOSSY_LEVELS = [0]
+            compression_config.FRAME_KEEP_RATIOS = [1.0]
+            compression_config.COLOR_KEEP_COUNTS = [256]
+            
+            result = pipeline.run(temp_dirs["raw"])
+            
+            assert result["status"] == "completed"
+            assert result["processed"] == 1
+            assert result["failed"] == 0
+            
+            # Check CSV was created
+            csv_files = list(temp_dirs["csv"].glob("results_*.csv"))
+            assert len(csv_files) == 1
+    
+    @patch('src.giflab.pipeline.extract_gif_metadata')
+    def test_find_original_gif_by_sha(self, mock_extract_metadata, test_config, temp_dirs, sample_gif_metadata):
+        """Test finding original GIF by SHA hash."""
+        compression_config, path_config = test_config
+        pipeline = CompressionPipeline(compression_config, path_config)
         
         # Create test GIF file
         gif_path = temp_dirs["raw"] / "test.gif"
         gif_path.touch()
         
-        # Run pipeline with limited jobs (1 engine, 1 lossy, 1 ratio, 1 color)
-        compression_config.ENGINES = ["gifsicle"]
-        compression_config.LOSSY_LEVELS = [0]
-        compression_config.FRAME_KEEP_RATIOS = [1.0]
-        compression_config.COLOR_KEEP_COUNTS = [256]
+        # Setup mock to return our test metadata
+        mock_extract_metadata.return_value = sample_gif_metadata
         
-        result = pipeline.run(temp_dirs["raw"])
+        # Test successful lookup
+        found_path = pipeline.find_original_gif_by_sha("abc123def456", temp_dirs["raw"])
+        assert found_path == gif_path
         
-        assert result["status"] == "completed"
-        assert result["processed"] == 1
-        assert result["failed"] == 0
+        # Test with non-existent SHA
+        found_path = pipeline.find_original_gif_by_sha("nonexistent", temp_dirs["raw"])
+        assert found_path is None
+    
+    @patch('src.giflab.pipeline.extract_gif_metadata')
+    def test_find_original_gif_by_folder_name(self, mock_extract_metadata, test_config, temp_dirs, sample_gif_metadata):
+        """Test finding original GIF by render folder name."""
+        compression_config, path_config = test_config
+        pipeline = CompressionPipeline(compression_config, path_config)
         
-        # Check CSV was created
-        csv_files = list(temp_dirs["csv"].glob("results_*.csv"))
-        assert len(csv_files) == 1
+        # Create test GIF file
+        gif_path = temp_dirs["raw"] / "test.gif"
+        gif_path.touch()
+        
+        # Setup mock to return our test metadata
+        mock_extract_metadata.return_value = sample_gif_metadata
+        
+        # Test successful lookup with full SHA folder name
+        full_sha = "abc123def456" + "0" * 52  # Pad to 64 chars for realistic SHA
+        folder_name = f"test_gif_{full_sha}"
+        
+        # Update mock to return the full SHA
+        sample_gif_metadata.gif_sha = full_sha
+        mock_extract_metadata.return_value = sample_gif_metadata
+        
+        found_path = pipeline.find_original_gif_by_folder_name(folder_name, temp_dirs["raw"])
+        assert found_path == gif_path
+        
+        # Test with invalid folder name (no underscore)
+        found_path = pipeline.find_original_gif_by_folder_name("invalid", temp_dirs["raw"])
+        assert found_path is None
+        
+        # Test with invalid SHA in folder name
+        found_path = pipeline.find_original_gif_by_folder_name("test_invalidsha", temp_dirs["raw"])
+        assert found_path is None
 
 
 class TestCreatePipeline:
