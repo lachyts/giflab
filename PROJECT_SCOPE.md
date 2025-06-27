@@ -158,7 +158,7 @@ Re-run with `--resume` continues where it left off, using the presence of render
 | **S2**  | `lossy.py`.                                                        | ✅     |
 | **S3**  | `frame_keep.py`.                                                   | ✅     |
 | **S4**  | `color_keep.py`.                                                   | ✅     |
-| **S5**  | `metrics.py`.                                                      | ⏳     |
+| **S5**  | `metrics.py` — see [QUALITY_METRICS_APPROACH.md](./QUALITY_METRICS_APPROACH.md) for technical details.                                                    | ⏳     |
 | **S6**  | `pipeline.py` + `io.py` (skip, resume, CSV append, move bad gifs). | ⏳     |
 | **S7**  | `cli.py` (`run` subcommand).                                       | ⏳     |
 | **S8**  | `tests/test_resume.py`.                                            | ⏳     |
@@ -190,4 +190,3 @@ cd giflab
 poetry install
 poetry run python -m giflab run data/raw data/
 ```
-
