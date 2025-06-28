@@ -2,6 +2,14 @@
 
 GIF compression and analysis laboratory for systematic performance evaluation.
 
+## 👋 New to GifLab?
+
+**🚀 Complete Beginners:** Start with our [**Beginner's Guide**](BEGINNER_GUIDE.md) for step-by-step instructions and hand-holding through your first GIF analysis.
+
+**🔧 Developers & Advanced Users:** Continue reading for technical details and quick reference.
+
+---
+
 ## Overview
 
 GifLab analyzes GIF compression by generating a grid of variants with different:
