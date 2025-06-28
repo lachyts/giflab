@@ -1,34 +1,68 @@
-"""AI tagging pipeline for adding content tags to existing compression results."""
+"""Comprehensive tagging pipeline for adding content analysis to existing compression results.
+
+This pipeline adds 25 continuous scores (0.0-1.0) to compression results:
+- 6 content classification scores (CLIP)  
+- 4 quality/artifact assessment scores (Classical CV)
+- 5 technical characteristic scores (Classical CV)
+- 10 temporal motion analysis scores (Classical CV)
+
+CRITICAL: Tagging runs ONCE on original GIFs only, scores inherited by all variants.
+"""
 
 import logging
+import multiprocessing
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import csv
 
-from .tagger import GifTagger, TaggingResult
-from .io import read_csv_as_dicts, append_csv_row, setup_logging
+import pandas as pd
+from tqdm import tqdm
+
+from .tagger import HybridCompressionTagger, TaggingResult
+from .io import read_csv_as_dicts, setup_logging
 
 
 class TaggingPipeline:
-    """Pipeline for adding AI-generated tags to existing compression results."""
+    """Pipeline for adding comprehensive tagging scores to existing compression results.
     
-    def __init__(
-        self,
-        model_name: str = "default",
-        workers: int = 1,
-        max_tags_per_gif: int = 5
-    ):
-        """Initialize the tagging pipeline.
+    Adds 25 continuous scores per original GIF:
+    - Content classification (CLIP): 6 confidence scores  
+    - Quality assessment (Classical CV): 4 artifact scores
+    - Technical characteristics (Classical CV): 5 feature scores
+    - Temporal motion analysis (Classical CV): 10 motion scores
+    """
+    
+    # Define the 25 tagging columns that will be added to CSV
+    TAGGING_COLUMNS = [
+        # Content classification (CLIP) - 6 columns
+        'screen_capture_confidence', 'vector_art_confidence', 'photography_confidence',
+        'hand_drawn_confidence', '3d_rendered_confidence', 'pixel_art_confidence',
+        
+        # Quality assessment (Classical CV) - 4 columns  
+        'blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality',
+        
+        # Technical characteristics (Classical CV) - 5 columns
+        'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness',
+        
+        # Temporal motion analysis (Classical CV) - 10 columns
+        'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio',
+        'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness', 
+        'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'
+    ]
+    
+    def __init__(self, workers: int = 1):
+        """Initialize the comprehensive tagging pipeline.
         
         Args:
-            model_name: AI model to use for tagging
             workers: Number of worker processes for parallel tagging
-            max_tags_per_gif: Maximum tags to generate per GIF
         """
-        self.tagger = GifTagger(model_name)
-        self.workers = workers  
-        self.max_tags_per_gif = max_tags_per_gif
+        self.tagger = HybridCompressionTagger()
+        self.workers = max(1, workers)  
         self.logger = setup_logging(Path("logs"))
+        
+        self.logger.info(f"Initialized HybridCompressionTagger with {self.workers} workers")
+        self.logger.info(f"Will add {len(self.TAGGING_COLUMNS)} tagging columns to CSV")
     
     def load_existing_results(self, csv_path: Path) -> List[Dict[str, Any]]:
         """Load existing compression results from CSV.
@@ -45,36 +79,54 @@ class TaggingPipeline:
         try:
             results = read_csv_as_dicts(csv_path)
             self.logger.info(f"Loaded {len(results)} existing results from {csv_path}")
+            
+            # Validate expected columns exist
+            if results:
+                required_cols = {'gif_sha', 'orig_filename', 'engine'}
+                missing_cols = required_cols - set(results[0].keys())
+                if missing_cols:
+                    raise ValueError(f"Missing required columns: {missing_cols}")
+            
             return results
         except Exception as e:
             self.logger.error(f"Failed to load CSV {csv_path}: {e}")
             raise
     
     def identify_unique_gifs(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Identify unique GIFs from compression results (one per gif_sha).
+        """Identify unique original GIFs from compression results.
+        
+        CRITICAL: Only select original engine records (engine='original'), 
+        not compressed variants.
         
         Args:
             results: List of compression result dictionaries
             
         Returns:
-            List of unique GIF records (one per gif_sha)
+            List of unique original GIF records (one per gif_sha)
         """
-        unique_gifs = {}
+        original_gifs = {}
         
         for result in results:
             gif_sha = result.get("gif_sha")
-            if gif_sha and gif_sha not in unique_gifs:
-                unique_gifs[gif_sha] = result
+            engine = result.get("engine", "").lower()
+            
+            # Only process original GIFs, not compressed variants
+            if gif_sha and engine == "original" and gif_sha not in original_gifs:
+                original_gifs[gif_sha] = result
         
-        unique_list = list(unique_gifs.values())
-        self.logger.info(f"Found {len(unique_list)} unique GIFs to tag")
+        unique_list = list(original_gifs.values())
+        self.logger.info(f"Found {len(unique_list)} unique original GIFs to tag")
+        
+        if len(unique_list) == 0:
+            self.logger.warning("No original GIFs found (engine='original'). Tagging requires original records.")
+        
         return unique_list
     
     def find_original_gif_path(self, result: Dict[str, Any], raw_dir: Path) -> Optional[Path]:
         """Find the original GIF file path for a result record.
         
         Args:
-            result: Compression result dictionary
+            result: Original compression result dictionary
             raw_dir: Directory containing original GIF files
             
         Returns:
@@ -85,30 +137,34 @@ class TaggingPipeline:
             return None
         
         gif_path = raw_dir / orig_filename
-        if gif_path.exists():
+        if gif_path.exists() and gif_path.is_file():
             return gif_path
         
         # Try case-insensitive search
-        for file_path in raw_dir.iterdir():
-            if file_path.name.lower() == orig_filename.lower():
-                return file_path
+        try:
+            for file_path in raw_dir.iterdir():
+                if file_path.is_file() and file_path.name.lower() == orig_filename.lower():
+                    return file_path
+        except Exception:
+            pass
         
         return None
     
-    def tag_single_gif(self, gif_path: Path) -> TaggingResult:
-        """Generate tags for a single GIF file.
+    def tag_single_gif(self, gif_path: Path, gif_sha: str) -> TaggingResult:
+        """Generate comprehensive tagging scores for a single GIF file.
         
         Args:
             gif_path: Path to GIF file
+            gif_sha: SHA hash of the GIF
             
         Returns:
-            Tagging result with generated tags
+            TaggingResult with 25 continuous scores
             
         Raises:
             RuntimeError: If tagging fails
         """
         try:
-            return self.tagger.tag_gif(gif_path, max_tags=self.max_tags_per_gif)
+            return self.tagger.tag_gif(gif_path, gif_sha=gif_sha)
         except Exception as e:
             self.logger.error(f"Failed to tag {gif_path}: {e}")
             raise RuntimeError(f"Tagging failed for {gif_path}: {e}")
@@ -118,14 +174,16 @@ class TaggingPipeline:
         results: List[Dict[str, Any]], 
         tagging_results: Dict[str, TaggingResult]
     ) -> List[Dict[str, Any]]:
-        """Update compression results with generated tags.
+        """Update compression results with generated tagging scores.
+        
+        CRITICAL: Tagging scores are inherited by ALL variants of the same gif_sha.
         
         Args:
             results: Original compression results
             tagging_results: Dictionary mapping gif_sha to TaggingResult
             
         Returns:
-            Updated results with tags column
+            Updated results with 25 tagging columns added
         """
         updated_results = []
         
@@ -134,15 +192,56 @@ class TaggingPipeline:
             result_copy = result.copy()
             
             if gif_sha in tagging_results:
+                # Add all 25 tagging scores
                 tagging_result = tagging_results[gif_sha]
-                # Join tags with semicolon separator
-                result_copy["tags"] = ";".join(tagging_result.tags)
+                for column in self.TAGGING_COLUMNS:
+                    score = tagging_result.scores.get(column, 0.0)
+                    result_copy[column] = f"{score:.6f}"  # High precision for ML use
             else:
-                result_copy["tags"] = ""
+                # Add empty scores if tagging failed
+                for column in self.TAGGING_COLUMNS:
+                    result_copy[column] = "0.000000"
             
             updated_results.append(result_copy)
         
         return updated_results
+    
+    def write_tagged_csv(
+        self, 
+        updated_results: List[Dict[str, Any]], 
+        output_csv_path: Path
+    ) -> None:
+        """Write updated results with tagging scores to new CSV file.
+        
+        Args:
+            updated_results: Results with tagging scores added
+            output_csv_path: Path for output CSV file
+            
+        Raises:
+            IOError: If CSV cannot be written
+        """
+        if not updated_results:
+            raise ValueError("No results to write")
+        
+        # Determine fieldnames - original columns + tagging columns
+        original_fieldnames = [k for k in updated_results[0].keys() if k not in self.TAGGING_COLUMNS]
+        fieldnames = original_fieldnames + self.TAGGING_COLUMNS
+        
+        try:
+            output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(output_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                for result in updated_results:
+                    writer.writerow(result)
+            
+            self.logger.info(f"Wrote {len(updated_results)} results to {output_csv_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to write CSV {output_csv_path}: {e}")
+            raise
     
     def run(
         self,
@@ -150,7 +249,7 @@ class TaggingPipeline:
         raw_dir: Path,
         output_csv_path: Optional[Path] = None
     ) -> Dict[str, Any]:
-        """Run the complete tagging pipeline.
+        """Run the complete comprehensive tagging pipeline.
         
         Args:
             csv_path: Path to existing compression results CSV
@@ -168,84 +267,136 @@ class TaggingPipeline:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_csv_path = csv_path.parent / f"results_tagged_{timestamp}.csv"
         
-        self.logger.info(f"Starting tagging pipeline: {csv_path} -> {output_csv_path}")
+        self.logger.info(f"Starting comprehensive tagging pipeline")
+        self.logger.info(f"Input CSV: {csv_path}")
+        self.logger.info(f"Raw GIFs directory: {raw_dir}")
+        self.logger.info(f"Output CSV: {output_csv_path}")
         
         # Load existing results
         results = self.load_existing_results(csv_path)
         if not results:
             return {"status": "no_results", "tagged": 0}
         
-        # Find unique GIFs to tag
-        unique_gifs = self.identify_unique_gifs(results)
-        if not unique_gifs:
-            return {"status": "no_unique_gifs", "tagged": 0}
+        # Find unique original GIFs to tag
+        original_gifs = self.identify_unique_gifs(results)
+        if not original_gifs:
+            return {"status": "no_original_gifs", "tagged": 0}
         
-        # Generate tags for each unique GIF
+        # Generate comprehensive tags for each unique original GIF
         tagging_results = {}
         tagged_count = 0
         failed_count = 0
         
-        for gif_record in unique_gifs:
+        self.logger.info(f"Processing {len(original_gifs)} original GIFs...")
+        
+        # Process GIFs with progress bar
+        for gif_record in tqdm(original_gifs, desc="Tagging GIFs", unit="gif"):
             gif_sha = gif_record["gif_sha"]
             
             # Find original GIF path
             gif_path = self.find_original_gif_path(gif_record, raw_dir)
             if not gif_path:
-                self.logger.warning(f"Could not find original GIF for {gif_sha}")
+                self.logger.warning(f"Could not find original GIF for {gif_sha}: {gif_record.get('orig_filename', 'unknown')}")
                 failed_count += 1
                 continue
             
             try:
-                # Generate tags
-                tagging_result = self.tag_single_gif(gif_path)
+                # Generate comprehensive tagging scores
+                tagging_result = self.tag_single_gif(gif_path, gif_sha)
                 tagging_results[gif_sha] = tagging_result
                 tagged_count += 1
                 
-                self.logger.info(f"Tagged {gif_path.name}: {';'.join(tagging_result.tags)}")
+                # Log key scores for monitoring
+                content_type = max(tagging_result.content_classification.items(), key=lambda x: x[1])
+                motion_intensity = tagging_result.scores.get('motion_intensity', 0)
+                overall_quality = tagging_result.scores.get('overall_quality', 0)
+                
+                self.logger.info(
+                    f"Tagged {gif_path.name}: {content_type[0]}={content_type[1]:.3f}, "
+                    f"motion={motion_intensity:.3f}, quality={overall_quality:.3f}, "
+                    f"time={tagging_result.processing_time_ms}ms"
+                )
                 
             except Exception as e:
                 self.logger.error(f"Failed to tag {gif_path}: {e}")
                 failed_count += 1
         
-        # Update all results with tags
+        if tagged_count == 0:
+            return {
+                "status": "no_successful_tags",
+                "total_results": len(results),
+                "original_gifs": len(original_gifs),
+                "tagged_successfully": 0,
+                "tagging_failures": failed_count,
+            }
+        
+        # Update all results with tagging scores (inheritance)
+        self.logger.info("Updating all compression results with inherited tagging scores...")
         updated_results = self.update_results_with_tags(results, tagging_results)
         
         # Write updated results to new CSV
-        fieldnames = list(results[0].keys()) if results else []
-        if "tags" not in fieldnames:
-            fieldnames.append("tags")
-        
-        # TODO: Write all updated results to CSV
-        # This will be implemented in Stage 9 (S9)
-        self.logger.info(f"Would write {len(updated_results)} results to {output_csv_path}")
+        self.logger.info("Writing tagged results to CSV...")
+        self.write_tagged_csv(updated_results, output_csv_path)
         
         return {
             "status": "completed",
             "total_results": len(results),
-            "unique_gifs": len(unique_gifs),
+            "original_gifs": len(original_gifs), 
             "tagged_successfully": tagged_count,
             "tagging_failures": failed_count,
-            "output_path": str(output_csv_path)
+            "output_path": str(output_csv_path),
+            "tagging_columns_added": len(self.TAGGING_COLUMNS)
         }
 
 
-def create_tagging_pipeline(
-    model_name: str = "default",
-    workers: int = 1,
-    max_tags: int = 5
-) -> TaggingPipeline:
-    """Factory function to create a tagging pipeline.
+def create_tagging_pipeline(workers: int = 1) -> TaggingPipeline:
+    """Factory function to create a comprehensive tagging pipeline.
     
     Args:
-        model_name: AI model to use for tagging
         workers: Number of worker processes
-        max_tags: Maximum tags per GIF
         
     Returns:
         Configured TaggingPipeline instance
     """
-    return TaggingPipeline(
-        model_name=model_name,
-        workers=workers,
-        max_tags_per_gif=max_tags
-    ) 
+    return TaggingPipeline(workers=workers)
+
+
+def validate_tagged_csv(csv_path: Path) -> Dict[str, Any]:
+    """Validate that a CSV contains the expected tagging columns.
+    
+    Args:
+        csv_path: Path to tagged CSV file
+        
+    Returns:
+        Validation report dictionary
+    """
+    try:
+        # Load first few rows to check structure
+        df = pd.read_csv(csv_path, nrows=5)
+        
+        # Check for tagging columns
+        missing_columns = []
+        present_columns = []
+        
+        for col in TaggingPipeline.TAGGING_COLUMNS:
+            if col in df.columns:
+                present_columns.append(col)
+            else:
+                missing_columns.append(col)
+        
+        return {
+            "valid": len(missing_columns) == 0,
+            "total_rows": len(df),
+            "total_columns": len(df.columns),
+            "tagging_columns_present": len(present_columns),
+            "tagging_columns_missing": len(missing_columns),
+            "missing_columns": missing_columns,
+            "csv_path": str(csv_path)
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "error": str(e),
+            "csv_path": str(csv_path)
+        } 

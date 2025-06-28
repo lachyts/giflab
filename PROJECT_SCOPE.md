@@ -162,7 +162,7 @@ Re-run with `--resume` continues where it left off, using the presence of render
 | **S6**  | `pipeline.py` + `io.py` (skip, resume, CSV append, move bad gifs). | ✅     |
 | **S7**  | `cli.py` (`run` subcommand).                                       | ✅     |
 | **S8**  | `tests/test_resume.py`.                                            | ✅     |
-| **S9**  | `tagger.py` + `tag_pipeline.py` + `cli tag`.                       | ⏳     |
+| **S9**  | `tagger.py` + `tag_pipeline.py` + `cli tag`.                       | ✅     |
 | **S10** | notebooks 01 & 02.                                                 | ⏳     |
 
 **Status Legend:**
