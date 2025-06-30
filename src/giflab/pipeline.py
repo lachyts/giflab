@@ -219,18 +219,32 @@ class CompressionPipeline:
             existing_records = read_csv_as_dicts(csv_path)
             completed_jobs = set()
             
-            for record in existing_records:
+            for i, record in enumerate(existing_records):
                 try:
+                    # Validate required fields exist and are not empty
+                    gif_sha = record.get("gif_sha", "").strip()
+                    engine = record.get("engine", "").strip()
+                    lossy_str = record.get("lossy", "").strip()
+                    ratio_str = record.get("frame_keep_ratio", "").strip()
+                    colors_str = record.get("color_keep_count", "").strip()
+                    
+                    if not all([gif_sha, engine, lossy_str, ratio_str, colors_str]):
+                        raise ValueError(f"Missing or empty required fields in record {i}")
+                    
+                    # Validate SHA format (64 hex characters)
+                    if len(gif_sha) != 64 or not all(c in "0123456789abcdef" for c in gif_sha.lower()):
+                        raise ValueError(f"Invalid SHA format in record {i}: {gif_sha}")
+                    
                     key = (
-                        record["gif_sha"],
-                        record["engine"],
-                        int(record["lossy"]),
-                        float(record["frame_keep_ratio"]),
-                        int(record["color_keep_count"])
+                        gif_sha,
+                        engine,
+                        int(lossy_str),
+                        float(ratio_str),
+                        int(colors_str)
                     )
                     completed_jobs.add(key)
-                except (KeyError, ValueError) as e:
-                    self.logger.warning(f"Skipping invalid CSV record: {e}")
+                except (KeyError, ValueError, TypeError) as e:
+                    self.logger.warning(f"Skipping invalid CSV record {i}: {e}")
             
             self.logger.info(f"Loaded {len(completed_jobs)} existing CSV records")
             return completed_jobs

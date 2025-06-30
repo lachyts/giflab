@@ -237,6 +237,16 @@ class HybridCompressionTagger:
     
     def _analyze_comprehensive_characteristics(self, frames: List[np.ndarray]) -> Dict[str, float]:
         """Comprehensive analysis including static technical metrics and temporal motion analysis."""
+        if not frames:
+            # Return default scores if no frames available
+            return {col: 0.0 for col in [
+                'blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality',
+                'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness',
+                'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio',
+                'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness', 
+                'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'
+            ]}
+        
         representative_frame = frames[0]  # Use first frame for static analysis
         
         return {

@@ -5,6 +5,8 @@ import json
 import logging
 import tempfile
 import shutil
+import fcntl
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from contextlib import contextmanager
@@ -77,7 +79,7 @@ def atomic_write(target_path: Path, mode: str = "w"):
 
 
 def append_csv_row(csv_path: Path, row_data: Dict[str, Any], fieldnames: List[str]) -> None:
-    """Atomically append a row to a CSV file.
+    """Atomically append a row to a CSV file with proper locking to prevent race conditions.
     
     Args:
         csv_path: Path to CSV file
@@ -89,18 +91,30 @@ def append_csv_row(csv_path: Path, row_data: Dict[str, Any], fieldnames: List[st
     """
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Check if file exists and has header
-    file_exists = csv_path.exists()
-    
+    # Use file locking to prevent race conditions in multiprocessing
     with open(csv_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        
-        # Write header if file is new
-        if not file_exists:
-            writer.writeheader()
-        
-        # Write the row
-        writer.writerow(row_data)
+        try:
+            # Acquire exclusive lock (blocks until available)
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            
+            # Check if file is empty (needs header) after acquiring lock
+            current_pos = f.tell()
+            f.seek(0, os.SEEK_END)
+            file_size = f.tell()
+            f.seek(current_pos)
+            
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            
+            # Write header if file is empty
+            if file_size == 0:
+                writer.writeheader()
+            
+            # Write the row
+            writer.writerow(row_data)
+            
+        finally:
+            # Lock is automatically released when file is closed
+            pass
 
 
 def read_csv_as_dicts(csv_path: Path) -> List[Dict[str, Any]]:

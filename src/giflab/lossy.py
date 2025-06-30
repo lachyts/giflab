@@ -162,8 +162,17 @@ def compress_with_gifsicle(
         color_args = build_gifsicle_color_args(color_keep_count, original_colors)
         cmd.extend(color_args)
     
-    # Add input and output
-    cmd.extend([str(input_path), "--output", str(output_path)])
+    # Add input and output with path validation
+    input_str = str(input_path.resolve())  # Resolve to absolute path
+    output_str = str(output_path.resolve())  # Resolve to absolute path
+    
+    # Validate paths don't contain suspicious characters
+    if any(char in input_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
+    if any(char in output_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
+    
+    cmd.extend([input_str, "--output", output_str])
     
     # Execute command and measure time
     start_time = time.time()
@@ -261,8 +270,17 @@ def compress_with_animately(
         color_args = build_animately_color_args(color_keep_count, original_colors)
         cmd.extend(color_args)
     
-    # Add input and output
-    cmd.extend([str(input_path), str(output_path)])
+    # Add input and output with path validation
+    input_str = str(input_path.resolve())  # Resolve to absolute path
+    output_str = str(output_path.resolve())  # Resolve to absolute path
+    
+    # Validate paths don't contain suspicious characters
+    if any(char in input_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
+    if any(char in output_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
+    
+    cmd.extend([input_str, output_str])
     
     # Execute command and measure time
     start_time = time.time()
