@@ -207,8 +207,9 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         try:
             scale_ssim = ssim(current_frame1, current_frame2, data_range=255.0)
             ssim_values.append(scale_ssim)
-        except Exception:
-            # If SSIM calculation fails, use a default value
+        except (ValueError, RuntimeError) as e:
+            # If SSIM calculation fails due to invalid data or computation error, use a default value
+            logger.warning(f"SSIM calculation failed at scale {scale}: {e}")
             ssim_values.append(0.0)
         
         # Downsample for next scale (if not the last scale)
@@ -263,7 +264,9 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     if mean_diff == 0:
         return 1.0
     
-    consistency = 1.0 / (1.0 + variance_diff / (mean_diff + 1e-8))
+    # Protect against division by zero with proper epsilon handling
+    epsilon = 1e-8
+    consistency = 1.0 / (1.0 + variance_diff / max(mean_diff, epsilon))
     return max(0.0, min(1.0, consistency))
 
 

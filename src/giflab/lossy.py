@@ -2,6 +2,7 @@
 
 import subprocess
 import time
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -19,6 +20,48 @@ from .color_keep import (
     count_gif_colors
 )
 from .meta import extract_gif_metadata
+
+
+def _find_animately_launcher() -> Optional[str]:
+    """Find the animately launcher executable.
+    
+    Returns:
+        Path to animately launcher or None if not found
+    """
+    # Check environment variable first
+    env_path = os.environ.get('ANIMATELY_PATH')
+    if env_path and Path(env_path).exists():
+        return env_path
+    
+    # Common installation paths to check
+    search_paths = [
+        # Original hardcoded path for backwards compatibility
+        "/Users/lachlants/bin/launcher",
+        # Common Unix paths
+        "/usr/local/bin/animately",
+        "/usr/bin/animately",
+        "/opt/animately/bin/launcher",
+        # User paths
+        os.path.expanduser("~/bin/animately"),
+        os.path.expanduser("~/bin/launcher"),
+        # Current directory (for development)
+        "./animately",
+        "./launcher"
+    ]
+    
+    for path in search_paths:
+        if Path(path).exists():
+            return path
+    
+    # Try to find in PATH
+    try:
+        result = subprocess.run(['which', 'animately'], capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    
+    return None
 
 
 class LossyEngine(Enum):
@@ -185,12 +228,12 @@ def compress_with_animately(
     Raises:
         RuntimeError: If animately command fails
     """
-    # Path to animately launcher
-    animately_path = "/Users/lachlants/bin/launcher"
+    # Find animately launcher with configurable path
+    animately_path = _find_animately_launcher()
     
     # Check if animately is available
-    if not Path(animately_path).exists():
-        raise RuntimeError(f"Animately launcher not found at: {animately_path}")
+    if not animately_path or not Path(animately_path).exists():
+        raise RuntimeError(f"Animately launcher not found. Please install animately or set ANIMATELY_PATH environment variable.")
     
     # Get GIF metadata for frame and color information
     try:
