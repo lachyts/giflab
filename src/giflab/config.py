@@ -61,11 +61,17 @@ class MetricsConfig:
     TEMPORAL_WEIGHT: float = 0.10
     
     def __post_init__(self) -> None:
-        # Validate weights sum to 1.0
+        # Validate weights sum to 1.0 with proper floating point tolerance
         total_weight = (self.SSIM_WEIGHT + self.MS_SSIM_WEIGHT + 
                        self.PSNR_WEIGHT + self.TEMPORAL_WEIGHT)
-        if abs(total_weight - 1.0) > 0.001:
-            raise ValueError(f"Composite quality weights must sum to 1.0, got {total_weight}")
+        tolerance = 1e-6  # More restrictive tolerance for configuration validation
+        if abs(total_weight - 1.0) > tolerance:
+            raise ValueError(f"Composite quality weights must sum to 1.0 (±{tolerance}), got {total_weight:.10f}")
+        
+        # Validate individual weights are non-negative
+        weights = [self.SSIM_WEIGHT, self.MS_SSIM_WEIGHT, self.PSNR_WEIGHT, self.TEMPORAL_WEIGHT]
+        if any(w < 0 for w in weights):
+            raise ValueError(f"All weights must be non-negative, got {weights}")
         
         # Note: Frame alignment is always content-based (most robust approach)
         
@@ -73,6 +79,10 @@ class MetricsConfig:
         valid_modes = {"fast", "optimized", "full", "comprehensive"}
         if self.SSIM_MODE not in valid_modes:
             raise ValueError(f"Invalid SSIM mode: {self.SSIM_MODE}")
+        
+        # Validate frame limit is reasonable
+        if self.SSIM_MAX_FRAMES <= 0 or self.SSIM_MAX_FRAMES > 1000:
+            raise ValueError(f"SSIM_MAX_FRAMES must be between 1 and 1000, got {self.SSIM_MAX_FRAMES}")
 
 
 @dataclass

@@ -163,7 +163,9 @@ class HybridCompressionTagger:
             # Combine all scores (6 + 19 = 25 total)
             all_scores = {**content_scores, **technical_scores}
             
-            processing_time = int((time.time() - start_time) * 1000)
+            elapsed_seconds = time.time() - start_time
+            # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+            processing_time = min(int(elapsed_seconds * 1000), 86400000)
             
             return TaggingResult(
                 gif_sha=gif_sha,
@@ -178,12 +180,19 @@ class HybridCompressionTagger:
     
     def _extract_representative_frames(self, gif_path: Path, max_frames: int = 10) -> List[np.ndarray]:
         """Extract representative frames from GIF for analysis."""
+        cap = None
         try:
             # Use cv2 to read GIF frames
             cap = cv2.VideoCapture(str(gif_path))
+            if not cap.isOpened():
+                raise RuntimeError(f"Failed to open video file: {gif_path}")
+            
             frames = []
             
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if frame_count <= 0:
+                raise RuntimeError(f"Invalid frame count: {frame_count}")
+            
             if frame_count <= max_frames:
                 # Read all frames if small GIF
                 frame_indices = range(frame_count)
@@ -202,12 +211,15 @@ class HybridCompressionTagger:
                 if len(frames) >= max_frames:
                     break
             
-            cap.release()
             return frames
             
         except Exception as e:
             self.logger.error(f"Frame extraction failed for {gif_path}: {e}")
             raise
+        finally:
+            # Ensure VideoCapture is always released
+            if cap is not None:
+                cap.release()
     
     def _classify_content_with_clip(self, image: np.ndarray) -> Dict[str, float]:
         """Use CLIP to get confidence scores for each content type."""
@@ -237,6 +249,16 @@ class HybridCompressionTagger:
     
     def _analyze_comprehensive_characteristics(self, frames: List[np.ndarray]) -> Dict[str, float]:
         """Comprehensive analysis including static technical metrics and temporal motion analysis."""
+        if not frames:
+            # Return default scores if no frames available
+            return {col: 0.0 for col in [
+                'blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality',
+                'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness',
+                'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio',
+                'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness', 
+                'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'
+            ]}
+        
         representative_frame = frames[0]  # Use first frame for static analysis
         
         return {
@@ -505,12 +527,27 @@ class HybridCompressionTagger:
             return 1.0
         
         try:
-            # Create motion mask by accumulating frame differences
-            motion_mask = np.zeros(frames[0][:,:,0].shape, dtype=np.float32)
+            # Validate frame dimensions and get first frame
+            first_frame = frames[0]
+            if len(first_frame.shape) < 2:
+                return 0.5  # Invalid frame shape
+            
+            # Convert first frame to grayscale to get proper dimensions
+            first_gray = cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY)
+            motion_mask = np.zeros(first_gray.shape, dtype=np.float32)
             
             for i in range(len(frames) - 1):
+                # Validate frame shapes
+                if (len(frames[i].shape) < 3 or len(frames[i+1].shape) < 3 or
+                    frames[i].shape[:2] != frames[i+1].shape[:2]):
+                    continue  # Skip frames with inconsistent dimensions
+                
                 gray1 = cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY)
                 gray2 = cv2.cvtColor(frames[i + 1], cv2.COLOR_RGB2GRAY)
+                
+                # Ensure grayscale frames have consistent dimensions
+                if gray1.shape != gray2.shape:
+                    continue
                 
                 # Calculate absolute difference
                 diff = cv2.absdiff(gray1, gray2)
@@ -519,13 +556,18 @@ class HybridCompressionTagger:
                 _, motion_binary = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
                 motion_mask += motion_binary.astype(np.float32)
             
-            # Normalize motion mask
-            motion_mask = motion_mask / (len(frames) - 1)
+            # Normalize motion mask (protect against division by zero)
+            frame_pairs_processed = len(frames) - 1
+            if frame_pairs_processed > 0:
+                motion_mask = motion_mask / frame_pairs_processed
             
             # Calculate static ratio (inverse of motion)
             motion_pixels = np.sum(motion_mask > 50)  # Pixels with significant motion
             total_pixels = motion_mask.size
-            static_ratio = (total_pixels - motion_pixels) / total_pixels
+            if total_pixels > 0:
+                static_ratio = (total_pixels - motion_pixels) / total_pixels
+            else:
+                static_ratio = 1.0  # No pixels means completely static
             
             return max(0, min(static_ratio, 1.0))
             

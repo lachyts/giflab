@@ -218,14 +218,38 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> Dict[str, A
             if img.format != 'GIF':
                 raise ValueError(f"File is not a GIF: {input_path}")
             
-            # Count frames
+            # Count frames using safer method
             frame_count = 0
             try:
+                # Use PIL's built-in frame counting if available
+                if hasattr(img, 'n_frames'):
+                    frame_count = img.n_frames
+                else:
+                    # Fallback to manual counting with better error handling
+                    current_frame = 0
                 while True:
-                    frame_count += 1
-                    img.seek(img.tell() + 1)
+                        try:
+                            img.seek(current_frame)
+                            frame_count = current_frame + 1
+                            current_frame += 1
+                        except EOFError:
+                            break
+                        except Exception:
+                            # Stop on any other error to prevent infinite loops
+                            break
+                        
+                        # Safety limit to prevent infinite loops with corrupted files
+                        if current_frame > 10000:  # Reasonable upper limit
+                            raise ValueError(f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted")
+                            
             except EOFError:
-                pass
+                pass  # Normal end of frames
+            except Exception as e:
+                raise ValueError(f"Error counting frames in GIF: {e}")
+            
+            # Validate frame count
+            if frame_count <= 0:
+                raise ValueError(f"Invalid frame count: {frame_count}")
             
             # Calculate reduction info
             target_frames = calculate_target_frame_count(frame_count, keep_ratio)

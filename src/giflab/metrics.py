@@ -148,15 +148,27 @@ def align_frames_content_based(original_frames: List[np.ndarray], compressed_fra
         for comp_idx, comp_frame in enumerate(compressed_frames):
             if comp_idx in used_compressed_indices:
                 continue
-                
-            mse = calculate_frame_mse(orig_frame, comp_frame)
-            if mse < best_mse:
-                best_mse = mse
-                best_match_idx = comp_idx
+            
+            try:
+                mse = calculate_frame_mse(orig_frame, comp_frame)
+                # Validate MSE is finite and reasonable
+                if not np.isfinite(mse):
+                    logger.warning(f"Non-finite MSE calculated for frame pair {comp_idx}")
+                    continue
+                    
+                if mse < best_mse:
+                    best_mse = mse
+                    best_match_idx = comp_idx
+            except Exception as e:
+                logger.warning(f"MSE calculation failed for frame {comp_idx}: {e}")
+                continue
         
-        if best_match_idx >= 0:
+        # Only add pair if we found a valid match with finite MSE
+        if best_match_idx >= 0 and np.isfinite(best_mse):
             aligned_pairs.append((orig_frame, compressed_frames[best_match_idx]))
             used_compressed_indices.add(best_match_idx)
+        else:
+            logger.warning(f"No valid frame match found for original frame (best_mse={best_mse})")
     
     return aligned_pairs
 
@@ -207,8 +219,9 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         try:
             scale_ssim = ssim(current_frame1, current_frame2, data_range=255.0)
             ssim_values.append(scale_ssim)
-        except Exception:
-            # If SSIM calculation fails, use a default value
+        except (ValueError, RuntimeError) as e:
+            # If SSIM calculation fails due to invalid data or computation error, use a default value
+            logger.warning(f"SSIM calculation failed at scale {scale}: {e}")
             ssim_values.append(0.0)
         
         # Downsample for next scale (if not the last scale)
@@ -223,8 +236,16 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
     # Weighted average of SSIM values across scales
     if ssim_values:
         weights = [0.4, 0.25, 0.15, 0.1, 0.1][:len(ssim_values)]
-        weights = weights / np.sum(weights)  # Normalize weights
-        return np.average(ssim_values, weights=weights)
+        weights = np.array(weights)
+        
+        # Protect against division by zero in weight normalization
+        weights_sum = np.sum(weights)
+        if weights_sum > 0:
+            weights = weights / weights_sum  # Normalize weights
+            return np.average(ssim_values, weights=weights)
+        else:
+            # If all weights are zero, use uniform weighting
+            return np.mean(ssim_values)
     else:
         return 0.0
 
@@ -263,7 +284,9 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     if mean_diff == 0:
         return 1.0
     
-    consistency = 1.0 / (1.0 + variance_diff / (mean_diff + 1e-8))
+    # Protect against division by zero with proper epsilon handling
+    epsilon = 1e-8
+    consistency = 1.0 / (1.0 + variance_diff / max(mean_diff, epsilon))
     return max(0.0, min(1.0, consistency))
 
 
@@ -377,7 +400,9 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
         
         # Calculate processing time
         end_time = time.perf_counter()
-        render_ms = int((end_time - start_time) * 1000)
+        elapsed_seconds = end_time - start_time
+        # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+        render_ms = min(int(elapsed_seconds * 1000), 86400000)
         
         return {
             "ssim": float(avg_ssim),
@@ -442,7 +467,9 @@ def measure_render_time(func, *args, **kwargs) -> Tuple[Any, int]:
     result = func(*args, **kwargs)
     end_time = time.perf_counter()
     
-    execution_time_ms = int((end_time - start_time) * 1000)
+    elapsed_seconds = end_time - start_time
+    # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+    execution_time_ms = min(int(elapsed_seconds * 1000), 86400000)
     return result, execution_time_ms
 
 
