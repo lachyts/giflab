@@ -117,7 +117,7 @@ class TaggingPipeline:
         unique_list = list(original_gifs.values())
         self.logger.info(f"Found {len(unique_list)} unique original GIFs to tag")
         
-        if len(unique_list) == 0:
+        if not unique_list:
             self.logger.warning("No original GIFs found (engine='original'). Tagging requires original records.")
         
         return unique_list
@@ -307,12 +307,18 @@ class TaggingPipeline:
                 tagged_count += 1
                 
                 # Log key scores for monitoring
-                content_type = max(tagging_result.content_classification.items(), key=lambda x: x[1])
+                content_classification = tagging_result.content_classification
+                if content_classification:
+                    content_type = max(content_classification.items(), key=lambda x: x[1])
+                    content_type_str = f"{content_type[0]}={content_type[1]:.3f}"
+                else:
+                    content_type_str = "no_content_classification"
+                
                 motion_intensity = tagging_result.scores.get('motion_intensity', 0)
                 overall_quality = tagging_result.scores.get('overall_quality', 0)
                 
                 self.logger.info(
-                    f"Tagged {gif_path.name}: {content_type[0]}={content_type[1]:.3f}, "
+                    f"Tagged {gif_path.name}: {content_type_str}, "
                     f"motion={motion_intensity:.3f}, quality={overall_quality:.3f}, "
                     f"time={tagging_result.processing_time_ms}ms"
                 )
@@ -385,7 +391,7 @@ def validate_tagged_csv(csv_path: Path) -> Dict[str, Any]:
                 missing_columns.append(col)
         
         return {
-            "valid": len(missing_columns) == 0,
+            "valid": not missing_columns,
             "total_rows": len(df),
             "total_columns": len(df.columns),
             "tagging_columns_present": len(present_columns),

@@ -168,7 +168,7 @@ def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
     click.echo(f"   • Jobs to run: {len(jobs_to_run)}")
     click.echo(f"   • Jobs to skip: {len(all_jobs) - len(jobs_to_run)}")
 
-    if len(jobs_to_run) == 0:
+    if not jobs_to_run:
         click.echo(f"✅ All jobs already completed")
     else:
         estimated_time = len(jobs_to_run) * 2  # Rough estimate: 2 seconds per job

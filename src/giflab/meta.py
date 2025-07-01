@@ -185,7 +185,12 @@ def calculate_entropy(image: Image.Image) -> float:
     histogram, _ = np.histogram(img_array, bins=256, range=(0, 256))
     
     # Normalize histogram to get probabilities
-    histogram = histogram / histogram.sum()
+    histogram_sum = histogram.sum()
+    if histogram_sum == 0:
+        # Handle edge case of empty or invalid image
+        return 0.0
+    
+    histogram = histogram / histogram_sum
     
     # Remove zero probabilities to avoid log(0)
     histogram = histogram[histogram > 0]
