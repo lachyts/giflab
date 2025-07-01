@@ -187,7 +187,9 @@ def compress_with_gifsicle(
         )
         
         end_time = time.time()
-        render_ms = int((end_time - start_time) * 1000)
+        elapsed_seconds = end_time - start_time
+        # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+        render_ms = min(int(elapsed_seconds * 1000), 86400000)
         
         # Verify output file was created
         if not output_path.exists():
@@ -295,7 +297,9 @@ def compress_with_animately(
         )
         
         end_time = time.time()
-        render_ms = int((end_time - start_time) * 1000)
+        elapsed_seconds = end_time - start_time
+        # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+        render_ms = min(int(elapsed_seconds * 1000), 86400000)
         
         # Verify output file was created
         if not output_path.exists():

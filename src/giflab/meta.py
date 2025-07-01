@@ -71,20 +71,50 @@ def extract_gif_metadata(file_path: Path) -> GifMetadata:
             # Basic dimensions
             orig_width, orig_height = img.size
             
-            # Count frames
+            # Count frames using safer method
             frame_count = 0
             durations = []
             
             try:
-                while True:
-                    frame_count += 1
-                    # Get frame duration in milliseconds
-                    duration = img.info.get('duration', 100)  # Default 100ms if not specified
-                    durations.append(duration)
-                    img.seek(img.tell() + 1)
+                # Use PIL's built-in frame counting if available
+                if hasattr(img, 'n_frames'):
+                    frame_count = img.n_frames
+                    # Still need to collect durations for FPS calculation
+                    for i in range(frame_count):
+                        try:
+                            img.seek(i)
+                            duration = img.info.get('duration', 100)
+                            durations.append(duration)
+                        except Exception:
+                            durations.append(100)  # Default fallback
+                else:
+                    # Fallback to manual counting with safety limits
+                    current_frame = 0
+                    while True:
+                        try:
+                            img.seek(current_frame)
+                            frame_count = current_frame + 1
+                            duration = img.info.get('duration', 100)
+                            durations.append(duration)
+                            current_frame += 1
+                        except EOFError:
+                            break
+                        except Exception:
+                            break
+                        
+                        # Safety limit to prevent infinite loops
+                        if current_frame > 10000:
+                            raise ValueError(f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted")
+                            
             except EOFError:
-                # End of frames reached
-                pass
+                pass  # Normal end of frames
+            except Exception as e:
+                raise ValueError(f"Error counting frames in GIF: {e}")
+            
+            # Validate frame count
+            if frame_count <= 0:
+                frame_count = 1  # At least one frame for valid GIF
+                durations = [100]  # Default duration
             
             # Calculate average FPS from frame durations
             if durations:

@@ -526,11 +526,16 @@ class CompressionPipeline:
         Returns:
             Path to original GIF file, or None if not found
         """
-        # Extract SHA from folder name (everything after the last underscore)
-        if "_" not in folder_name:
+        # Validate input
+        if not folder_name or not isinstance(folder_name, str):
             return None
         
-        gif_sha = folder_name.split("_")[-1]
+        # Extract SHA from folder name (everything after the last underscore)
+        folder_parts = folder_name.split("_")
+        if len(folder_parts) < 2:  # Must have at least filename_sha format
+            return None
+        
+        gif_sha = folder_parts[-1]
         
         # Validate SHA format (64 hex characters)
         if len(gif_sha) != 64 or not all(c in "0123456789abcdef" for c in gif_sha.lower()):

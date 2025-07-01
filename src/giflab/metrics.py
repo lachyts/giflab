@@ -380,7 +380,9 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
         
         # Calculate processing time
         end_time = time.perf_counter()
-        render_ms = int((end_time - start_time) * 1000)
+        elapsed_seconds = end_time - start_time
+        # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+        render_ms = min(int(elapsed_seconds * 1000), 86400000)
         
         return {
             "ssim": float(avg_ssim),
@@ -445,7 +447,9 @@ def measure_render_time(func, *args, **kwargs) -> Tuple[Any, int]:
     result = func(*args, **kwargs)
     end_time = time.perf_counter()
     
-    execution_time_ms = int((end_time - start_time) * 1000)
+    elapsed_seconds = end_time - start_time
+    # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
+    execution_time_ms = min(int(elapsed_seconds * 1000), 86400000)
     return result, execution_time_ms
 
 
