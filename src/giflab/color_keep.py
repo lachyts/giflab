@@ -161,7 +161,7 @@ def get_color_reduction_info(input_path: Path, color_count: int) -> Dict[str, An
             "color_keep_count": color_count,
             "reduction_needed": reduction_needed,
             "reduction_percent": ((original_colors - target_colors) / original_colors * 100.0) if original_colors > 0 else 0.0,
-            "compression_ratio": original_colors / target_colors if target_colors > 0 and original_colors > 0 else 1.0
+            "compression_ratio": (original_colors / target_colors) if target_colors > 0 and original_colors > 0 else 1.0
         }
         
     except Exception as e:

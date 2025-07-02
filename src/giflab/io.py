@@ -183,6 +183,10 @@ def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:
     """
     bad_gifs_dir.mkdir(parents=True, exist_ok=True)
     
+    # Validate source file exists
+    if not gif_path.exists():
+        raise IOError(f"Source file does not exist: {gif_path}")
+    
     # Preserve original weird filenames
     dest_path = bad_gifs_dir / gif_path.name
     
@@ -193,8 +197,22 @@ def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:
         suffix = gif_path.suffix
         dest_path = bad_gifs_dir / f"{stem}_{counter}{suffix}"
         counter += 1
+        
+        # Prevent infinite loop with too many conflicts
+        if counter > 1000:
+            raise IOError(f"Too many filename conflicts when moving {gif_path}")
     
-    shutil.move(str(gif_path), str(dest_path))
+    try:
+        # Use Path.rename() which is more reliable than shutil.move()
+        gif_path.rename(dest_path)
+    except OSError as e:
+        # If rename fails (e.g., cross-filesystem), fall back to copy + delete
+        try:
+            shutil.copy2(str(gif_path), str(dest_path))
+            gif_path.unlink()
+        except Exception as copy_error:
+            raise IOError(f"Failed to move {gif_path} to {dest_path}: {copy_error}") from e
+    
     return dest_path
 
 

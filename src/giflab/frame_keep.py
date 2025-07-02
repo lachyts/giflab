@@ -227,7 +227,7 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> Dict[str, A
                 else:
                     # Fallback to manual counting with better error handling
                     current_frame = 0
-                while True:
+                    while True:
                         try:
                             img.seek(current_frame)
                             frame_count = current_frame + 1
@@ -241,7 +241,6 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> Dict[str, A
                         # Safety limit to prevent infinite loops with corrupted files
                         if current_frame > 10000:  # Reasonable upper limit
                             raise ValueError(f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted")
-                            
             except EOFError:
                 pass  # Normal end of frames
             except Exception as e:
