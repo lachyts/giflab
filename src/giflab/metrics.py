@@ -214,7 +214,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
     current_frame1 = frame1_gray.astype(np.float32)
     current_frame2 = frame2_gray.astype(np.float32)
     
-    for scale in range(scales):
+    # Safety check: limit scales to prevent infinite loops
+    max_possible_scales = min(scales, 10)  # Hard limit to prevent runaway loops
+    
+    for scale in range(max_possible_scales):
         # Calculate SSIM at current scale
         try:
             scale_ssim = ssim(current_frame1, current_frame2, data_range=255.0)
@@ -225,12 +228,14 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
             ssim_values.append(0.0)
         
         # Downsample for next scale (if not the last scale)
-        if scale < scales - 1:
+        if scale < max_possible_scales - 1:
+            prev_shape = current_frame1.shape
             current_frame1 = cv2.resize(current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
             current_frame2 = cv2.resize(current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
             
-            # Stop if frames become too small
-            if current_frame1.shape[0] < 8 or current_frame1.shape[1] < 8:
+            # Stop if frames become too small OR if size didn't change (safety check)
+            if (current_frame1.shape[0] < 8 or current_frame1.shape[1] < 8 or 
+                current_frame1.shape == prev_shape):
                 break
     
     # Weighted average of SSIM values across scales
@@ -284,9 +289,15 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     if mean_diff == 0:
         return 1.0
     
-    # Protect against division by zero with proper epsilon handling
+    # Protect against division by zero and handle edge cases
     epsilon = 1e-8
-    consistency = 1.0 / (1.0 + variance_diff / max(mean_diff, epsilon))
+    if variance_diff == 0:
+        # Perfect consistency - no variance in frame differences
+        return 1.0
+    
+    # Use max to ensure we don't divide by zero
+    denominator = max(mean_diff, epsilon)
+    consistency = 1.0 / (1.0 + variance_diff / denominator)
     return max(0.0, min(1.0, consistency))
 
 
