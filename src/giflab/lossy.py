@@ -211,7 +211,13 @@ def compress_with_gifsicle(
         raise RuntimeError(
             f"Gifsicle failed with exit code {e.returncode}: {e.stderr}"
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        # Ensure process is properly terminated on timeout
+        if e.args and hasattr(e.args[0], 'kill'):
+            try:
+                e.args[0].kill()
+            except Exception:
+                pass
         raise RuntimeError(f"Gifsicle timed out after 5 minutes")
     except Exception as e:
         raise RuntimeError(f"Gifsicle execution failed: {str(e)}")
@@ -321,7 +327,13 @@ def compress_with_animately(
         raise RuntimeError(
             f"Animately failed with exit code {e.returncode}: {e.stderr}"
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        # Ensure process is properly terminated on timeout
+        if e.args and hasattr(e.args[0], 'kill'):
+            try:
+                e.args[0].kill()
+            except Exception:
+                pass
         raise RuntimeError(f"Animately timed out after 5 minutes")
     except Exception as e:
         raise RuntimeError(f"Animately execution failed: {str(e)}")

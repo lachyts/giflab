@@ -419,6 +419,7 @@ class CompressionPipeline:
         # Execute jobs in parallel
         processed_count = 0
         failed_count = 0
+        moved_bad_gifs = set()  # Track which GIFs have already been moved to prevent duplicates
         
         try:
             with ProcessPoolExecutor(max_workers=self.workers) as executor:
@@ -455,12 +456,15 @@ class CompressionPipeline:
                         failed_count += 1
                         self.logger.error(f"Job failed: {e}")
                         
-                        # Move bad GIF if this is the first failure for this GIF
-                        try:
-                            if all(f.gif_path != job.gif_path for f in future_to_job.values()):
+                        # Move bad GIF only once per unique GIF file
+                        gif_path_str = str(job.gif_path)
+                        if gif_path_str not in moved_bad_gifs:
+                            try:
                                 move_bad_gif(job.gif_path, self.path_config.BAD_GIFS_DIR)
-                        except Exception:
-                            pass
+                                moved_bad_gifs.add(gif_path_str)
+                                self.logger.info(f"Moved bad GIF to: {self.path_config.BAD_GIFS_DIR}")
+                            except Exception as move_error:
+                                self.logger.error(f"Failed to move bad GIF {job.gif_path}: {move_error}")
         
         except KeyboardInterrupt:
             self.logger.info("Pipeline interrupted by user")
@@ -535,10 +539,19 @@ class CompressionPipeline:
         if len(folder_parts) < 2:  # Must have at least filename_sha format
             return None
         
+        # Get the last part which should be the SHA
         gif_sha = folder_parts[-1]
         
         # Validate SHA format (64 hex characters)
-        if len(gif_sha) != 64 or not all(c in "0123456789abcdef" for c in gif_sha.lower()):
+        if len(gif_sha) != 64:
+            return None
+        
+        # Check if all characters are valid hex characters (case insensitive)
+        try:
+            # This will raise ValueError if gif_sha contains non-hex characters
+            int(gif_sha, 16)
+        except ValueError:
+            # Invalid hex string
             return None
         
         return self.find_original_gif_by_sha(gif_sha, raw_dir)

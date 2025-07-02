@@ -53,7 +53,23 @@ def extract_gif_frames(gif_path: Path, max_frames: Optional[int] = None) -> Fram
                 )
             
             total_frames = img.n_frames
-            frames_to_extract = min(total_frames, max_frames) if max_frames else total_frames
+            
+            # Memory protection: limit frame extraction for very large GIFs
+            memory_limit_frames = 500  # Reasonable limit to prevent memory issues
+            if max_frames is None:
+                frames_to_extract = min(total_frames, memory_limit_frames)
+            else:
+                frames_to_extract = min(total_frames, max_frames, memory_limit_frames)
+            
+            # Additional memory check based on image dimensions
+            width, height = img.size
+            pixels_per_frame = width * height * 3  # RGB
+            estimated_memory_mb = (frames_to_extract * pixels_per_frame) / (1024 * 1024)
+            
+            # Limit memory usage to ~500MB for frame extraction
+            if estimated_memory_mb > 500:
+                max_safe_frames = int(500 * 1024 * 1024 / pixels_per_frame)
+                frames_to_extract = min(frames_to_extract, max(1, max_safe_frames))
             
             frames = []
             total_duration = 0
@@ -91,28 +107,52 @@ def resize_to_common_dimensions(frames1: List[np.ndarray], frames2: List[np.ndar
     if not frames1 or not frames2:
         return frames1, frames2
     
+    # Validate frames have proper dimensions
+    if len(frames1[0].shape) < 2 or len(frames2[0].shape) < 2:
+        raise ValueError("Frames must have at least 2 dimensions")
+    
     # Get dimensions
     h1, w1 = frames1[0].shape[:2]
     h2, w2 = frames2[0].shape[:2]
+    
+    # Validate dimensions are positive
+    if h1 <= 0 or w1 <= 0 or h2 <= 0 or w2 <= 0:
+        raise ValueError(f"Invalid frame dimensions: {h1}x{w1} and {h2}x{w2}")
     
     # Use smallest common dimensions
     target_h = min(h1, h2)
     target_w = min(w1, w2)
     
+    # Ensure minimum dimensions for processing
+    target_h = max(target_h, 1)
+    target_w = max(target_w, 1)
+    
     # Resize if necessary
     resized_frames1 = []
     for frame in frames1:
+        if len(frame.shape) < 2:
+            raise ValueError("Frame has invalid shape")
+        
         if frame.shape[:2] != (target_h, target_w):
-            resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
-            resized_frames1.append(resized)
+            try:
+                resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                resized_frames1.append(resized)
+            except Exception as e:
+                raise ValueError(f"Failed to resize frame: {e}")
         else:
             resized_frames1.append(frame)
     
     resized_frames2 = []
     for frame in frames2:
+        if len(frame.shape) < 2:
+            raise ValueError("Frame has invalid shape")
+            
         if frame.shape[:2] != (target_h, target_w):
-            resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
-            resized_frames2.append(resized)
+            try:
+                resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                resized_frames2.append(resized)
+            except Exception as e:
+                raise ValueError(f"Failed to resize frame: {e}")
         else:
             resized_frames2.append(frame)
     
@@ -214,7 +254,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
     current_frame1 = frame1_gray.astype(np.float32)
     current_frame2 = frame2_gray.astype(np.float32)
     
-    for scale in range(scales):
+    # Safety check: limit scales to prevent infinite loops
+    max_possible_scales = min(scales, 10)  # Hard limit to prevent runaway loops
+    
+    for scale in range(max_possible_scales):
         # Calculate SSIM at current scale
         try:
             scale_ssim = ssim(current_frame1, current_frame2, data_range=255.0)
@@ -225,12 +268,14 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
             ssim_values.append(0.0)
         
         # Downsample for next scale (if not the last scale)
-        if scale < scales - 1:
+        if scale < max_possible_scales - 1:
+            prev_shape = current_frame1.shape
             current_frame1 = cv2.resize(current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
             current_frame2 = cv2.resize(current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
             
-            # Stop if frames become too small
-            if current_frame1.shape[0] < 8 or current_frame1.shape[1] < 8:
+            # Stop if frames become too small OR if size didn't change (safety check)
+            if (current_frame1.shape[0] < 8 or current_frame1.shape[1] < 8 or 
+                current_frame1.shape == prev_shape):
                 break
     
     # Weighted average of SSIM values across scales
@@ -284,9 +329,15 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     if mean_diff == 0:
         return 1.0
     
-    # Protect against division by zero with proper epsilon handling
+    # Protect against division by zero and handle edge cases
     epsilon = 1e-8
-    consistency = 1.0 / (1.0 + variance_diff / max(mean_diff, epsilon))
+    if variance_diff == 0:
+        # Perfect consistency - no variance in frame differences
+        return 1.0
+    
+    # Use max to ensure we don't divide by zero
+    denominator = max(mean_diff, epsilon)
+    consistency = 1.0 / (1.0 + variance_diff / denominator)
     return max(0.0, min(1.0, consistency))
 
 
