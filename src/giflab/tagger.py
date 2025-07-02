@@ -21,12 +21,12 @@ from PIL import Image
 # Conditional imports for CLIP dependencies
 try:
     import torch
-    import clip
+    import open_clip
     CLIP_AVAILABLE = True
 except ImportError:
     CLIP_AVAILABLE = False
     torch = None
-    clip = None
+    open_clip = None
 
 from .meta import extract_gif_metadata
 
@@ -94,7 +94,7 @@ class HybridCompressionTagger:
         """Initialize the hybrid tagger with CLIP model and content queries."""
         if not CLIP_AVAILABLE:
             raise RuntimeError(
-                "CLIP dependencies not available. Install with: pip install torch clip-by-openai"
+                "CLIP dependencies not available. Install with: pip install torch open-clip-torch"
             )
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -102,7 +102,9 @@ class HybridCompressionTagger:
         
         # Initialize CLIP for content classification
         try:
-            self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
+            self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
+            self.clip_model = self.clip_model.to(self.device)
+            self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
             self.logger.info(f"CLIP model loaded on {self.device}")
         except Exception as e:
             self.logger.error(f"Failed to load CLIP model: {e}")
@@ -229,11 +231,17 @@ class HybridCompressionTagger:
             
             # Preprocess image and text
             image_input = self.clip_preprocess(pil_image).unsqueeze(0).to(self.device)
-            text_inputs = clip.tokenize(self.content_queries).to(self.device)
+            text_inputs = self.tokenizer(self.content_queries).to(self.device)
             
             # Get CLIP predictions
             with torch.no_grad():
-                logits_per_image, _ = self.clip_model(image_input, text_inputs)
+                image_features = self.clip_model.encode_image(image_input)
+                text_features = self.clip_model.encode_text(text_inputs)
+                
+                # Calculate similarity scores
+                image_features /= image_features.norm(dim=-1, keepdim=True)
+                text_features /= text_features.norm(dim=-1, keepdim=True)
+                logits_per_image = (image_features @ text_features.T)
                 probs = logits_per_image.softmax(dim=-1).cpu().numpy()[0]
             
             # Return confidence scores for each content type

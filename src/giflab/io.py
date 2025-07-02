@@ -5,12 +5,46 @@ import json
 import logging
 import tempfile
 import shutil
-import fcntl
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from contextlib import contextmanager
 from datetime import datetime
+
+# Cross-platform file locking
+if sys.platform == "win32":
+    import msvcrt
+    
+    def lock_file(file_handle):
+        """Lock file on Windows using msvcrt."""
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_LOCK, 1)
+        except OSError:
+            pass  # File locking may not be available in all situations
+    
+    def unlock_file(file_handle):
+        """Unlock file on Windows using msvcrt."""
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+else:
+    import fcntl
+    
+    def lock_file(file_handle):
+        """Lock file on Unix systems using fcntl."""
+        try:
+            fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            pass
+    
+    def unlock_file(file_handle):
+        """Unlock file on Unix systems using fcntl."""
+        try:
+            fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
 
 
 def setup_logging(log_dir: Path, log_level: str = "INFO") -> logging.Logger:
@@ -95,7 +129,7 @@ def append_csv_row(csv_path: Path, row_data: Dict[str, Any], fieldnames: List[st
     with open(csv_path, "a", newline="", encoding="utf-8") as f:
         try:
             # Acquire exclusive lock (blocks until available)
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            lock_file(f)
             
             # Check if file is empty (needs header) after acquiring lock
             current_pos = f.tell()
@@ -114,7 +148,7 @@ def append_csv_row(csv_path: Path, row_data: Dict[str, Any], fieldnames: List[st
             
         finally:
             # Lock is automatically released when file is closed
-            pass
+            unlock_file(f)
 
 
 def read_csv_as_dicts(csv_path: Path) -> List[Dict[str, Any]]:

@@ -357,7 +357,7 @@ def tag(
         sys.exit(1)
     except ImportError as e:
         click.echo(f"❌ Missing dependencies for tagging: {e}", err=True)
-        click.echo(f"💡 Run: poetry install (to install torch and clip-by-openai)")
+        click.echo(f"💡 Run: poetry install (to install torch and open-clip-torch)")
         sys.exit(1)
     except Exception as e:
         click.echo(f"❌ Tagging failed: {e}", err=True)
