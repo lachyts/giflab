@@ -116,25 +116,23 @@ This project is being developed in stages:
 
 - Python 3.11+
 - Poetry for dependency management
-- gifsicle and animately-cli for compression
 - FFmpeg for video processing
 
 ## Cross-Platform Setup
 
+Engine paths are configurable in `src/giflab/config.py` under the `EngineConfig` class.
+
 ### macOS
 ```bash
 brew install python@3.11 ffmpeg gifsicle
-# Install animately-cli binary to PATH
+# Install animately-cli binary and update its path in EngineConfig
 ```
-
-**Engine Paths:**
-- Animately engine: `/Users/lachlants/bin/launcher`
-- Gifsicle: `gifsicle`
 
 ### Windows/WSL
 ```bash
 choco install python ffmpeg gifsicle
 # Or use WSL2 with Linux setup
+# Update engine paths in src/giflab/config.py as needed
 ```
 
 ## License

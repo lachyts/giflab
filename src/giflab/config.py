@@ -1,6 +1,6 @@
 """Configuration settings for GifLab."""
 
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,16 +10,16 @@ class CompressionConfig:
     """Configuration for GIF compression variants."""
     
     # Frame keep ratios to test
-    FRAME_KEEP_RATIOS: List[float] = None
+    FRAME_KEEP_RATIOS: Optional[List[float]] = None
     
     # Color palette sizes to test
-    COLOR_KEEP_COUNTS: List[int] = None
+    COLOR_KEEP_COUNTS: Optional[List[int]] = None
     
     # Lossy compression levels to test
-    LOSSY_LEVELS: List[int] = None
+    LOSSY_LEVELS: Optional[List[int]] = None
     
     # Supported engines
-    ENGINES: List[str] = None
+    ENGINES: Optional[List[str]] = None
     
     def __post_init__(self) -> None:
         if self.FRAME_KEEP_RATIOS is None:
@@ -98,7 +98,22 @@ class PathConfig:
     LOGS_DIR: Path = Path("logs")
 
 
+@dataclass
+class EngineConfig:
+    """Configuration for compression engine paths."""
+
+    # Path to the gifsicle executable.
+    # On Windows, you might need to provide the full path to the .exe
+    # e.g., "C:/Program Files/gifsicle/gifsicle.exe"
+    GIFSICLE_PATH: str = r"C:\Tools\gifsicle\gifsicle-1.94\gifsicle.exe"
+
+    # Path to the animately executable.
+    # Set this to the location of your animately binary.
+    ANIMATELY_PATH: str = r"C:\Tools\Animately Engine\animately.exe"
+
+
 # Default configuration instances
 DEFAULT_COMPRESSION_CONFIG = CompressionConfig()
 DEFAULT_METRICS_CONFIG = MetricsConfig()
-DEFAULT_PATH_CONFIG = PathConfig() 
+DEFAULT_PATH_CONFIG = PathConfig()
+DEFAULT_ENGINE_CONFIG = EngineConfig() 

@@ -20,48 +20,7 @@ from .color_keep import (
     count_gif_colors
 )
 from .meta import extract_gif_metadata
-
-
-def _find_animately_launcher() -> Optional[str]:
-    """Find the animately launcher executable.
-    
-    Returns:
-        Path to animately launcher or None if not found
-    """
-    # Check environment variable first
-    env_path = os.environ.get('ANIMATELY_PATH')
-    if env_path and Path(env_path).exists():
-        return env_path
-    
-    # Common installation paths to check
-    search_paths = [
-        # Original hardcoded path for backwards compatibility
-        "/Users/lachlants/bin/launcher",
-        # Common Unix paths
-        "/usr/local/bin/animately",
-        "/usr/bin/animately",
-        "/opt/animately/bin/launcher",
-        # User paths
-        os.path.expanduser("~/bin/animately"),
-        os.path.expanduser("~/bin/launcher"),
-        # Current directory (for development)
-        "./animately",
-        "./launcher"
-    ]
-    
-    for path in search_paths:
-        if Path(path).exists():
-            return path
-    
-    # Try to find in PATH
-    try:
-        result = subprocess.run(['which', 'animately'], capture_output=True, text=True)
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except Exception:
-        pass
-    
-    return None
+from .config import DEFAULT_ENGINE_CONFIG
 
 
 class LossyEngine(Enum):
@@ -145,7 +104,12 @@ def compress_with_gifsicle(
         raise RuntimeError(f"Failed to extract metadata from {input_path}: {str(e)}")
     
     # Build gifsicle command
-    cmd = ["gifsicle", "--optimize"]
+    gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
+    if not gifsicle_path or not _is_executable(gifsicle_path):
+        raise RuntimeError(
+            "gifsicle not found. Please install it or set GIFSICLE_PATH in EngineConfig."
+        )
+    cmd = [gifsicle_path, "--optimize"]
     
     # Add lossy compression if level > 0
     if lossy_level > 0:
@@ -231,7 +195,26 @@ def compress_with_animately(
     color_keep_count: Optional[int] = None
 ) -> Dict[str, Any]:
     """Compress GIF using animately CLI with lossy, frame reduction, and color reduction options.
-    
+
+    Animately Engine Options:
+      -i, --input arg        Path to input gif file
+      -o, --output arg       Path to output gif file
+      -s, --scale arg        Scale
+      -c, --crop arg         Crop
+      -l, --lossy arg        Lossy
+      -d, --delay arg        Delay
+      -t, --trim-frames arg  Trim
+      -m, --trim-ms arg      Trim in milliseconds
+      -f, --reduce arg       Reduce frames
+      -p, --colors arg       Reduce palette colors
+      -g, --frames arg       Frames
+      -z, --zoom arg         Zoom
+      -u, --tone arg         Duotone
+      -r, --repeated-frame   Repeated Frame
+      -e, --meta arg         Gif meta information
+      -y, --loops arg        Loops in output gif
+      -h, --help             List of available options
+
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
@@ -245,13 +228,15 @@ def compress_with_animately(
     Raises:
         RuntimeError: If animately command fails
     """
-    # Find animately launcher with configurable path
-    animately_path = _find_animately_launcher()
-    
+    animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
+
     # Check if animately is available
     if not animately_path or not Path(animately_path).exists():
-        raise RuntimeError(f"Animately launcher not found. Please install animately or set ANIMATELY_PATH environment variable.")
-    
+        raise RuntimeError(
+            "Animately launcher not found. "
+            "Please install animately or set ANIMATELY_PATH in EngineConfig."
+        )
+
     # Get GIF metadata for frame and color information
     try:
         metadata = extract_gif_metadata(input_path)
@@ -261,7 +246,20 @@ def compress_with_animately(
         raise RuntimeError(f"Failed to extract metadata from {input_path}: {str(e)}")
     
     # Build animately command
-    cmd = [animately_path, "gif", "optimize"]
+    cmd = [animately_path]
+    
+    # Add input and output with path validation
+    input_str = str(input_path.resolve())  # Resolve to absolute path
+    output_str = str(output_path.resolve())  # Resolve to absolute path
+    
+    # Validate paths don't contain suspicious characters
+    if any(char in input_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
+    if any(char in output_str for char in [';', '&', '|', '`', '$']):
+        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
+    
+    # Add input and output paths
+    cmd.extend(["--input", input_str, "--output", output_str])
     
     # Add lossy compression if level > 0
     if lossy_level > 0:
@@ -277,18 +275,6 @@ def compress_with_animately(
         validate_color_keep_count(color_keep_count)
         color_args = build_animately_color_args(color_keep_count, original_colors)
         cmd.extend(color_args)
-    
-    # Add input and output with path validation
-    input_str = str(input_path.resolve())  # Resolve to absolute path
-    output_str = str(output_path.resolve())  # Resolve to absolute path
-    
-    # Validate paths don't contain suspicious characters
-    if any(char in input_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
-    if any(char in output_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
-    
-    cmd.extend([input_str, output_str])
     
     # Execute command and measure time
     start_time = time.time()
@@ -337,6 +323,18 @@ def compress_with_animately(
         raise RuntimeError(f"Animately timed out after 5 minutes")
     except Exception as e:
         raise RuntimeError(f"Animately execution failed: {str(e)}")
+
+
+def _is_executable(path: str) -> bool:
+    """Check if a path is an executable file.
+    
+    Args:
+        path: The file path to check.
+        
+    Returns:
+        True if the path is an executable file, False otherwise.
+    """
+    return Path(path).is_file() and os.access(path, os.X_OK)
 
 
 def validate_lossy_level(lossy_level: int, engine: LossyEngine) -> None:
