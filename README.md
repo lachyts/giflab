@@ -135,6 +135,25 @@ choco install python ffmpeg gifsicle
 # Update engine paths in src/giflab/config.py as needed
 ```
 
+## 📈 Machine-Learning Dataset Best Practices  
+*Why this matters: High-quality, well-documented metrics are the foundation of reliable ML models.*
+
+When you create or extend a GifLab dataset for ML tasks, **follow the checklist below** (detailed rationale in *Section&nbsp;8* of `QUALITY_METRICS_EXPANSION_PLAN.md`). These rules apply to *every* future contribution:
+
+1. **Deterministic extraction** – lock random seeds; metric functions must be pure.
+2. **Schema validation** – export rows that pass `MetricRecordV1` (pydantic) validation.
+3. **Version tagging** – record dataset version, `giflab` semver, and git commit hash.
+4. **Canonical data-splits** – maintain *GIF-level* `train/val/test` JSON split files.
+5. **Feature scaling** – persist `scaler.pkl` (z-score or min-max) alongside data.
+6. **Missing-value handling** – encode unknown metrics as `np.nan`, not `0.0`.
+7. **Outlier & drift reports** – auto-generate an HTML outlier summary and correlation dashboard.
+8. **Reproducible pipeline** – provide a `make data` target that builds the dataset + EDA artifacts end-to-end.
+9. **Comprehensive logs** – include parameter checksum and elapsed-time stats in every run.
+
+> **🚦 Gate keeper:** Pull requests touching dataset code MUST tick all items or explain why they do not apply.
+
+For implementation details, see `giflab/data_prep.py` (to be added) and the ML checklist in the plan document.
+
 ## License
 
 MIT License - see LICENSE file for details.

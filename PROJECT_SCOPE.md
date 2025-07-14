@@ -190,3 +190,16 @@ cd giflab
 poetry install
 poetry run python -m giflab run data/raw data/
 ```
+
+## 7  ML Dataset Quality Requirements
+
+All future stages must comply with the “Machine-Learning Dataset Best Practices” checklist in `README.md` and the detailed guidance in *Section 8* of `QUALITY_METRICS_EXPANSION_PLAN.md`.  In short, any code that produces or mutates metric data **MUST**:
+
+- guarantee deterministic, reproducible extraction;
+- validate against `MetricRecordV1` pydantic schema;
+- tag outputs with dataset+code versions;
+- respect canonical train/val/test GIF splits;
+- preserve or update `scaler.pkl` feature-scaling artefacts;
+- regenerate outlier and correlation reports when metrics change.
+
+Pull requests that add or modify dataset-related code must include evidence (CI artefacts or notebook screenshots) showing the checklist is satisfied.
