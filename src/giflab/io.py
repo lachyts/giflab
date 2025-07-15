@@ -123,6 +123,24 @@ def append_csv_row(csv_path: Path, row_data: dict[str, Any], fieldnames: list[st
     Raises:
         IOError: If file cannot be written
     """
+    # Validate against MetricRecordV1 if it appears to be a metrics row. This is
+    # done *best-effort* – we only attempt validation when the dictionary
+    # contains the key that uniquely identifies a metrics export ("composite_quality").
+    #
+    # The CSV writer is reused for both compression summaries and full metrics
+    # exports. Compression summaries (which lack many metric keys) should skip
+    # validation to avoid false errors. Full metric exports *must* pass the
+    # schema, raising immediately on detection of malformed records.
+    try:
+        if "composite_quality" in row_data:
+            # Lazy import to avoid circulars and optional dependency load when
+            # only basic I/O is required.
+            from giflab.schema import validate_metric_record
+
+            validate_metric_record(row_data)  # Will raise ValidationError on failure
+    except Exception as e:  # pragma: no cover – propagate clearer message
+        raise ValueError(f"Invalid metric record: {e}") from e
+
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Use file locking to prevent race conditions in multiprocessing
