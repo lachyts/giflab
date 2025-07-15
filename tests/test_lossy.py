@@ -249,8 +249,8 @@ class TestCompressWithGifsicle:
         mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
 
-        # Mock frame reduction arguments
-        mock_frame_args.return_value = ["--delete", "#1", "--delete", "#3"]
+        # Mock frame reduction arguments (new frame selection syntax)
+        mock_frame_args.return_value = ["#0", "#2", "#4", "#6"]
 
         mock_result = MagicMock()
         mock_result.stderr = ""
@@ -262,14 +262,13 @@ class TestCompressWithGifsicle:
 
         result = compress_with_gifsicle(input_path, output_path, 0, 0.8)
 
-        # Verify frame reduction arguments are included
+        # Verify frame reduction arguments are included (input file comes first, then frame args)
         from giflab.config import DEFAULT_ENGINE_CONFIG
         expected_cmd = [
             DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
             "--optimize",
-            "--delete", "#1",
-            "--delete", "#3",
             str(input_path.resolve()),
+            "#0", "#2", "#4", "#6",
             "--output",
             str(output_path.resolve())
         ]
@@ -555,7 +554,7 @@ class TestApplyCompressionWithAllParams:
                 Path("output.gif"),
                 0,
                 0.8,
-                32  # Not in supported counts
+                4  # 4 is not in supported counts [256, 128, 64, 32, 16, 8]
             )
 
 
@@ -610,8 +609,8 @@ class TestColorIntegration:
         mock_meta.orig_n_colors = 256
         mock_metadata.return_value = mock_meta
 
-        # Mock color reduction arguments
-        mock_color_args.return_value = ["--colors", "64"]
+        # Mock color reduction arguments (includes dithering parameter)
+        mock_color_args.return_value = ["--colors", "64", "--no-dither"]
 
         mock_result = MagicMock()
         mock_result.stderr = ""
@@ -628,7 +627,7 @@ class TestColorIntegration:
         expected_cmd = [
             DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
             "--optimize",
-            "--colors", "64",
+            "--colors", "64", "--no-dither",
             str(input_path.resolve()),
             "--output",
             str(output_path.resolve())
@@ -642,8 +641,8 @@ class TestColorIntegration:
             timeout=300
         )
 
-        # Verify color args function was called
-        mock_color_args.assert_called_once_with(64, 256)
+        # Verify color args function was called with dithering parameter
+        mock_color_args.assert_called_once_with(64, 256, dithering=False)
 
         assert result["color_keep_count"] == 64
         assert result["original_colors"] == 256
@@ -719,7 +718,7 @@ class TestGetCompressionEstimate:
             get_compression_estimate(Path("test.gif"), 0, 0.33, 128)
 
         with pytest.raises(ValueError, match="not in supported counts"):
-            get_compression_estimate(Path("test.gif"), 0, 0.8, 32)
+            get_compression_estimate(Path("test.gif"), 0, 0.8, 4)  # 4 is not in supported counts
 
     @patch('pathlib.Path.exists')
     def test_missing_file_estimate(self, mock_exists):

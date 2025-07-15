@@ -29,7 +29,7 @@ class TestValidateColorKeepCount:
     def test_invalid_count_not_configured(self):
         """Test count not in configured valid counts."""
         with pytest.raises(ValueError, match="not in supported counts"):
-            validate_color_keep_count(32)
+            validate_color_keep_count(4)  # 4 is not in [256, 128, 64, 32, 16, 8]
 
     def test_invalid_count_negative(self):
         """Test negative color count."""
@@ -41,10 +41,10 @@ class TestValidateColorKeepCount:
         with pytest.raises(ValueError, match="must be a positive integer"):
             validate_color_keep_count(0)
 
-    def test_invalid_count_non_integer(self):
+    def test_non_integer_count(self):
         """Test non-integer color count."""
         with pytest.raises(ValueError, match="must be a positive integer"):
-            validate_color_keep_count(64.5)
+            validate_color_keep_count(64.5)  # type: ignore
 
 
 class TestBuildGifsicleColorArgs:
@@ -68,17 +68,17 @@ class TestBuildGifsicleColorArgs:
     def test_color_reduction_needed(self):
         """Test color reduction arguments when needed."""
         args = build_gifsicle_color_args(64, 256)
-        assert args == ["--colors", "64"]
+        assert args == ["--colors", "64", "--no-dither"]
 
     def test_various_color_counts(self):
         """Test different color reduction scenarios."""
         # 256 -> 128
         args = build_gifsicle_color_args(128, 256)
-        assert args == ["--colors", "128"]
+        assert args == ["--colors", "128", "--no-dither"]
 
         # 200 -> 64
         args = build_gifsicle_color_args(64, 200)
-        assert args == ["--colors", "64"]
+        assert args == ["--colors", "64", "--no-dither"]
 
 
 class TestBuildAnimatelyColorArgs:
@@ -231,7 +231,7 @@ class TestGetColorReductionInfo:
     def test_invalid_color_count(self):
         """Test error with invalid color count."""
         with pytest.raises(ValueError, match="not in supported counts"):
-            get_color_reduction_info(Path("test.gif"), 32)
+            get_color_reduction_info(Path("test.gif"), 4)  # 4 is not in supported counts
 
 
 class TestExtractDominantColors:
@@ -353,7 +353,7 @@ class TestGetOptimalColorCount:
         optimal = get_optimal_color_count(Path("test.gif"), 0.9)
 
         # Should suggest a color count that retains 90% of colors
-        assert optimal in [256, 128, 64]
+        assert optimal in [256, 128, 64, 32, 16, 8]
 
     @patch('giflab.color_keep.analyze_gif_palette')
     def test_optimal_count_low_quality(self, mock_analyze):

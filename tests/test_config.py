@@ -18,7 +18,7 @@ class TestCompressionConfig:
         config = CompressionConfig()
 
         assert config.FRAME_KEEP_RATIOS == [1.00, 0.90, 0.80, 0.70, 0.50]
-        assert config.COLOR_KEEP_COUNTS == [256, 128, 64]
+        assert config.COLOR_KEEP_COUNTS == [256, 128, 64, 32, 16, 8]
         assert config.LOSSY_LEVELS == [0, 40, 120]
         assert config.ENGINES == ["gifsicle", "animately"]
 
@@ -71,7 +71,12 @@ def test_default_configurations():
     assert isinstance(DEFAULT_PATH_CONFIG, PathConfig)
 
     # Verify defaults are properly set
+    assert DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS is not None
+    assert DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS is not None
+    assert DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS is not None
+    assert DEFAULT_COMPRESSION_CONFIG.ENGINES is not None
+    
     assert len(DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS) == 5
-    assert len(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS) == 3
+    assert len(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS) == 6  # Updated from 3 to 6
     assert len(DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS) == 3
     assert len(DEFAULT_COMPRESSION_CONFIG.ENGINES) == 2

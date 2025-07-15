@@ -25,7 +25,7 @@ class CompressionConfig:
             self.FRAME_KEEP_RATIOS = [1.00, 0.90, 0.80, 0.70, 0.50]
 
         if self.COLOR_KEEP_COUNTS is None:
-            self.COLOR_KEEP_COUNTS = [256, 128, 64]
+            self.COLOR_KEEP_COUNTS = [256, 128, 64, 32, 16, 8]
 
         if self.LOSSY_LEVELS is None:
             self.LOSSY_LEVELS = [0, 40, 120]

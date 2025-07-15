@@ -117,30 +117,28 @@ class TestBuildGifsicleFrameArgs:
     def test_keep_every_other_frame(self):
         """Test keeping every other frame."""
         args = build_gifsicle_frame_args(0.5, 10)
-        # Should keep frames 0, 2, 4, 6, 8
-        # Should delete frames 1, 3, 5, 7, 9
-        expected_deletions = ["--delete", "#1", "--delete", "#3", "--delete", "#5", "--delete", "#7", "--delete", "#9"]
-        assert args == expected_deletions
+        # Should keep frames 0, 2, 4, 6, 8 (frame selection syntax)
+        expected_frames = ["#0", "#2", "#4", "#6", "#8"]
+        assert args == expected_frames
 
     def test_keep_first_and_last(self):
         """Test keeping only first few frames."""
         args = build_gifsicle_frame_args(0.2, 10)
-        # Should keep 2 frames: 0, 5
-        # Should delete 1-4, 6-9
-        assert "--delete" in args
-        assert "#1-4" in args or ("#1" in args and "#4" in args)
+        # Should keep 2 frames: 0, 5 (frame selection syntax)
+        assert "#0" in args
+        assert "#5" in args
 
     def test_single_frame_gif(self):
         """Test with single frame GIF."""
         args = build_gifsicle_frame_args(0.5, 1)
-        assert args == []  # No frames to delete
+        assert args == ["#0"]  # Keep the single frame
 
     def test_keep_80_percent(self):
         """Test keeping 80% of frames."""
         args = build_gifsicle_frame_args(0.8, 10)
-        # Should keep 8 frames, delete 2 frames
-        assert "--delete" in args
-        assert len([arg for arg in args if arg == "--delete"]) <= 3  # At most a few delete commands
+        # Should keep 8 frames with frame selection syntax
+        assert len(args) == 8
+        assert "#0" in args
 
 
 class TestBuildAnimatelyFrameArgs:
@@ -154,8 +152,8 @@ class TestBuildAnimatelyFrameArgs:
     def test_frame_reduction_args(self):
         """Test frame reduction arguments for animately."""
         args = build_animately_frame_args(0.5, 10)
-        # Should include frame reduction parameter
-        assert "--frame-reduce" in args
+        # Should include frame reduction parameter with --reduce
+        assert "--reduce" in args
         assert "0.50" in args
 
     def test_different_ratios(self):
@@ -163,10 +161,9 @@ class TestBuildAnimatelyFrameArgs:
         args_80 = build_animately_frame_args(0.8, 10)
         args_70 = build_animately_frame_args(0.7, 10)
 
-        assert "--frame-reduce" in args_80
+        assert "--reduce" in args_80
+        assert "--reduce" in args_70
         assert "0.80" in args_80
-
-        assert "--frame-reduce" in args_70
         assert "0.70" in args_70
 
     def test_single_frame_gif(self):

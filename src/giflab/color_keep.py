@@ -3,6 +3,26 @@
 This module provides utilities for calculating color reduction parameters
 for use with compression engines. Color reduction is applied as part of
 single-pass compression along with lossy and frame reduction.
+
+Engine Color Reduction Capabilities:
+
+Gifsicle (https://www.lcdf.org/gifsicle/):
+- Uses --colors N flag to reduce palette to N colors
+- Supports various color reduction methods: --color-method METHOD
+- Dithering options: --dither, --no-dither
+- Advanced options: --gamma, --use-colormap, --change-color
+- Example: gifsicle --colors 64 --dither input.gif --output output.gif
+
+Animately Engine:
+- Uses --colors N flag to reduce palette to N colors
+- Simplified interface compared to gifsicle
+- Example: animately --input input.gif --colors 64 --output output.gif
+
+Best Practices:
+- Both engines support standard palette sizes: 256, 128, 64, 32, 16
+- Color reduction should be done before frame optimization for best results
+- Consider dithering for smooth gradients when reducing colors significantly
+- Test different color counts to balance quality vs file size
 """
 
 from collections import Counter
@@ -29,6 +49,8 @@ def validate_color_keep_count(color_count: int) -> None:
 
     # Check against configured valid counts
     valid_counts = DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS
+    if valid_counts is None:
+        valid_counts = [256, 128, 64, 32, 16, 8]  # Default values
 
     if color_count not in valid_counts:
         raise ValueError(
@@ -36,33 +58,65 @@ def validate_color_keep_count(color_count: int) -> None:
         )
 
 
-def build_gifsicle_color_args(color_count: int, original_colors: int) -> list[str]:
+def build_gifsicle_color_args(color_count: int, original_colors: int, dithering: bool = False) -> list[str]:
     """Build gifsicle command arguments for color reduction.
+
+    Reference: https://www.lcdf.org/gifsicle/
+    
+    Gifsicle color reduction options:
+    - --colors N: Reduce palette to N colors
+    - --color-method METHOD: Choose color reduction algorithm
+    - --dither: Enable dithering for smoother gradients
+    - --no-dither: Disable dithering for sharp edges
+    
+    Example: gifsicle --colors 64 --dither input.gif --output output.gif
 
     Args:
         color_count: Target number of colors to keep
         original_colors: Original number of colors in the GIF
+        dithering: Whether to enable dithering (default: False for consistency with animately)
 
     Returns:
-        List of command line arguments for gifsicle
+        List of command line arguments for gifsicle color reduction
+        
+    Note:
+        Returns empty list if no reduction needed (color_count >= original_colors)
+        Dithering is disabled by default to match animately's behavior more closely.
     """
     # No reduction needed if target is >= original or target is max (256)
     if color_count >= original_colors or color_count >= 256:
         return []
 
     # Gifsicle uses --colors argument for palette reduction
-    return ["--colors", str(color_count)]
+    args = ["--colors", str(color_count)]
+    
+    # Add dithering control for consistency
+    if dithering:
+        args.append("--dither")
+    else:
+        args.append("--no-dither")
+    
+    return args
 
 
 def build_animately_color_args(color_count: int, original_colors: int) -> list[str]:
     """Build animately command arguments for color reduction.
+
+    Animately color reduction is simpler than gifsicle:
+    - --colors N: Reduce palette to N colors
+    - Automatic optimization without manual dithering controls
+    
+    Example: animately --input input.gif --colors 64 --output output.gif
 
     Args:
         color_count: Target number of colors to keep
         original_colors: Original number of colors in the GIF
 
     Returns:
-        List of command line arguments for animately
+        List of command line arguments for animately color reduction
+        
+    Note:
+        Returns empty list if no reduction needed (color_count >= original_colors)
     """
     # No reduction needed if target is >= original or target is max (256)
     if color_count >= original_colors or color_count >= 256:
@@ -263,7 +317,7 @@ def analyze_gif_palette(image_path: Path) -> dict[str, Any]:
                 "palette_info": palette_info,
                 "reduction_candidates": {
                     count: color_count > count
-                    for count in DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS
+                    for count in (DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or [256, 128, 64, 32, 16, 8])
                 }
             }
 
@@ -294,7 +348,7 @@ def get_optimal_color_count(image_path: Path, quality_threshold: float = 0.95) -
         original_colors = analysis["total_colors"]
 
         # Find the largest supported color count that provides meaningful reduction
-        valid_counts = sorted(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS, reverse=True)
+        valid_counts = sorted(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or [256, 128, 64, 32, 16, 8], reverse=True)
 
         for count in valid_counts:
             if count < original_colors:

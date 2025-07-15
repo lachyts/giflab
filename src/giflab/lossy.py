@@ -1,4 +1,43 @@
-"""Lossy compression functionality for GIF optimization."""
+"""Lossy compression functionality for GIF optimization.
+
+This module provides unified interfaces for both gifsicle and animately compression engines.
+Each engine has different command-line syntax and capabilities, but this module provides
+a consistent Python API for both.
+
+Engine Documentation & Best Practices:
+
+Gifsicle (https://www.lcdf.org/gifsicle/):
+- Powerful command-line GIF manipulation tool
+- Frame selection syntax: #0 #2 #4 (specify frames to keep)
+- Optimization levels: --optimize, -O1, -O2, -O3
+- Lossy compression: --lossy=LEVEL (0-200, higher = more compression)
+- Color reduction: --colors N (reduce palette to N colors)
+- Command structure: gifsicle [OPTIONS] INPUT [FRAME_SELECTION] --output OUTPUT
+
+Animately Engine:
+- Internal compression engine with streamlined CLI
+- Frame reduction: --reduce RATIO (0.0-1.0, decimal format)
+- Lossy compression: --lossy LEVEL (compression level)
+- Color reduction: --colors N (reduce palette to N colors)
+- Command structure: animately --input INPUT [OPTIONS] --output OUTPUT
+
+Key Differences:
+- Gifsicle: Frame selection by index (#0 #2 #4), input file before frame args
+- Animately: Frame reduction by ratio (--reduce 0.5), input/output via flags
+- Gifsicle: More complex but powerful optimization options
+- Animately: Simpler syntax, consistent flag-based interface
+
+Usage Examples:
+    # Gifsicle frame reduction (keep every other frame)
+    gifsicle --optimize input.gif #0 #2 #4 #6 --output output.gif
+    
+    # Animately frame reduction (keep 50% of frames)
+    animately --input input.gif --reduce 0.50 --output output.gif
+    
+    # Both engines with lossy compression
+    gifsicle --optimize --lossy=40 input.gif --output output.gif
+    animately --input input.gif --lossy 40 --output output.gif
+"""
 
 import os
 import subprocess
@@ -80,18 +119,49 @@ def compress_with_gifsicle(
 ) -> dict[str, Any]:
     """Compress GIF using gifsicle with lossy, frame reduction, and color reduction options.
 
+    Constructs and executes a gifsicle command following best practices from:
+    https://www.lcdf.org/gifsicle/
+    
+    Command Construction:
+    1. Base: gifsicle --optimize
+    2. Lossy: --lossy=LEVEL (if level > 0)
+    3. Colors: --colors N (if color_keep_count specified)
+    4. Input: INPUT_FILE (must come before frame selection)
+    5. Frames: #0 #2 #4 (frame selection, if frame_keep_ratio < 1.0)
+    6. Output: --output OUTPUT_FILE
+    
+    Example Commands:
+        # Lossless with frame reduction
+        gifsicle --optimize input.gif #0 #2 #4 #6 --output output.gif
+        
+        # Lossy with color reduction
+        gifsicle --optimize --lossy=40 --colors 64 input.gif --output output.gif
+        
+        # Full optimization
+        gifsicle --optimize --lossy=40 --colors 64 input.gif #0 #2 #4 --output output.gif
+
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
-        lossy_level: Lossy compression level for gifsicle
+        lossy_level: Lossy compression level for gifsicle (0=lossless, higher=more lossy)
         frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
         color_keep_count: Number of colors to keep (optional)
 
     Returns:
-        Dictionary with compression metadata
+        Dictionary with compression metadata including:
+        - render_ms: Processing time in milliseconds
+        - engine: "gifsicle"
+        - command: Full command that was executed
+        - original_frames: Number of frames in input
+        - original_colors: Number of colors in input
 
     Raises:
-        RuntimeError: If gifsicle command fails
+        RuntimeError: If gifsicle command fails or binary not found
+        ValueError: If paths contain dangerous characters
+        
+    Note:
+        Frame selection (#0 #2 #4) must come AFTER input file for gifsicle.
+        This is different from --delete which conflicts with --optimize.
     """
     # Get GIF metadata for frame and color information
     try:
@@ -113,15 +183,10 @@ def compress_with_gifsicle(
     if lossy_level > 0:
         cmd.extend([f"--lossy={lossy_level}"])
 
-    # Add frame reduction arguments
-    if frame_keep_ratio < 1.0:
-        frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
-        cmd.extend(frame_args)
-
     # Add color reduction arguments
     if color_keep_count is not None:
         validate_color_keep_count(color_keep_count)
-        color_args = build_gifsicle_color_args(color_keep_count, original_colors)
+        color_args = build_gifsicle_color_args(color_keep_count, original_colors, dithering=False)
         cmd.extend(color_args)
 
     # Add input and output with path validation
@@ -134,7 +199,16 @@ def compress_with_gifsicle(
     if any(char in output_str for char in [';', '&', '|', '`', '$']):
         raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
 
-    cmd.extend([input_str, "--output", output_str])
+    # Add input file first (required for frame operations)
+    cmd.append(input_str)
+
+    # Add frame reduction arguments AFTER input file
+    if frame_keep_ratio < 1.0:
+        frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
+        cmd.extend(frame_args)
+
+    # Add output
+    cmd.extend(["--output", output_str])
 
     # Execute command and measure time
     start_time = time.time()
@@ -194,24 +268,44 @@ def compress_with_animately(
 ) -> dict[str, Any]:
     """Compress GIF using animately CLI with lossy, frame reduction, and color reduction options.
 
-    Animately Engine Options:
+    Constructs and executes an animately command using its flag-based interface.
+    
+    Animately CLI Reference:
+    Usage: animately.exe [OPTION...]
       -i, --input arg        Path to input gif file
       -o, --output arg       Path to output gif file
-      -s, --scale arg        Scale
-      -c, --crop arg         Crop
-      -l, --lossy arg        Lossy
-      -d, --delay arg        Delay
-      -t, --trim-frames arg  Trim
-      -m, --trim-ms arg      Trim in milliseconds
-      -f, --reduce arg       Reduce frames
+      -l, --lossy arg        Lossy compression level
+      -f, --reduce arg       Reduce frames (ratio 0.0-1.0)
       -p, --colors arg       Reduce palette colors
-      -g, --frames arg       Frames
-      -z, --zoom arg         Zoom
-      -u, --tone arg         Duotone
-      -r, --repeated-frame   Repeated Frame
-      -e, --meta arg         Gif meta information
-      -y, --loops arg        Loops in output gif
-      -h, --help             List of available options
+      -d, --delay arg        Delay between frames
+      -t, --trim-frames arg  Trim frames
+      -m, --trim-ms arg      Trim in milliseconds
+      -s, --scale arg        Scale factor
+      -c, --crop arg         Crop dimensions
+      -z, --zoom arg         Zoom factor
+      -u, --tone arg         Duotone effect
+      -r, --repeated-frame   Repeated frame optimization
+      -e, --meta arg         GIF metadata
+      -y, --loops arg        Loop count
+      -h, --help             Show help
+    
+    Command Construction:
+    1. Base: animately
+    2. Input: --input INPUT_FILE
+    3. Output: --output OUTPUT_FILE
+    4. Lossy: --lossy LEVEL (if level > 0)
+    5. Frames: --reduce RATIO (if frame_keep_ratio < 1.0)
+    6. Colors: --colors N (if color_keep_count specified)
+    
+    Example Commands:
+        # Lossless with frame reduction
+        animately --input input.gif --reduce 0.50 --output output.gif
+        
+        # Lossy with color reduction
+        animately --input input.gif --lossy 40 --colors 64 --output output.gif
+        
+        # Full optimization
+        animately --input input.gif --lossy 40 --reduce 0.50 --colors 64 --output output.gif
 
     Args:
         input_path: Path to input GIF file
@@ -221,10 +315,20 @@ def compress_with_animately(
         color_keep_count: Number of colors to keep (optional)
 
     Returns:
-        Dictionary with compression metadata
+        Dictionary with compression metadata including:
+        - render_ms: Processing time in milliseconds
+        - engine: "animately"
+        - command: Full command that was executed
+        - original_frames: Number of frames in input
+        - original_colors: Number of colors in input
 
     Raises:
-        RuntimeError: If animately command fails
+        RuntimeError: If animately command fails or binary not found
+        ValueError: If paths contain dangerous characters
+        
+    Note:
+        Animately uses decimal ratios (0.50 for 50%) and consistent flag syntax.
+        All parameters are specified via flags, unlike gifsicle's mixed approach.
     """
     animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
