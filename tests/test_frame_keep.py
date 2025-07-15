@@ -1,16 +1,16 @@
 """Tests for giflab.frame_keep module."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import MagicMock, patch
 
+import pytest
 from giflab.frame_keep import (
+    build_animately_frame_args,
+    build_gifsicle_frame_args,
     calculate_frame_indices,
     calculate_target_frame_count,
-    build_gifsicle_frame_args,
-    build_animately_frame_args,
+    get_frame_reduction_info,
     validate_frame_keep_ratio,
-    get_frame_reduction_info
 )
 
 
@@ -162,10 +162,10 @@ class TestBuildAnimatelyFrameArgs:
         """Test different frame reduction ratios."""
         args_80 = build_animately_frame_args(0.8, 10)
         args_70 = build_animately_frame_args(0.7, 10)
-        
+
         assert "--frame-reduce" in args_80
         assert "0.80" in args_80
-        
+
         assert "--frame-reduce" in args_70
         assert "0.70" in args_70
 
@@ -189,7 +189,7 @@ class TestValidateFrameKeepRatio:
         """Test invalid ratios outside 0.0-1.0 range."""
         with pytest.raises(ValueError, match="must be between 0.0 and 1.0"):
             validate_frame_keep_ratio(-0.1)
-        
+
         with pytest.raises(ValueError, match="must be between 0.0 and 1.0"):
             validate_frame_keep_ratio(1.1)
 
@@ -213,7 +213,7 @@ class TestGetFrameReductionInfo:
     def test_valid_gif_analysis(self, mock_open, mock_exists):
         """Test frame reduction analysis for valid GIF."""
         mock_exists.return_value = True
-        
+
         # Mock PIL Image
         mock_img = MagicMock()
         mock_img.format = 'GIF'
@@ -221,9 +221,9 @@ class TestGetFrameReductionInfo:
         mock_img.seek.side_effect = [None, None, EOFError()]  # 3 frames (2 seeks, then EOFError)
         mock_img.tell.return_value = 0
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         info = get_frame_reduction_info(Path("test.gif"), 0.8)
-        
+
         assert info["original_frames"] == 3
         assert info["keep_ratio"] == 0.8
         assert info["target_frames"] == 2  # 80% of 3 frames
@@ -235,7 +235,7 @@ class TestGetFrameReductionInfo:
     def test_missing_file(self, mock_exists):
         """Test error when input file doesn't exist."""
         mock_exists.return_value = False
-        
+
         with pytest.raises(IOError, match="Input file not found"):
             get_frame_reduction_info(Path("missing.gif"), 0.8)
 
@@ -249,11 +249,11 @@ class TestGetFrameReductionInfo:
     def test_non_gif_file(self, mock_open, mock_exists):
         """Test error when file is not a GIF."""
         mock_exists.return_value = True
-        
+
         mock_img = MagicMock()
         mock_img.format = 'PNG'  # Not a GIF
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         with pytest.raises(ValueError, match="File is not a GIF"):
             get_frame_reduction_info(Path("test.png"), 0.8)
 
@@ -263,7 +263,7 @@ class TestGetFrameReductionInfo:
         """Test handling of PIL errors."""
         mock_exists.return_value = True
         mock_open.side_effect = Exception("PIL error")
-        
+
         with pytest.raises(IOError, match="Error reading GIF"):
             get_frame_reduction_info(Path("test.gif"), 0.8)
 
@@ -272,17 +272,17 @@ class TestGetFrameReductionInfo:
     def test_single_frame_gif(self, mock_open, mock_exists):
         """Test analysis of single frame GIF."""
         mock_exists.return_value = True
-        
+
         mock_img = MagicMock()
         mock_img.format = 'GIF'
         mock_img.n_frames = 1  # Explicitly set n_frames to 1
         mock_img.seek.side_effect = [EOFError()]  # Only 1 frame
         mock_img.tell.return_value = 0
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         info = get_frame_reduction_info(Path("single.gif"), 0.5)
-        
+
         assert info["original_frames"] == 1
         assert info["target_frames"] == 1
         assert info["frames_kept"] == 1
-        assert info["frame_indices"] == [0] 
+        assert info["frame_indices"] == [0]

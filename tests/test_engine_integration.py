@@ -1,24 +1,23 @@
 """Integration tests for compression engines (gifsicle and animately)."""
 
-import pytest
 import subprocess
 import tempfile
-import shutil
 from pathlib import Path
-from PIL import Image, ImageDraw
 
+import pytest
 from giflab.config import DEFAULT_ENGINE_CONFIG
 from giflab.lossy import (
     LossyEngine,
-    compress_with_gifsicle,
+    apply_lossy_compression,
     compress_with_animately,
-    apply_lossy_compression
+    compress_with_gifsicle,
 )
+from PIL import Image, ImageDraw
 
 
 def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None:
     """Create a simple test GIF for testing purposes.
-    
+
     Args:
         path: Path where to save the GIF
         frames: Number of frames in the GIF
@@ -32,7 +31,7 @@ def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None
         # Add a simple shape that moves
         draw.rectangle([i * 5, i * 5, i * 5 + 10, i * 5 + 10], fill=(255, 255, 255))
         images.append(img)
-    
+
     # Save as GIF
     images[0].save(
         path,
@@ -49,7 +48,7 @@ class TestEngineAvailability:
     def test_gifsicle_available(self):
         """Test that gifsicle is available and executable."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
-        
+
         try:
             result = subprocess.run(
                 [gifsicle_path, "--version"],
@@ -67,10 +66,10 @@ class TestEngineAvailability:
     def test_animately_available(self):
         """Test that animately is available and executable."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         if not Path(animately_path).exists():
             pytest.skip(f"Animately not found at {animately_path}")
-        
+
         try:
             result = subprocess.run(
                 [animately_path, "--help"],
@@ -89,19 +88,19 @@ class TestEngineAvailability:
         """Test that configured engine paths exist."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         # For gifsicle, it might be in PATH, so we'll try to find it
         try:
             result = subprocess.run(["which", gifsicle_path], capture_output=True, text=True)
             gifsicle_exists = result.returncode == 0 or Path(gifsicle_path).exists()
-        except:
+        except Exception:
             gifsicle_exists = Path(gifsicle_path).exists()
-        
+
         animately_exists = Path(animately_path).exists()
-        
+
         print(f"Gifsicle path: {gifsicle_path} (exists: {gifsicle_exists})")
         print(f"Animately path: {animately_path} (exists: {animately_exists})")
-        
+
         # At least one should exist for the tests to be meaningful
         assert gifsicle_exists or animately_exists, "Neither engine is available"
 
@@ -126,39 +125,39 @@ class TestGifsicleIntegration:
     def test_gifsicle_lossless_compression(self, test_gif, output_path):
         """Test gifsicle lossless compression."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
-        
+
         # Check if gifsicle is available
         try:
             subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
         except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
-        
+
         # Test compression
         result = compress_with_gifsicle(test_gif, output_path, lossy_level=0)
-        
+
         # Verify results
         assert output_path.exists(), "Output file was not created"
         assert result["engine"] == "gifsicle"
         assert result["lossy_level"] == 0
         assert result["render_ms"] > 0
         assert "command" in result
-        
+
         # Verify output is a valid GIF
         assert output_path.stat().st_size > 0, "Output file is empty"
 
     def test_gifsicle_lossy_compression(self, test_gif, output_path):
         """Test gifsicle lossy compression."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
-        
+
         # Check if gifsicle is available
         try:
             subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
         except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
-        
+
         # Test compression
         result = compress_with_gifsicle(test_gif, output_path, lossy_level=40)
-        
+
         # Verify results
         assert output_path.exists(), "Output file was not created"
         assert result["engine"] == "gifsicle"
@@ -187,35 +186,35 @@ class TestAnimatelyIntegration:
     def test_animately_lossless_compression(self, test_gif, output_path):
         """Test animately lossless compression."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         # Check if animately is available
         if not Path(animately_path).exists():
             pytest.skip(f"Animately not found at {animately_path}")
-        
+
         # Test compression
         result = compress_with_animately(test_gif, output_path, lossy_level=0)
-        
+
         # Verify results
         assert output_path.exists(), "Output file was not created"
         assert result["engine"] == "animately"
         assert result["lossy_level"] == 0
         assert result["render_ms"] > 0
         assert "command" in result
-        
+
         # Verify output is a valid GIF
         assert output_path.stat().st_size > 0, "Output file is empty"
 
     def test_animately_lossy_compression(self, test_gif, output_path):
         """Test animately lossy compression."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         # Check if animately is available
         if not Path(animately_path).exists():
             pytest.skip(f"Animately not found at {animately_path}")
-        
+
         # Test compression
         result = compress_with_animately(test_gif, output_path, lossy_level=40)
-        
+
         # Verify results
         assert output_path.exists(), "Output file was not created"
         assert result["engine"] == "animately"
@@ -239,21 +238,21 @@ class TestEngineComparison:
         """Compare both engines on the same input."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         # Check availability
         gifsicle_available = True
         animately_available = Path(animately_path).exists()
-        
+
         try:
             subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
-        except:
+        except Exception:
             gifsicle_available = False
-        
+
         if not gifsicle_available and not animately_available:
             pytest.skip("Neither engine is available")
-        
+
         results = {}
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             # Test gifsicle if available
             if gifsicle_available:
@@ -263,7 +262,7 @@ class TestEngineComparison:
                     results["gifsicle"]["output_size"] = gifsicle_output.stat().st_size
                 except Exception as e:
                     results["gifsicle"] = {"error": str(e)}
-            
+
             # Test animately if available
             if animately_available:
                 animately_output = Path(temp_dir) / "animately_output.gif"
@@ -272,7 +271,7 @@ class TestEngineComparison:
                     results["animately"]["output_size"] = animately_output.stat().st_size
                 except Exception as e:
                     results["animately"] = {"error": str(e)}
-        
+
         # Print comparison results
         print("\nEngine Comparison Results:")
         for engine, result in results.items():
@@ -280,7 +279,7 @@ class TestEngineComparison:
                 print(f"{engine}: ERROR - {result['error']}")
             else:
                 print(f"{engine}: {result['render_ms']}ms, {result['output_size']} bytes")
-        
+
         # At least one should succeed
         successful_engines = [k for k, v in results.items() if "error" not in v]
         assert len(successful_engines) > 0, f"All engines failed: {results}"
@@ -300,43 +299,43 @@ class TestHighLevelAPI:
     def test_apply_lossy_compression_gifsicle(self, test_gif):
         """Test high-level API with gifsicle."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
-        
+
         try:
             subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
-        except:
+        except Exception:
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "output.gif"
-            
+
             result = apply_lossy_compression(
-                test_gif, 
-                output_path, 
-                lossy_level=0, 
+                test_gif,
+                output_path,
+                lossy_level=0,
                 frame_keep_ratio=1.0,
                 engine=LossyEngine.GIFSICLE
             )
-            
+
             assert output_path.exists()
             assert result["engine"] == "gifsicle"
 
     def test_apply_lossy_compression_animately(self, test_gif):
         """Test high-level API with animately."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        
+
         if not Path(animately_path).exists():
             pytest.skip(f"Animately not found at {animately_path}")
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "output.gif"
-            
+
             result = apply_lossy_compression(
-                test_gif, 
-                output_path, 
-                lossy_level=0, 
+                test_gif,
+                output_path,
+                lossy_level=0,
                 frame_keep_ratio=1.0,
                 engine=LossyEngine.ANIMATELY
             )
-            
+
             assert output_path.exists()
-            assert result["engine"] == "animately" 
+            assert result["engine"] == "animately"

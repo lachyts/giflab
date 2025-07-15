@@ -1,21 +1,18 @@
 """Tests for giflab.color_keep module."""
 
-import pytest
-import warnings
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-import numpy as np
+from unittest.mock import MagicMock, patch
 
+import pytest
 from giflab.color_keep import (
-    validate_color_keep_count,
-    build_gifsicle_color_args,
-    build_animately_color_args,
-    count_gif_colors,
-    get_color_reduction_info,
-    extract_dominant_colors,
     analyze_gif_palette,
+    build_animately_color_args,
+    build_gifsicle_color_args,
+    count_gif_colors,
+    extract_dominant_colors,
+    get_color_reduction_info,
     get_optimal_color_count,
-    reduce_colors
+    validate_color_keep_count,
 )
 
 
@@ -78,7 +75,7 @@ class TestBuildGifsicleColorArgs:
         # 256 -> 128
         args = build_gifsicle_color_args(128, 256)
         assert args == ["--colors", "128"]
-        
+
         # 200 -> 64
         args = build_gifsicle_color_args(64, 200)
         assert args == ["--colors", "64"]
@@ -111,23 +108,23 @@ class TestCountGifColors:
     def test_palette_mode_gif(self, mock_open, mock_exists):
         """Test color counting for palette mode GIF."""
         mock_exists.return_value = True
-        
+
         # Mock PIL Image in palette mode
         mock_img = MagicMock()
         mock_img.format = 'GIF'
         mock_img.mode = 'P'
         # Create a simple palette with 5 unique colors
         mock_palette = [255, 0, 0,  # Red
-                       0, 255, 0,   # Green  
+                       0, 255, 0,   # Green
                        0, 0, 255,   # Blue
                        255, 255, 0, # Yellow
                        0, 0, 0]     # Black
         mock_palette.extend([0] * (256*3 - len(mock_palette)))  # Pad to full palette
         mock_img.getpalette.return_value = mock_palette
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         color_count = count_gif_colors(Path("test.gif"))
-        
+
         # Should detect the unique colors in the palette
         assert color_count > 0
         assert color_count <= 256
@@ -137,21 +134,21 @@ class TestCountGifColors:
     def test_rgb_mode_gif(self, mock_open, mock_exists):
         """Test color counting for RGB mode GIF."""
         mock_exists.return_value = True
-        
+
         # Mock PIL Image in RGB mode
         mock_img = MagicMock()
         mock_img.format = 'GIF'
         mock_img.mode = 'RGB'
-        
+
         # Mock quantization
         mock_quantized = MagicMock()
         mock_quantized.getpalette.return_value = [255, 0, 0, 0, 255, 0, 0, 0, 255]  # 3 colors
         mock_img.quantize.return_value = mock_quantized
-        
+
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         color_count = count_gif_colors(Path("test.gif"))
-        
+
         assert color_count > 0
         assert color_count <= 256
         mock_img.quantize.assert_called_once_with(colors=256)
@@ -160,7 +157,7 @@ class TestCountGifColors:
     def test_missing_file(self, mock_exists):
         """Test error when file doesn't exist."""
         mock_exists.return_value = False
-        
+
         with pytest.raises(IOError, match="File not found"):
             count_gif_colors(Path("missing.gif"))
 
@@ -169,11 +166,11 @@ class TestCountGifColors:
     def test_non_gif_file(self, mock_open, mock_exists):
         """Test error when file is not a GIF."""
         mock_exists.return_value = True
-        
+
         mock_img = MagicMock()
         mock_img.format = 'PNG'  # Not a GIF
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         with pytest.raises(ValueError, match="File is not a GIF"):
             count_gif_colors(Path("test.png"))
 
@@ -183,7 +180,7 @@ class TestCountGifColors:
         """Test handling of PIL errors."""
         mock_exists.return_value = True
         mock_open.side_effect = Exception("PIL error")
-        
+
         with pytest.raises(IOError, match="Error reading GIF"):
             count_gif_colors(Path("test.gif"))
 
@@ -197,13 +194,13 @@ class TestGetColorReductionInfo:
         """Test color reduction analysis for valid GIF."""
         mock_exists.return_value = True
         mock_count.return_value = 256  # Original has 256 colors
-        
+
         info = get_color_reduction_info(Path("test.gif"), 128)
-        
+
         assert info["original_colors"] == 256
         assert info["target_colors"] == 128
         assert info["color_keep_count"] == 128
-        assert info["reduction_needed"] == True
+        assert info["reduction_needed"] is True
         assert info["reduction_percent"] == 50.0
         assert info["compression_ratio"] == 2.0
 
@@ -213,13 +210,13 @@ class TestGetColorReductionInfo:
         """Test when no color reduction is needed."""
         mock_exists.return_value = True
         mock_count.return_value = 64  # Original has fewer colors than target
-        
+
         info = get_color_reduction_info(Path("test.gif"), 128)
-        
+
         assert info["original_colors"] == 64
         assert info["target_colors"] == 64
         assert info["color_keep_count"] == 128
-        assert info["reduction_needed"] == False
+        assert info["reduction_needed"] is False
         assert info["reduction_percent"] == 0.0
         assert info["compression_ratio"] == 1.0
 
@@ -227,7 +224,7 @@ class TestGetColorReductionInfo:
     def test_missing_file(self, mock_exists):
         """Test error when input file doesn't exist."""
         mock_exists.return_value = False
-        
+
         with pytest.raises(IOError, match="Input file not found"):
             get_color_reduction_info(Path("missing.gif"), 128)
 
@@ -245,11 +242,11 @@ class TestExtractDominantColors:
         # Create a mock PIL Image
         mock_img = MagicMock()
         mock_img.mode = 'RGB'
-        
+
         # Mock numpy array conversion
         with patch('numpy.array') as mock_array, \
              patch('giflab.color_keep.Counter') as mock_counter:
-            
+
             # Mock pixel data
             mock_array.return_value.reshape.return_value = [
                 [255, 0, 0],    # Red
@@ -257,16 +254,16 @@ class TestExtractDominantColors:
                 [0, 255, 0],    # Green
                 [0, 0, 255]     # Blue
             ]
-            
+
             # Mock counter results
             mock_counter.return_value.most_common.return_value = [
                 ((255, 0, 0), 2),   # Red appears twice
                 ((0, 255, 0), 1),   # Green appears once
                 ((0, 0, 255), 1)    # Blue appears once
             ]
-            
+
             colors = extract_dominant_colors(mock_img, 3)
-            
+
             assert colors == [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
             mock_counter.assert_called_once()
 
@@ -274,27 +271,27 @@ class TestExtractDominantColors:
         """Test color extraction with palette mode conversion."""
         mock_img = MagicMock()
         mock_img.mode = 'P'
-        
+
         # Mock conversion to RGB
         mock_rgb = MagicMock()
         mock_rgb.mode = 'RGB'
         mock_img.convert.return_value = mock_rgb
-        
+
         with patch('numpy.array') as mock_array, \
              patch('giflab.color_keep.Counter') as mock_counter:
-            
+
             mock_array.return_value.reshape.return_value = [[128, 128, 128]]
             mock_counter.return_value.most_common.return_value = [((128, 128, 128), 1)]
-            
+
             colors = extract_dominant_colors(mock_img, 1)
-            
+
             mock_img.convert.assert_called_once_with('RGB')
             assert colors == [(128, 128, 128)]
 
     def test_invalid_n_colors(self):
         """Test error with invalid n_colors."""
         mock_img = MagicMock()
-        
+
         with pytest.raises(ValueError, match="n_colors must be positive"):
             extract_dominant_colors(mock_img, 0)
 
@@ -314,7 +311,7 @@ class TestAnalyzeGifPalette:
         mock_exists.return_value = True
         mock_count.return_value = 128
         mock_extract.return_value = [(255, 0, 0), (0, 255, 0)]
-        
+
         # Mock PIL Image in palette mode
         mock_img = MagicMock()
         mock_img.format = 'GIF'
@@ -322,15 +319,15 @@ class TestAnalyzeGifPalette:
         mock_img.getpalette.return_value = [255, 0, 0] * 128  # 128 colors
         mock_img.info = {}
         mock_open.return_value.__enter__.return_value = mock_img
-        
+
         analysis = analyze_gif_palette(Path("test.gif"))
-        
+
         assert analysis["total_colors"] == 128
         assert analysis["dominant_colors"] == [(255, 0, 0), (0, 255, 0)]
         assert analysis["palette_info"]["mode"] == "palette"
         assert analysis["palette_info"]["palette_size"] == 128
-        assert analysis["palette_info"]["has_transparency"] == False
-        
+        assert analysis["palette_info"]["has_transparency"] is False
+
         # Check reduction candidates
         assert 256 in analysis["reduction_candidates"]
         assert 128 in analysis["reduction_candidates"]
@@ -340,7 +337,7 @@ class TestAnalyzeGifPalette:
     def test_missing_file(self, mock_exists):
         """Test error when file doesn't exist."""
         mock_exists.return_value = False
-        
+
         with pytest.raises(IOError, match="File not found"):
             analyze_gif_palette(Path("missing.gif"))
 
@@ -352,9 +349,9 @@ class TestGetOptimalColorCount:
     def test_optimal_count_high_quality(self, mock_analyze):
         """Test optimal color count with high quality threshold."""
         mock_analyze.return_value = {"total_colors": 256}
-        
+
         optimal = get_optimal_color_count(Path("test.gif"), 0.9)
-        
+
         # Should suggest a color count that retains 90% of colors
         assert optimal in [256, 128, 64]
 
@@ -362,9 +359,9 @@ class TestGetOptimalColorCount:
     def test_optimal_count_low_quality(self, mock_analyze):
         """Test optimal color count with low quality threshold."""
         mock_analyze.return_value = {"total_colors": 256}
-        
+
         optimal = get_optimal_color_count(Path("test.gif"), 0.2)
-        
+
         # Should suggest aggressive reduction
         assert optimal in [256, 128, 64]
 
@@ -377,40 +374,3 @@ class TestGetOptimalColorCount:
             get_optimal_color_count(Path("test.gif"), -0.1)
 
 
-class TestReduceColors:
-    """Tests for reduce_colors function (deprecated)."""
-
-    @patch('giflab.color_keep.count_gif_colors')
-    @patch('PIL.Image.open')
-    def test_deprecation_warning(self, mock_open, mock_count):
-        """Test that deprecation warning is raised."""
-        mock_count.return_value = 256
-        
-        # Mock PIL Image
-        mock_img = MagicMock()
-        mock_img.mode = 'RGB'
-        mock_quantized = MagicMock()
-        mock_img.quantize.return_value = mock_quantized
-        mock_open.return_value.__enter__.return_value = mock_img
-        
-        # Mock path operations
-        with patch('pathlib.Path.mkdir'), \
-             patch('pathlib.Path.parent'), \
-             warnings.catch_warnings(record=True) as w:
-            
-            warnings.simplefilter("always")
-            
-            reduce_colors(Path("input.gif"), Path("output.gif"), 128)
-            
-            # Check that deprecation warning was raised
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "deprecated" in str(w[0].message)
-
-    def test_invalid_max_colors(self):
-        """Test error with invalid max_colors."""
-        with pytest.raises(ValueError, match="must be between 1 and 256"):
-            reduce_colors(Path("input.gif"), Path("output.gif"), 0)
-
-        with pytest.raises(ValueError, match="must be between 1 and 256"):
-            reduce_colors(Path("input.gif"), Path("output.gif"), 300) 

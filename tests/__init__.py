@@ -1,1 +1,1 @@
-"""Test package for GifLab.""" 
+"""Test package for GifLab."""

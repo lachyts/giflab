@@ -1,27 +1,25 @@
 """Tests for giflab.metrics module."""
 
-import pytest
-import numpy as np
-from pathlib import Path
-import tempfile
 import time
-from unittest.mock import Mock, patch
-from PIL import Image
+from pathlib import Path
 
-from giflab.config import MetricsConfig, DEFAULT_METRICS_CONFIG
+import numpy as np
+import pytest
+from giflab.config import DEFAULT_METRICS_CONFIG, MetricsConfig
 from giflab.metrics import (
-    calculate_comprehensive_metrics,
-    calculate_ssim,
-    calculate_file_size_kb,
-    extract_gif_frames,
-    resize_to_common_dimensions,
+    FrameExtractResult,
     align_frames,
     align_frames_content_based,
-    calculate_ms_ssim,
-    calculate_temporal_consistency,
+    calculate_comprehensive_metrics,
+    calculate_file_size_kb,
     calculate_frame_mse,
-    FrameExtractResult
+    calculate_ms_ssim,
+    calculate_ssim,
+    calculate_temporal_consistency,
+    extract_gif_frames,
+    resize_to_common_dimensions,
 )
+from PIL import Image
 
 
 class TestMetricsConfig:
@@ -30,7 +28,7 @@ class TestMetricsConfig:
     def test_default_initialization(self):
         """Test that default values are set correctly."""
         config = MetricsConfig()
-        
+
         assert config.SSIM_MODE == "comprehensive"
         assert config.SSIM_MAX_FRAMES == 30
         assert config.USE_COMPREHENSIVE_METRICS is True
@@ -43,7 +41,7 @@ class TestMetricsConfig:
     def test_weights_sum_to_one(self):
         """Test that composite quality weights sum to 1.0."""
         config = MetricsConfig()
-        total_weight = (config.SSIM_WEIGHT + config.MS_SSIM_WEIGHT + 
+        total_weight = (config.SSIM_WEIGHT + config.MS_SSIM_WEIGHT +
                        config.PSNR_WEIGHT + config.TEMPORAL_WEIGHT)
         assert abs(total_weight - 1.0) < 0.001
 
@@ -74,7 +72,7 @@ class TestMetricsConfig:
             PSNR_WEIGHT=0.25,
             TEMPORAL_WEIGHT=0.25
         )
-        
+
         assert config.SSIM_MODE == "fast"
         assert config.SSIM_MAX_FRAMES == 10
         assert config.SSIM_WEIGHT == 0.25
@@ -88,7 +86,7 @@ class TestFileOperations:
         test_file = tmp_path / "test.txt"
         test_content = "x" * 1024  # 1KB of content
         test_file.write_text(test_content)
-        
+
         size_kb = calculate_file_size_kb(test_file)
         assert abs(size_kb - 1.0) < 0.1  # Should be approximately 1KB
 
@@ -104,7 +102,7 @@ class TestFrameExtraction:
     def create_test_gif(self, tmp_path, frames=3, width=50, height=50, duration=100):
         """Create a test GIF file."""
         gif_path = tmp_path / "test.gif"
-        
+
         # Create frames with different colors
         images = []
         for i in range(frames):
@@ -112,7 +110,7 @@ class TestFrameExtraction:
             color = (i * 80 % 255, (i * 100) % 255, (i * 120) % 255)
             img = Image.new('RGB', (width, height), color)
             images.append(img)
-        
+
         # Save as GIF
         if images:
             images[0].save(
@@ -122,20 +120,20 @@ class TestFrameExtraction:
                 duration=duration,
                 loop=0
             )
-        
+
         return gif_path
 
     def test_extract_gif_frames_basic(self, tmp_path):
         """Test basic GIF frame extraction."""
         gif_path = self.create_test_gif(tmp_path, frames=3)
         result = extract_gif_frames(gif_path)
-        
+
         assert isinstance(result, FrameExtractResult)
         assert result.frame_count == 3
         assert len(result.frames) == 3
         assert result.dimensions == (50, 50)
         assert result.duration_ms > 0
-        
+
         # Check frame data
         for frame in result.frames:
             assert isinstance(frame, np.ndarray)
@@ -145,7 +143,7 @@ class TestFrameExtraction:
         """Test frame extraction with max_frames limit."""
         gif_path = self.create_test_gif(tmp_path, frames=10)
         result = extract_gif_frames(gif_path, max_frames=5)
-        
+
         assert result.frame_count == 5
         assert len(result.frames) == 5
 
@@ -154,9 +152,9 @@ class TestFrameExtraction:
         img_path = tmp_path / "test.png"
         img = Image.new('RGB', (50, 50), (255, 0, 0))
         img.save(img_path)
-        
+
         result = extract_gif_frames(img_path)
-        
+
         assert result.frame_count == 1
         assert len(result.frames) == 1
         assert result.dimensions == (50, 50)
@@ -166,7 +164,7 @@ class TestFrameExtraction:
         """Test extraction from invalid file."""
         invalid_file = tmp_path / "invalid.gif"
         invalid_file.write_text("not a gif")
-        
+
         with pytest.raises(IOError):
             extract_gif_frames(invalid_file)
 
@@ -177,7 +175,7 @@ class TestFrameDimensionHandling:
     def create_frames(self, count, height, width):
         """Create test frames with specified dimensions."""
         frames = []
-        for i in range(count):
+        for _i in range(count):
             frame = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
             frames.append(frame)
         return frames
@@ -186,9 +184,9 @@ class TestFrameDimensionHandling:
         """Test resizing when frames are already same size."""
         frames1 = self.create_frames(3, 50, 50)
         frames2 = self.create_frames(3, 50, 50)
-        
+
         resized1, resized2 = resize_to_common_dimensions(frames1, frames2)
-        
+
         assert len(resized1) == 3
         assert len(resized2) == 3
         assert all(frame.shape == (50, 50, 3) for frame in resized1)
@@ -198,9 +196,9 @@ class TestFrameDimensionHandling:
         """Test resizing when frames have different sizes."""
         frames1 = self.create_frames(2, 100, 100)  # Larger
         frames2 = self.create_frames(2, 50, 50)    # Smaller
-        
+
         resized1, resized2 = resize_to_common_dimensions(frames1, frames2)
-        
+
         # Should resize to smallest common size (50x50)
         assert all(frame.shape == (50, 50, 3) for frame in resized1)
         assert all(frame.shape == (50, 50, 3) for frame in resized2)
@@ -209,9 +207,9 @@ class TestFrameDimensionHandling:
         """Test resizing with empty frame lists."""
         frames1 = []
         frames2 = self.create_frames(2, 50, 50)
-        
+
         resized1, resized2 = resize_to_common_dimensions(frames1, frames2)
-        
+
         assert len(resized1) == 0
         assert len(resized2) == 2
 
@@ -234,9 +232,9 @@ class TestFrameAlignment:
         """Test content-based alignment method (the only alignment method)."""
         original_frames = self.create_test_frames(5)
         compressed_frames = self.create_test_frames(3)
-        
+
         aligned = align_frames_content_based(original_frames, compressed_frames)
-        
+
         assert len(aligned) <= len(original_frames)
         assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in aligned)
 
@@ -244,9 +242,9 @@ class TestFrameAlignment:
         """Test the align_frames wrapper function."""
         original_frames = self.create_test_frames(4)
         compressed_frames = self.create_test_frames(3)
-        
+
         aligned = align_frames(original_frames, compressed_frames)
-        
+
         assert len(aligned) <= len(original_frames)
         assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in aligned)
 
@@ -256,11 +254,11 @@ class TestFrameAlignment:
         """Test alignment with empty frame lists."""
         original_frames = self.create_test_frames(5)
         empty_frames = []
-        
+
         # Test with empty compressed frames
         aligned = align_frames(original_frames, empty_frames)
         assert len(aligned) == 0
-        
+
         # Test with empty original frames
         aligned = align_frames(empty_frames, original_frames)
         assert len(aligned) == 0
@@ -289,7 +287,7 @@ class TestMetricCalculations:
         """Test MSE calculation between frames."""
         frame1, frame2 = self.create_similar_frames()
         mse = calculate_frame_mse(frame1, frame2)
-        
+
         assert isinstance(mse, float)
         assert mse >= 0.0
 
@@ -297,7 +295,7 @@ class TestMetricCalculations:
         """Test MSE calculation with different frame sizes."""
         frame1 = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
         frame2 = np.random.randint(0, 255, (25, 25, 3), dtype=np.uint8)
-        
+
         mse = calculate_frame_mse(frame1, frame2)
         assert isinstance(mse, float)
         assert mse >= 0.0
@@ -306,7 +304,7 @@ class TestMetricCalculations:
         """Test MS-SSIM calculation."""
         frame1, frame2 = self.create_similar_frames()
         ms_ssim_val = calculate_ms_ssim(frame1, frame2)
-        
+
         assert isinstance(ms_ssim_val, float)
         assert 0.0 <= ms_ssim_val <= 1.0
 
@@ -314,27 +312,27 @@ class TestMetricCalculations:
         """Test MS-SSIM with identical frames."""
         frame = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
         ms_ssim_val = calculate_ms_ssim(frame, frame)
-        
+
         assert ms_ssim_val >= 0.9  # Should be very high for identical frames
 
     def test_calculate_temporal_consistency_single_frame(self):
         """Test temporal consistency with single frame."""
         frames = [np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)]
         consistency = calculate_temporal_consistency(frames)
-        
+
         assert consistency == 1.0  # Single frame is perfectly consistent
 
     def test_calculate_temporal_consistency_consistent_frames(self):
         """Test temporal consistency with very similar frames."""
         base_frame = np.random.randint(100, 155, (50, 50, 3), dtype=np.uint8)
         frames = []
-        for i in range(5):
+        for _i in range(5):
             # Create very similar frames
             frame = base_frame.copy()
             frame = frame + np.random.randint(-5, 6, frame.shape, dtype=np.int8)
             frame = np.clip(frame, 0, 255).astype(np.uint8)
             frames.append(frame)
-        
+
         consistency = calculate_temporal_consistency(frames)
         assert isinstance(consistency, float)
         assert 0.0 <= consistency <= 1.0
@@ -342,11 +340,11 @@ class TestMetricCalculations:
     def test_calculate_temporal_consistency_inconsistent_frames(self):
         """Test temporal consistency with very different frames."""
         frames = []
-        for i in range(5):
+        for _i in range(5):
             # Create very different frames
             frame = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
             frames.append(frame)
-        
+
         consistency = calculate_temporal_consistency(frames)
         assert isinstance(consistency, float)
         assert 0.0 <= consistency <= 1.0
@@ -363,7 +361,7 @@ class TestComprehensiveMetrics:
         for i in range(5):
             img = Image.new('RGB', (100, 100), (i * 50, i * 60, i * 70))
             original_images.append(img)
-        
+
         original_images[0].save(
             original_path,
             save_all=True,
@@ -371,14 +369,14 @@ class TestComprehensiveMetrics:
             duration=100,
             loop=0
         )
-        
+
         # Create compressed GIF (smaller, fewer frames)
         compressed_path = tmp_path / "compressed.gif"
         compressed_images = []
         for i in range(0, 5, 2):  # Every 2nd frame
             img = Image.new('RGB', (80, 80), (i * 50 + 10, i * 60 + 10, i * 70 + 10))
             compressed_images.append(img)
-        
+
         compressed_images[0].save(
             compressed_path,
             save_all=True,
@@ -386,20 +384,20 @@ class TestComprehensiveMetrics:
             duration=100,
             loop=0
         )
-        
+
         return original_path, compressed_path
 
     def test_calculate_comprehensive_metrics_basic(self, tmp_path):
         """Test basic comprehensive metrics calculation."""
         original_path, compressed_path = self.create_test_gif_pair(tmp_path)
-        
+
         metrics = calculate_comprehensive_metrics(original_path, compressed_path)
-        
+
         # Check all required keys are present
-        required_keys = ["ssim", "ms_ssim", "psnr", "temporal_consistency", 
+        required_keys = ["ssim", "ms_ssim", "psnr", "temporal_consistency",
                         "composite_quality", "render_ms", "kilobytes"]
         assert all(key in metrics for key in required_keys)
-        
+
         # Check value ranges
         assert 0.0 <= metrics["ssim"] <= 1.0
         assert 0.0 <= metrics["ms_ssim"] <= 1.0
@@ -412,24 +410,24 @@ class TestComprehensiveMetrics:
     def test_calculate_comprehensive_metrics_custom_config(self, tmp_path):
         """Test comprehensive metrics with custom configuration."""
         original_path, compressed_path = self.create_test_gif_pair(tmp_path)
-        
+
         config = MetricsConfig(
             SSIM_MAX_FRAMES=5,
             TEMPORAL_CONSISTENCY_ENABLED=False
         )
-        
+
         metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
-        
+
         assert isinstance(metrics, dict)
         assert "composite_quality" in metrics
 
     def test_calculate_comprehensive_metrics_content_based_alignment(self, tmp_path):
         """Test comprehensive metrics with content-based alignment (the only method)."""
         original_path, compressed_path = self.create_test_gif_pair(tmp_path)
-        
+
         # Test with default configuration (content-based alignment)
         metrics = calculate_comprehensive_metrics(original_path, compressed_path)
-        
+
         assert isinstance(metrics, dict)
         assert "composite_quality" in metrics
         assert 0.0 <= metrics["composite_quality"] <= 1.0
@@ -438,20 +436,20 @@ class TestComprehensiveMetrics:
         """Test comprehensive metrics with nonexistent files."""
         with pytest.raises((IOError, ValueError)):
             calculate_comprehensive_metrics(
-                Path("nonexistent1.gif"), 
+                Path("nonexistent1.gif"),
                 Path("nonexistent2.gif")
             )
 
     def test_calculate_comprehensive_metrics_performance(self, tmp_path):
         """Test performance requirements (should be under 1 second)."""
         original_path, compressed_path = self.create_test_gif_pair(tmp_path)
-        
+
         start_time = time.perf_counter()
         metrics = calculate_comprehensive_metrics(original_path, compressed_path)
         end_time = time.perf_counter()
-        
+
         processing_time_ms = (end_time - start_time) * 1000
-        
+
         # Should meet performance target (significantly under 1 second)
         assert processing_time_ms < 1000  # Less than 1 second
         assert metrics["render_ms"] > 0
@@ -465,14 +463,14 @@ class TestLegacyCompatibility:
         # Create simple test GIFs
         original_path = tmp_path / "original.gif"
         compressed_path = tmp_path / "compressed.gif"
-        
+
         # Create identical single-frame GIFs
         img = Image.new('RGB', (50, 50), (128, 128, 128))
         img.save(original_path)
         img.save(compressed_path)
-        
+
         ssim_value = calculate_ssim(original_path, compressed_path)
-        
+
         assert isinstance(ssim_value, float)
         assert 0.0 <= ssim_value <= 1.0
 
@@ -483,11 +481,11 @@ class TestQualityDifferentiation:
     def create_quality_test_gifs(self, tmp_path):
         """Create GIFs with different quality levels for testing differentiation."""
         base_img = Image.new('RGB', (100, 100), (128, 128, 128))
-        
+
         # Excellent quality (identical)
         excellent_path = tmp_path / "excellent.gif"
         base_img.save(excellent_path)
-        
+
         # Good quality (slight differences)
         good_path = tmp_path / "good.gif"
         good_array = np.array(base_img)
@@ -495,7 +493,7 @@ class TestQualityDifferentiation:
         good_array = np.clip(good_array, 0, 255).astype(np.uint8)
         good_img = Image.fromarray(good_array)
         good_img.save(good_path)
-        
+
         # Poor quality (significant differences)
         poor_path = tmp_path / "poor.gif"
         poor_array = np.array(base_img)
@@ -503,7 +501,7 @@ class TestQualityDifferentiation:
         poor_array = np.clip(poor_array, 0, 255).astype(np.uint8)
         poor_img = Image.fromarray(poor_array)
         poor_img.save(poor_path)
-        
+
         return excellent_path, good_path, poor_path
 
     def test_quality_differentiation(self, tmp_path):
@@ -512,20 +510,20 @@ class TestQualityDifferentiation:
         reference_path = tmp_path / "reference.gif"
         ref_img = Image.new('RGB', (100, 100), (128, 128, 128))
         ref_img.save(reference_path)
-        
+
         excellent_path, good_path, poor_path = self.create_quality_test_gifs(tmp_path)
-        
+
         # Calculate metrics for each quality level
         excellent_metrics = calculate_comprehensive_metrics(reference_path, excellent_path)
         good_metrics = calculate_comprehensive_metrics(reference_path, good_path)
         poor_metrics = calculate_comprehensive_metrics(reference_path, poor_path)
-        
+
         # Quality should decrease: excellent > good > poor
         assert excellent_metrics["composite_quality"] >= good_metrics["composite_quality"]
         assert good_metrics["composite_quality"] >= poor_metrics["composite_quality"]
-        
+
         # Should achieve some differentiation (not necessarily 40% but some separation)
-        quality_range = (excellent_metrics["composite_quality"] - 
+        quality_range = (excellent_metrics["composite_quality"] -
                         poor_metrics["composite_quality"])
         assert quality_range > 0.1  # At least 10% differentiation
 
@@ -544,15 +542,15 @@ class TestEdgeCases:
         # Create single-frame GIFs
         img1 = Image.new('RGB', (50, 50), (100, 100, 100))
         img2 = Image.new('RGB', (50, 50), (110, 110, 110))
-        
+
         path1 = tmp_path / "single1.gif"
         path2 = tmp_path / "single2.gif"
-        
+
         img1.save(path1)
         img2.save(path2)
-        
+
         metrics = calculate_comprehensive_metrics(path1, path2)
-        
+
         assert isinstance(metrics, dict)
         assert metrics["temporal_consistency"] == 1.0  # Single frame is perfectly consistent
 
@@ -561,15 +559,15 @@ class TestEdgeCases:
         # Create tiny GIFs (8x8 pixels)
         img1 = Image.new('RGB', (8, 8), (50, 50, 50))
         img2 = Image.new('RGB', (8, 8), (60, 60, 60))
-        
+
         path1 = tmp_path / "tiny1.gif"
         path2 = tmp_path / "tiny2.gif"
-        
+
         img1.save(path1)
         img2.save(path2)
-        
+
         metrics = calculate_comprehensive_metrics(path1, path2)
-        
+
         assert isinstance(metrics, dict)
         assert all(0.0 <= metrics[key] <= 1.0 for key in ["ssim", "ms_ssim", "psnr", "composite_quality"])
 
@@ -580,7 +578,7 @@ class TestEdgeCases:
         for i in range(50):  # Create 50 frames
             img = Image.new('RGB', (50, 50), (i * 5 % 255, i * 7 % 255, i * 11 % 255))
             images.append(img)
-        
+
         gif_path = tmp_path / "many_frames.gif"
         images[0].save(
             gif_path,
@@ -589,10 +587,10 @@ class TestEdgeCases:
             duration=50,
             loop=0
         )
-        
+
         # Should limit to max frames automatically
         config = MetricsConfig(SSIM_MAX_FRAMES=10)
         metrics = calculate_comprehensive_metrics(gif_path, gif_path, config)
-        
+
         assert isinstance(metrics, dict)
-        assert metrics["composite_quality"] >= 0.9  # Should be high for identical GIFs 
+        assert metrics["composite_quality"] >= 0.9  # Should be high for identical GIFs
