@@ -102,13 +102,14 @@ class EngineConfig:
     """Configuration for compression engine paths."""
 
     # Path to the gifsicle executable.
+    # On macOS/Linux, "gifsicle" should work if installed via package manager
     # On Windows, you might need to provide the full path to the .exe
     # e.g., "C:/Program Files/gifsicle/gifsicle.exe"
-    GIFSICLE_PATH: str = r"C:\Tools\gifsicle\gifsicle-1.94\gifsicle.exe"
+    GIFSICLE_PATH: str = "gifsicle"
 
     # Path to the animately executable.
     # Set this to the location of your animately binary.
-    ANIMATELY_PATH: str = r"C:\Tools\Animately Engine\animately.exe"
+    ANIMATELY_PATH: str = "animately"
 
 
 # Default configuration instances

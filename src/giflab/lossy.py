@@ -578,7 +578,13 @@ def _is_executable(path: str) -> bool:
     Returns:
         True if the path is an executable file, False otherwise.
     """
-    return Path(path).is_file() and os.access(path, os.X_OK)
+    # First check if it's an absolute path
+    if Path(path).is_absolute():
+        return Path(path).is_file() and os.access(path, os.X_OK)
+    
+    # Otherwise, check if it's available in PATH
+    import shutil
+    return shutil.which(path) is not None
 
 
 def validate_lossy_level(lossy_level: int, engine: LossyEngine) -> None:
