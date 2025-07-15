@@ -468,7 +468,7 @@ def compress_with_animately(
     animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
     # Check if animately is available
-    if not animately_path or not Path(animately_path).exists():
+    if not animately_path or not _is_executable(animately_path):
         raise RuntimeError(
             "Animately launcher not found. "
             "Please install animately or set ANIMATELY_PATH in EngineConfig."

@@ -55,7 +55,8 @@ def _engine_available(engine: LossyEngine) -> bool:
             return False
     elif engine == LossyEngine.ANIMATELY:
         binary = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
-        return Path(binary).exists()
+        from giflab.lossy import _is_executable
+        return _is_executable(binary)
     else:
         return False
 

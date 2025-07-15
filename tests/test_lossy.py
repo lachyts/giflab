@@ -442,10 +442,10 @@ class TestCompressWithAnimately:
         assert result["frame_keep_ratio"] == 0.7
         assert result["original_frames"] == 8
 
-    @patch('pathlib.Path.exists')
-    def test_missing_launcher(self, mock_exists):
+    @patch('giflab.lossy._is_executable')
+    def test_missing_launcher(self, mock_is_executable):
         """Test error when animately launcher is missing."""
-        mock_exists.return_value = False
+        mock_is_executable.return_value = False
 
         with pytest.raises(RuntimeError, match="Animately launcher not found"):
             compress_with_animately(Path("input.gif"), Path("output.gif"), 0, 1.0)

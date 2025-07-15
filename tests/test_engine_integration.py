@@ -11,6 +11,7 @@ from giflab.lossy import (
     apply_lossy_compression,
     compress_with_animately,
     compress_with_gifsicle,
+    _is_executable,
 )
 from PIL import Image, ImageDraw
 
@@ -49,6 +50,9 @@ class TestEngineAvailability:
         """Test that gifsicle is available and executable."""
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
 
+        if not _is_executable(gifsicle_path):
+            pytest.skip(f"gifsicle not found at {gifsicle_path}")
+
         try:
             result = subprocess.run(
                 [gifsicle_path, "--version"],
@@ -67,7 +71,7 @@ class TestEngineAvailability:
         """Test that animately is available and executable."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
-        if not Path(animately_path).exists():
+        if not _is_executable(animately_path):
             pytest.skip(f"Animately not found at {animately_path}")
 
         try:
@@ -89,14 +93,8 @@ class TestEngineAvailability:
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
-        # For gifsicle, it might be in PATH, so we'll try to find it
-        try:
-            result = subprocess.run(["which", gifsicle_path], capture_output=True, text=True)
-            gifsicle_exists = result.returncode == 0 or Path(gifsicle_path).exists()
-        except Exception:
-            gifsicle_exists = Path(gifsicle_path).exists()
-
-        animately_exists = Path(animately_path).exists()
+        gifsicle_exists = _is_executable(gifsicle_path)
+        animately_exists = _is_executable(animately_path)
 
         print(f"Gifsicle path: {gifsicle_path} (exists: {gifsicle_exists})")
         print(f"Animately path: {animately_path} (exists: {animately_exists})")
@@ -188,7 +186,7 @@ class TestAnimatelyIntegration:
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
         # Check if animately is available
-        if not Path(animately_path).exists():
+        if not _is_executable(animately_path):
             pytest.skip(f"Animately not found at {animately_path}")
 
         # Test compression
@@ -209,7 +207,7 @@ class TestAnimatelyIntegration:
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
         # Check if animately is available
-        if not Path(animately_path).exists():
+        if not _is_executable(animately_path):
             pytest.skip(f"Animately not found at {animately_path}")
 
         # Test compression
@@ -240,13 +238,15 @@ class TestEngineComparison:
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
         # Check availability
-        gifsicle_available = True
-        animately_available = Path(animately_path).exists()
+        gifsicle_available = _is_executable(gifsicle_path)
+        animately_available = _is_executable(animately_path)
 
-        try:
-            subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
-        except Exception:
-            gifsicle_available = False
+        # Double-check gifsicle with version command
+        if gifsicle_available:
+            try:
+                subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
+            except Exception:
+                gifsicle_available = False
 
         if not gifsicle_available and not animately_available:
             pytest.skip("Neither engine is available")
@@ -323,7 +323,7 @@ class TestHighLevelAPI:
         """Test high-level API with animately."""
         animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
 
-        if not Path(animately_path).exists():
+        if not _is_executable(animately_path):
             pytest.skip(f"Animately not found at {animately_path}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
