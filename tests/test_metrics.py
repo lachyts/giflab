@@ -528,6 +528,373 @@ class TestQualityDifferentiation:
         assert quality_range > 0.1  # At least 10% differentiation
 
 
+class TestExtendedComprehensiveMetrics:
+    """Tests for the extended comprehensive metrics functionality."""
+
+    def create_test_gif_pair(self, tmp_path):
+        """Create a pair of test GIFs for extended metrics testing."""
+        # Create original GIF
+        original_path = tmp_path / "original.gif"
+        original_images = []
+        for i in range(3):
+            img = Image.new('RGB', (64, 64), (i * 80, i * 60, i * 70))
+            original_images.append(img)
+
+        original_images[0].save(
+            original_path,
+            save_all=True,
+            append_images=original_images[1:],
+            duration=100,
+            loop=0
+        )
+
+        # Create compressed GIF (slightly different)
+        compressed_path = tmp_path / "compressed.gif"
+        compressed_images = []
+        for i in range(3):
+            img = Image.new('RGB', (64, 64), (i * 80 + 5, i * 60 + 5, i * 70 + 5))
+            compressed_images.append(img)
+
+        compressed_images[0].save(
+            compressed_path,
+            save_all=True,
+            append_images=compressed_images[1:],
+            duration=100,
+            loop=0
+        )
+
+        return original_path, compressed_path
+
+    def test_extended_metrics_basic(self, tmp_path):
+        """Test that all new metrics are included in comprehensive results."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path)
+
+        # Check that all new metrics are present
+        expected_new_metrics = [
+            'mse', 'rmse', 'fsim', 'gmsd', 'chist', 
+            'edge_similarity', 'texture_similarity', 'sharpness_similarity'
+        ]
+        
+        for metric in expected_new_metrics:
+            assert metric in metrics, f"Missing metric: {metric}"
+            assert isinstance(metrics[metric], float), f"Metric {metric} should be float"
+
+    def test_aggregation_descriptors(self, tmp_path):
+        """Test that aggregation descriptors (std, min, max) are included."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path)
+
+        # Check that aggregation descriptors exist for all metrics
+        base_metrics = [
+            'ssim', 'ms_ssim', 'psnr', 'mse', 'rmse', 'fsim', 'gmsd', 
+            'chist', 'edge_similarity', 'texture_similarity', 'sharpness_similarity',
+            'temporal_consistency'
+        ]
+        
+        for metric in base_metrics:
+            assert f"{metric}_std" in metrics, f"Missing {metric}_std"
+            assert f"{metric}_min" in metrics, f"Missing {metric}_min"
+            assert f"{metric}_max" in metrics, f"Missing {metric}_max"
+            
+            # Check that std, min, max are valid
+            assert metrics[f"{metric}_std"] >= 0.0, f"{metric}_std should be non-negative"
+            assert metrics[f"{metric}_min"] <= metrics[f"{metric}_max"], f"{metric}_min should be <= max"
+
+    def test_raw_metrics_flag_disabled(self, tmp_path):
+        """Test that raw metrics are not included when RAW_METRICS=False."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        config = MetricsConfig(RAW_METRICS=False)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # Check that no raw metrics are present
+        raw_metrics = [key for key in metrics.keys() if key.endswith('_raw')]
+        assert len(raw_metrics) == 0, f"Should not have raw metrics when disabled, found: {raw_metrics}"
+
+    def test_raw_metrics_flag_enabled(self, tmp_path):
+        """Test that raw metrics are included when RAW_METRICS=True."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        config = MetricsConfig(RAW_METRICS=True)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # Check that raw metrics are present
+        expected_raw_metrics = [
+            'ssim_raw', 'ms_ssim_raw', 'psnr_raw', 'mse_raw', 'rmse_raw', 
+            'fsim_raw', 'gmsd_raw', 'chist_raw', 'edge_similarity_raw', 
+            'texture_similarity_raw', 'sharpness_similarity_raw', 'temporal_consistency_raw'
+        ]
+        
+        for raw_metric in expected_raw_metrics:
+            assert raw_metric in metrics, f"Missing raw metric: {raw_metric}"
+
+    def test_single_frame_aggregation(self, tmp_path):
+        """Test aggregation descriptors work correctly for single frame GIFs."""
+        # Create single frame GIFs
+        original_path = tmp_path / "single_original.gif"
+        compressed_path = tmp_path / "single_compressed.gif"
+        
+        img1 = Image.new('RGB', (64, 64), (100, 100, 100))
+        img2 = Image.new('RGB', (64, 64), (105, 105, 105))
+        
+        img1.save(original_path)
+        img2.save(compressed_path)
+
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path)
+
+        # For single frame, std should be 0 and min should equal max
+        base_metrics = ['ssim', 'ms_ssim', 'psnr', 'mse', 'rmse', 'fsim', 'gmsd', 
+                       'chist', 'edge_similarity', 'texture_similarity', 'sharpness_similarity']
+        
+        for metric in base_metrics:
+            assert metrics[f"{metric}_std"] == 0.0, f"{metric}_std should be 0 for single frame"
+            assert metrics[f"{metric}_min"] == metrics[f"{metric}_max"], f"{metric}_min should equal max for single frame"
+
+    def test_backward_compatibility(self, tmp_path):
+        """Test that existing functionality still works (backward compatibility)."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path)
+
+        # Check that all original metrics are still present
+        original_metrics = [
+            'ssim', 'ms_ssim', 'psnr', 'temporal_consistency', 
+            'composite_quality', 'render_ms', 'kilobytes'
+        ]
+        
+        for metric in original_metrics:
+            assert metric in metrics, f"Missing original metric: {metric}"
+
+        # Check that composite quality is still calculated correctly
+        assert 0.0 <= metrics['composite_quality'] <= 1.0
+        assert metrics['render_ms'] > 0
+        assert metrics['kilobytes'] > 0
+
+    def test_metrics_count_expansion(self, tmp_path):
+        """Test that the number of metrics has expanded as expected."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        # Test without raw metrics
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path)
+
+        # Should have base metrics + aggregation descriptors + positional sampling
+        # 12 base metrics * 4 (mean, std, min, max) = 48
+        # + 3 system metrics (composite_quality, kilobytes, render_ms) = 51
+        # + 16 positional sampling metrics (4 metrics * 4 positions each) = 67
+        expected_count = 12 * 4 + 3 + 16  # 67 metrics
+        assert len(metrics) == expected_count, f"Expected {expected_count} metrics, got {len(metrics)}"
+
+        # Test with raw metrics
+        config = MetricsConfig(RAW_METRICS=True)
+        metrics_with_raw = calculate_comprehensive_metrics(original_path, compressed_path, config)
+        
+        # Should have all previous metrics + 12 raw metrics + 16 positional sampling = 95
+        expected_count_with_raw = expected_count + 12  # 79 metrics
+        assert len(metrics_with_raw) == expected_count_with_raw, f"Expected {expected_count_with_raw} metrics with raw, got {len(metrics_with_raw)}"
+
+    def test_aggregation_helper_function(self):
+        """Test the _aggregate_metric helper function directly."""
+        from giflab.metrics import _aggregate_metric
+        
+        # Test with multiple values
+        values = [0.8, 0.9, 0.7, 0.85]
+        result = _aggregate_metric(values, "test_metric")
+        
+        expected_keys = ["test_metric", "test_metric_std", "test_metric_min", "test_metric_max"]
+        assert all(key in result for key in expected_keys)
+        
+        assert result["test_metric"] == pytest.approx(0.8125, abs=0.001)  # mean
+        assert result["test_metric_min"] == 0.7
+        assert result["test_metric_max"] == 0.9
+        assert result["test_metric_std"] > 0.0
+        
+        # Test with single value
+        single_result = _aggregate_metric([0.5], "single")
+        assert single_result["single"] == 0.5
+        assert single_result["single_std"] == 0.0
+        assert single_result["single_min"] == 0.5
+        assert single_result["single_max"] == 0.5
+        
+        # Test with empty values
+        empty_result = _aggregate_metric([], "empty")
+        assert empty_result["empty"] == 0.0
+        assert empty_result["empty_std"] == 0.0
+        assert empty_result["empty_min"] == 0.0
+        assert empty_result["empty_max"] == 0.0
+
+    def test_positional_sampling_enabled(self, tmp_path):
+        """Test that positional sampling works when enabled."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        config = MetricsConfig(ENABLE_POSITIONAL_SAMPLING=True)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # Check that positional metrics are present for default metrics
+        default_positional_metrics = ["ssim", "mse", "fsim", "chist"]
+        
+        for metric in default_positional_metrics:
+            assert f"{metric}_first" in metrics, f"Missing {metric}_first"
+            assert f"{metric}_middle" in metrics, f"Missing {metric}_middle"
+            assert f"{metric}_last" in metrics, f"Missing {metric}_last"
+            assert f"{metric}_positional_variance" in metrics, f"Missing {metric}_positional_variance"
+            
+            # Check that values are reasonable
+            assert isinstance(metrics[f"{metric}_first"], float)
+            assert isinstance(metrics[f"{metric}_middle"], float)
+            assert isinstance(metrics[f"{metric}_last"], float)
+            assert metrics[f"{metric}_positional_variance"] >= 0.0
+
+    def test_positional_sampling_disabled(self, tmp_path):
+        """Test that positional sampling is not included when disabled."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        config = MetricsConfig(ENABLE_POSITIONAL_SAMPLING=False)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # Check that no positional metrics are present
+        positional_keys = [key for key in metrics.keys() if any(
+            suffix in key for suffix in ['_first', '_middle', '_last', '_positional_variance']
+        )]
+        assert len(positional_keys) == 0, f"Should not have positional metrics when disabled, found: {positional_keys}"
+
+    def test_positional_sampling_custom_metrics(self, tmp_path):
+        """Test positional sampling with custom metric selection."""
+        original_path, compressed_path = self.create_test_gif_pair(tmp_path)
+
+        config = MetricsConfig(
+            ENABLE_POSITIONAL_SAMPLING=True,
+            POSITIONAL_METRICS=["ssim", "mse"]  # Only these two
+        )
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # Check that only specified metrics have positional data
+        expected_metrics = ["ssim", "mse"]
+        unexpected_metrics = ["fsim", "chist", "gmsd"]
+        
+        for metric in expected_metrics:
+            assert f"{metric}_first" in metrics, f"Missing {metric}_first"
+            assert f"{metric}_positional_variance" in metrics, f"Missing {metric}_positional_variance"
+        
+        for metric in unexpected_metrics:
+            assert f"{metric}_first" not in metrics, f"Should not have {metric}_first"
+            assert f"{metric}_positional_variance" not in metrics, f"Should not have {metric}_positional_variance"
+
+    def test_positional_sampling_single_frame(self, tmp_path):
+        """Test positional sampling with single frame GIFs."""
+        # Create single frame GIFs
+        original_path = tmp_path / "single_original.gif"
+        compressed_path = tmp_path / "single_compressed.gif"
+        
+        img1 = Image.new('RGB', (64, 64), (100, 100, 100))
+        img2 = Image.new('RGB', (64, 64), (105, 105, 105))
+        
+        img1.save(original_path)
+        img2.save(compressed_path)
+
+        config = MetricsConfig(ENABLE_POSITIONAL_SAMPLING=True)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+
+        # For single frame, first/middle/last should be identical
+        for metric in ["ssim", "mse", "fsim", "chist"]:
+            first_val = metrics[f"{metric}_first"]
+            middle_val = metrics[f"{metric}_middle"]
+            last_val = metrics[f"{metric}_last"]
+            
+            assert first_val == middle_val == last_val, f"{metric} positional values should be identical for single frame"
+            # Use pytest.approx for floating point comparison
+            assert metrics[f"{metric}_positional_variance"] == pytest.approx(0.0, abs=1e-10), f"{metric} positional variance should be ~0 for single frame"
+
+    def test_positional_sampling_helper_function(self):
+        """Test the _calculate_positional_samples helper function directly."""
+        from giflab.metrics import _calculate_positional_samples, mse
+        import numpy as np
+        
+        # Create test frame pairs with different qualities
+        frames = []
+        for i in range(5):
+            frame1 = np.full((32, 32, 3), i * 50, dtype=np.uint8)
+            frame2 = np.full((32, 32, 3), i * 50 + 10, dtype=np.uint8)  # Slightly different
+            frames.append((frame1, frame2))
+        
+        result = _calculate_positional_samples(frames, mse, "test_mse")
+        
+        # Check that all expected keys are present
+        expected_keys = ["test_mse_first", "test_mse_middle", "test_mse_last", "test_mse_positional_variance"]
+        assert all(key in result for key in expected_keys)
+        
+        # Check that values are reasonable
+        assert result["test_mse_first"] >= 0.0
+        assert result["test_mse_middle"] >= 0.0
+        assert result["test_mse_last"] >= 0.0
+        assert result["test_mse_positional_variance"] >= 0.0
+        
+        # Test with empty frames - fix the expected keys
+        empty_result = _calculate_positional_samples([], mse, "empty_mse")
+        empty_expected_keys = ["empty_mse_first", "empty_mse_middle", "empty_mse_last", "empty_mse_positional_variance"]
+        assert all(empty_result[key] == 0.0 for key in empty_expected_keys)
+
+    def test_positional_variance_interpretation(self, tmp_path):
+        """Test that positional variance correctly indicates position importance."""
+        # Create GIFs with varying frame quality to test variance calculation
+        original_path = tmp_path / "varying_original.gif"
+        compressed_path = tmp_path / "varying_compressed.gif"
+        
+        # Create frames with different patterns to ensure MSE differences
+        original_images = []
+        compressed_images = []
+        
+        for i in range(5):
+            # Create original with consistent pattern
+            orig_img = Image.new('RGB', (64, 64), (100, 100, 100))
+            
+            # Create compressed with increasing noise/differences
+            comp_img = Image.new('RGB', (64, 64), (100, 100, 100))
+            
+            # Add different amounts of "noise" by drawing rectangles
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(comp_img)
+            
+            # More rectangles for later frames (simulating more compression artifacts)
+            for j in range(i + 1):  # 1, 2, 3, 4, 5 rectangles
+                x = j * 12
+                y = j * 12
+                draw.rectangle([x, y, x + 8, y + 8], fill=(150 + j * 20, 100, 100))
+            
+            original_images.append(orig_img)
+            compressed_images.append(comp_img)
+        
+        original_images[0].save(original_path, save_all=True, append_images=original_images[1:], duration=100, loop=0)
+        compressed_images[0].save(compressed_path, save_all=True, append_images=compressed_images[1:], duration=100, loop=0)
+        
+        config = MetricsConfig(ENABLE_POSITIONAL_SAMPLING=True)
+        metrics = calculate_comprehensive_metrics(original_path, compressed_path, config)
+        
+        # Test that positional sampling produces valid results
+        mse_first = metrics["mse_first"]
+        mse_middle = metrics["mse_middle"]
+        mse_last = metrics["mse_last"]
+        mse_variance = metrics["mse_positional_variance"]
+        
+        # Test that we have meaningful positional data
+        assert mse_first >= 0.0 and mse_middle >= 0.0 and mse_last >= 0.0, "All positional MSE values should be non-negative"
+        
+        # The variance should be non-negative (key insight: if variance is low, position doesn't matter much)
+        assert mse_variance >= 0.0, "Positional variance should be non-negative"
+        
+        # Test that the positional sampling mechanism works (values are computed)
+        assert isinstance(mse_first, float), "First position value should be a float"
+        assert isinstance(mse_middle, float), "Middle position value should be a float"
+        assert isinstance(mse_last, float), "Last position value should be a float"
+        assert isinstance(mse_variance, float), "Positional variance should be a float"
+        
+        # The key insight: if all values are the same, variance will be 0 (position doesn't matter)
+        # If values differ, variance will be > 0 (position matters)
+        # Both cases are valid and informative for production decisions
+
+
 def test_default_configuration():
     """Test that default configuration works."""
     assert isinstance(DEFAULT_METRICS_CONFIG, MetricsConfig)

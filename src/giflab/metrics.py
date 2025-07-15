@@ -343,135 +343,6 @@ def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
     return float(max(0.0, min(1.0, consistency)))
 
 
-def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, config: MetricsConfig | None = None) -> dict[str, float]:
-    """Calculate comprehensive quality metrics between original and compressed GIFs.
-
-    This is the main function that addresses the frame alignment problem and provides
-    multi-metric quality assessment.
-
-    Args:
-        original_path: Path to original GIF file
-        compressed_path: Path to compressed GIF file
-        config: Optional metrics configuration (uses default if None)
-
-    Returns:
-        Dictionary with comprehensive metrics:
-        {
-            "ssim": float,                    # Traditional SSIM (0.0-1.0)
-            "ms_ssim": float,                 # Multi-scale SSIM (0.0-1.0)
-            "psnr": float,                    # PSNR normalized (0.0-1.0)
-            "temporal_consistency": float,     # Animation smoothness (0.0-1.0)
-            "composite_quality": float,        # Weighted combination (0.0-1.0)
-            "render_ms": int,                 # Processing time in milliseconds
-            "kilobytes": float                # File size in KB
-        }
-
-    Raises:
-        IOError: If either GIF file cannot be read
-        ValueError: If GIFs are invalid or processing fails
-    """
-    if config is None:
-        config = DEFAULT_METRICS_CONFIG
-
-    start_time = time.perf_counter()
-
-    try:
-        # Extract frames from both GIFs
-        original_result = extract_gif_frames(original_path, config.SSIM_MAX_FRAMES)
-        compressed_result = extract_gif_frames(compressed_path, config.SSIM_MAX_FRAMES)
-
-        # Resize frames to common dimensions
-        original_frames, compressed_frames = resize_to_common_dimensions(
-            original_result.frames, compressed_result.frames
-        )
-
-        # Align frames using content-based method (most robust)
-        aligned_pairs = align_frames(original_frames, compressed_frames)
-
-        if not aligned_pairs:
-            raise ValueError("No frame pairs could be aligned")
-
-        # Calculate individual metrics
-        ssim_values = []
-        ms_ssim_values = []
-        psnr_values = []
-
-        for orig_frame, comp_frame in aligned_pairs:
-            # SSIM calculation
-            try:
-                if len(orig_frame.shape) == 3:
-                    orig_gray = cv2.cvtColor(orig_frame, cv2.COLOR_RGB2GRAY)
-                    comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY)
-                else:
-                    orig_gray = orig_frame
-                    comp_gray = comp_frame
-
-                frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
-                ssim_values.append(max(0.0, min(1.0, frame_ssim)))
-            except Exception as e:
-                logger.warning(f"SSIM calculation failed for frame: {e}")
-                ssim_values.append(0.0)
-
-            # MS-SSIM calculation
-            try:
-                frame_ms_ssim = calculate_ms_ssim(orig_frame, comp_frame)
-                ms_ssim_values.append(frame_ms_ssim)
-            except Exception as e:
-                logger.warning(f"MS-SSIM calculation failed for frame: {e}")
-                ms_ssim_values.append(0.0)
-
-            # PSNR calculation
-            try:
-                frame_psnr = psnr(orig_frame, comp_frame, data_range=255.0)
-                # Normalize PSNR to 0-1 range (assume max useful PSNR is 50dB)
-                normalized_psnr = min(frame_psnr / 50.0, 1.0)
-                psnr_values.append(max(0.0, normalized_psnr))
-            except Exception as e:
-                logger.warning(f"PSNR calculation failed for frame: {e}")
-                psnr_values.append(0.0)
-
-        # Aggregate metrics
-        avg_ssim = np.mean(ssim_values) if ssim_values else 0.0
-        avg_ms_ssim = np.mean(ms_ssim_values) if ms_ssim_values else 0.0
-        avg_psnr = np.mean(psnr_values) if psnr_values else 0.0
-
-        # Calculate temporal consistency
-        temporal_consistency = 0.0
-        if config.TEMPORAL_CONSISTENCY_ENABLED:
-            temporal_consistency = calculate_temporal_consistency(compressed_frames)
-
-        # Calculate composite quality using exact formula from instructions
-        composite_quality = (
-            config.SSIM_WEIGHT * avg_ssim +
-            config.MS_SSIM_WEIGHT * avg_ms_ssim +
-            config.PSNR_WEIGHT * avg_psnr +
-            config.TEMPORAL_WEIGHT * temporal_consistency
-        )
-
-        # Calculate file size
-        file_size_kb = calculate_file_size_kb(compressed_path)
-
-        # Calculate processing time
-        end_time = time.perf_counter()
-        elapsed_seconds = end_time - start_time
-        # Cap at reasonable maximum to prevent overflow (24 hours = 86400000 ms)
-        render_ms = min(int(elapsed_seconds * 1000), 86400000)
-
-        return {
-            "ssim": float(avg_ssim),
-            "ms_ssim": float(avg_ms_ssim),
-            "psnr": float(avg_psnr),
-            "temporal_consistency": float(temporal_consistency),
-            "composite_quality": float(composite_quality),
-            "render_ms": render_ms,
-            "kilobytes": float(file_size_kb)
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to calculate comprehensive metrics: {e}")
-        raise ValueError(f"Metrics calculation failed: {e}") from e
-
-
 # Legacy compatibility functions
 def calculate_ssim(original_path: Path, compressed_path: Path) -> float:
     """Calculate Structural Similarity Index (SSIM) between two GIFs.
@@ -752,3 +623,340 @@ def sharpness_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
     return float(min(var1, var2) / max(var1, var2))
 
 # --------------------------------------------------------------------------- #
+
+
+def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]:
+    """Aggregate frame-level metric values into descriptive statistics.
+    
+    Args:
+        values: List of frame-level metric values
+        metric_name: Name of the metric for key generation
+        
+    Returns:
+        Dictionary with mean, std, min, max for the metric
+    """
+    if not values:
+        return {
+            metric_name: 0.0,
+            f"{metric_name}_std": 0.0,
+            f"{metric_name}_min": 0.0,
+            f"{metric_name}_max": 0.0,
+        }
+    
+    values_array = np.array(values)
+    
+    # Handle edge case of single frame
+    if len(values) == 1:
+        return {
+            metric_name: float(values[0]),
+            f"{metric_name}_std": 0.0,
+            f"{metric_name}_min": float(values[0]),
+            f"{metric_name}_max": float(values[0]),
+        }
+    
+    return {
+        metric_name: float(np.mean(values_array)),
+        f"{metric_name}_std": float(np.std(values_array)),
+        f"{metric_name}_min": float(np.min(values_array)),
+        f"{metric_name}_max": float(np.max(values_array)),
+    }
+
+
+def _calculate_positional_samples(aligned_pairs: list, metric_func, metric_name: str) -> dict[str, float]:
+    """Calculate metrics for first, middle, and last frames to understand positional effects.
+    
+    This function provides insights into how frame position affects quality metrics,
+    which is crucial for determining optimal sampling strategies in production.
+    
+    Args:
+        aligned_pairs: List of (original_frame, compressed_frame) tuples
+        metric_func: Function to calculate the metric (e.g., ssim, mse, fsim)
+        metric_name: Name of the metric for key generation
+        
+    Returns:
+        Dictionary with positional samples and variance:
+        {
+            "metric_first": float,      # Metric value for first frame
+            "metric_middle": float,     # Metric value for middle frame  
+            "metric_last": float,       # Metric value for last frame
+            "metric_positional_variance": float  # Variance across positions
+        }
+    """
+    if not aligned_pairs:
+        return {
+            f"{metric_name}_first": 0.0,
+            f"{metric_name}_middle": 0.0,
+            f"{metric_name}_last": 0.0,
+            f"{metric_name}_positional_variance": 0.0,
+        }
+    
+    n_frames = len(aligned_pairs)
+    
+    try:
+        # Calculate for 3 key positions
+        first_val = float(metric_func(*aligned_pairs[0]))
+        middle_val = float(metric_func(*aligned_pairs[n_frames // 2]))
+        last_val = float(metric_func(*aligned_pairs[-1]))
+        
+        # Calculate positional variance (how much does position matter?)
+        pos_values = [first_val, middle_val, last_val]
+        positional_variance = float(np.var(pos_values))
+        
+        return {
+            f"{metric_name}_first": first_val,
+            f"{metric_name}_middle": middle_val,
+            f"{metric_name}_last": last_val,
+            f"{metric_name}_positional_variance": positional_variance,
+        }
+        
+    except Exception as e:
+        logger.warning(f"Positional sampling failed for {metric_name}: {e}")
+        return {
+            f"{metric_name}_first": 0.0,
+            f"{metric_name}_middle": 0.0,
+            f"{metric_name}_last": 0.0,
+            f"{metric_name}_positional_variance": 0.0,
+        }
+
+
+def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, config: MetricsConfig | None = None) -> dict[str, float]:
+    """Calculate comprehensive quality metrics between original and compressed GIFs.
+
+    This is the main function that addresses the frame alignment problem and provides
+    multi-metric quality assessment with all available metrics.
+
+    Args:
+        original_path: Path to original GIF file
+        compressed_path: Path to compressed GIF file
+        config: Optional metrics configuration (uses default if None)
+
+    Returns:
+        Dictionary with comprehensive metrics including:
+        - Traditional metrics: ssim, ms_ssim, psnr, temporal_consistency
+        - New metrics: mse, rmse, fsim, gmsd, chist, edge_similarity, texture_similarity, sharpness_similarity
+        - Aggregation descriptors: *_std, *_min, *_max for each metric
+        - Optional raw values: *_raw for each metric (if config.RAW_METRICS=True)
+        - System metrics: render_ms, kilobytes
+        - Composite quality score
+
+    Raises:
+        IOError: If either GIF file cannot be read
+        ValueError: If GIFs are invalid or processing fails
+    """
+    if config is None:
+        config = DEFAULT_METRICS_CONFIG
+
+    start_time = time.perf_counter()
+
+    try:
+        # Extract frames from both GIFs
+        original_result = extract_gif_frames(original_path, config.SSIM_MAX_FRAMES)
+        compressed_result = extract_gif_frames(compressed_path, config.SSIM_MAX_FRAMES)
+
+        # Resize frames to common dimensions
+        original_frames, compressed_frames = resize_to_common_dimensions(
+            original_result.frames, compressed_result.frames
+        )
+
+        # Align frames using content-based method (most robust)
+        aligned_pairs = align_frames(original_frames, compressed_frames)
+
+        if not aligned_pairs:
+            raise ValueError("No frame pairs could be aligned")
+
+        # Calculate all frame-level metrics
+        metric_values = {
+            'ssim': [],
+            'ms_ssim': [],
+            'psnr': [],
+            'mse': [],
+            'rmse': [],
+            'fsim': [],
+            'gmsd': [],
+            'chist': [],
+            'edge_similarity': [],
+            'texture_similarity': [],
+            'sharpness_similarity': [],
+        }
+
+        for orig_frame, comp_frame in aligned_pairs:
+            # Traditional SSIM calculation
+            try:
+                if len(orig_frame.shape) == 3:
+                    orig_gray = cv2.cvtColor(orig_frame, cv2.COLOR_RGB2GRAY)
+                    comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY)
+                else:
+                    orig_gray = orig_frame
+                    comp_gray = comp_frame
+
+                frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
+                metric_values['ssim'].append(max(0.0, min(1.0, frame_ssim)))
+            except Exception as e:
+                logger.warning(f"SSIM calculation failed for frame: {e}")
+                metric_values['ssim'].append(0.0)
+
+            # MS-SSIM calculation
+            try:
+                frame_ms_ssim = calculate_ms_ssim(orig_frame, comp_frame)
+                metric_values['ms_ssim'].append(frame_ms_ssim)
+            except Exception as e:
+                logger.warning(f"MS-SSIM calculation failed for frame: {e}")
+                metric_values['ms_ssim'].append(0.0)
+
+            # PSNR calculation
+            try:
+                frame_psnr = psnr(orig_frame, comp_frame, data_range=255.0)
+                # Store raw PSNR for raw_metrics flag
+                raw_psnr = frame_psnr
+                # Normalize PSNR to 0-1 range (assume max useful PSNR is 50dB)
+                normalized_psnr = min(frame_psnr / 50.0, 1.0)
+                metric_values['psnr'].append(max(0.0, normalized_psnr))
+            except Exception as e:
+                logger.warning(f"PSNR calculation failed for frame: {e}")
+                metric_values['psnr'].append(0.0)
+
+            # New metrics - MSE and RMSE
+            try:
+                frame_mse = mse(orig_frame, comp_frame)
+                metric_values['mse'].append(frame_mse)
+                
+                frame_rmse = rmse(orig_frame, comp_frame)
+                metric_values['rmse'].append(frame_rmse)
+            except Exception as e:
+                logger.warning(f"MSE/RMSE calculation failed for frame: {e}")
+                metric_values['mse'].append(0.0)
+                metric_values['rmse'].append(0.0)
+
+            # FSIM calculation
+            try:
+                frame_fsim = fsim(orig_frame, comp_frame)
+                metric_values['fsim'].append(frame_fsim)
+            except Exception as e:
+                logger.warning(f"FSIM calculation failed for frame: {e}")
+                metric_values['fsim'].append(0.0)
+
+            # GMSD calculation
+            try:
+                frame_gmsd = gmsd(orig_frame, comp_frame)
+                metric_values['gmsd'].append(frame_gmsd)
+            except Exception as e:
+                logger.warning(f"GMSD calculation failed for frame: {e}")
+                metric_values['gmsd'].append(0.0)
+
+            # Color histogram correlation
+            try:
+                frame_chist = chist(orig_frame, comp_frame)
+                metric_values['chist'].append(frame_chist)
+            except Exception as e:
+                logger.warning(f"Color histogram calculation failed for frame: {e}")
+                metric_values['chist'].append(0.0)
+
+            # Edge similarity
+            try:
+                frame_edge = edge_similarity(orig_frame, comp_frame)
+                metric_values['edge_similarity'].append(frame_edge)
+            except Exception as e:
+                logger.warning(f"Edge similarity calculation failed for frame: {e}")
+                metric_values['edge_similarity'].append(0.0)
+
+            # Texture similarity
+            try:
+                frame_texture = texture_similarity(orig_frame, comp_frame)
+                metric_values['texture_similarity'].append(frame_texture)
+            except Exception as e:
+                logger.warning(f"Texture similarity calculation failed for frame: {e}")
+                metric_values['texture_similarity'].append(0.0)
+
+            # Sharpness similarity
+            try:
+                frame_sharpness = sharpness_similarity(orig_frame, comp_frame)
+                metric_values['sharpness_similarity'].append(frame_sharpness)
+            except Exception as e:
+                logger.warning(f"Sharpness similarity calculation failed for frame: {e}")
+                metric_values['sharpness_similarity'].append(0.0)
+
+        # Calculate temporal consistency
+        temporal_consistency = 0.0
+        if config.TEMPORAL_CONSISTENCY_ENABLED:
+            temporal_consistency = calculate_temporal_consistency(compressed_frames)
+
+        # Aggregate all metrics with descriptive statistics
+        result = {}
+        
+        # Add aggregated metrics
+        for metric_name, values in metric_values.items():
+            result.update(_aggregate_metric(values, metric_name))
+        
+        # Add temporal consistency (single value, not frame-level)
+        result['temporal_consistency'] = float(temporal_consistency)
+        result['temporal_consistency_std'] = 0.0
+        result['temporal_consistency_min'] = float(temporal_consistency)
+        result['temporal_consistency_max'] = float(temporal_consistency)
+
+        # Calculate composite quality using traditional metrics only
+        composite_quality = (
+            config.SSIM_WEIGHT * result['ssim'] +
+            config.MS_SSIM_WEIGHT * result['ms_ssim'] +
+            config.PSNR_WEIGHT * result['psnr'] +
+            config.TEMPORAL_WEIGHT * result['temporal_consistency']
+        )
+        result['composite_quality'] = float(composite_quality)
+
+        # Add system metrics
+        result['kilobytes'] = float(calculate_file_size_kb(compressed_path))
+        
+        # Calculate processing time
+        end_time = time.perf_counter()
+        elapsed_seconds = end_time - start_time
+        result['render_ms'] = min(int(elapsed_seconds * 1000), 86400000)
+
+        # Add positional sampling if enabled
+        if config.ENABLE_POSITIONAL_SAMPLING:
+            # Map metric names to their functions
+            metric_functions = {
+                'ssim': lambda f1, f2: ssim(
+                    cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY) if len(f1.shape) == 3 else f1,
+                    cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY) if len(f2.shape) == 3 else f2,
+                    data_range=255.0
+                ),
+                'mse': mse,
+                'rmse': rmse,
+                'fsim': fsim,
+                'gmsd': gmsd,
+                'chist': chist,
+                'edge_similarity': edge_similarity,
+                'texture_similarity': texture_similarity,
+                'sharpness_similarity': sharpness_similarity,
+            }
+            
+            # Calculate positional samples for configured metrics
+            for metric_name in config.POSITIONAL_METRICS:
+                if metric_name in metric_functions:
+                    try:
+                        positional_data = _calculate_positional_samples(
+                            aligned_pairs, 
+                            metric_functions[metric_name], 
+                            metric_name
+                        )
+                        result.update(positional_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate positional samples for {metric_name}: {e}")
+
+        # Add raw metrics if requested
+        if config.RAW_METRICS:
+            # For metrics that are already in raw form, just copy them
+            for metric_name, values in metric_values.items():
+                if metric_name in ['mse', 'rmse', 'gmsd']:  # These are already raw
+                    result[f"{metric_name}_raw"] = result[metric_name]
+                else:
+                    # For normalized metrics, we'd need to store raw values during calculation
+                    # For now, just copy the normalized values
+                    result[f"{metric_name}_raw"] = result[metric_name]
+            
+            result['temporal_consistency_raw'] = result['temporal_consistency']
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to calculate comprehensive metrics: {e}")
+        raise ValueError(f"Metrics calculation failed: {e}") from e

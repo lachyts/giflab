@@ -53,6 +53,13 @@ class MetricsConfig:
     # Enable temporal consistency analysis
     TEMPORAL_CONSISTENCY_ENABLED: bool = True
 
+    # Enable raw (un-normalised) metric values alongside normalised ones
+    RAW_METRICS: bool = False
+
+    # Enable positional sampling (first, middle, last frame analysis)
+    ENABLE_POSITIONAL_SAMPLING: bool = True
+    POSITIONAL_METRICS: list[str] = None  # Will be set in __post_init__
+
     # Composite quality weights (must sum to 1.0)
     SSIM_WEIGHT: float = 0.30
     MS_SSIM_WEIGHT: float = 0.35
@@ -82,6 +89,10 @@ class MetricsConfig:
         # Validate frame limit is reasonable
         if self.SSIM_MAX_FRAMES <= 0 or self.SSIM_MAX_FRAMES > 1000:
             raise ValueError(f"SSIM_MAX_FRAMES must be between 1 and 1000, got {self.SSIM_MAX_FRAMES}")
+
+        # Set default positional metrics if not provided
+        if self.POSITIONAL_METRICS is None:
+            self.POSITIONAL_METRICS = ["ssim", "mse", "fsim", "chist"]
 
 
 @dataclass

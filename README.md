@@ -154,6 +154,24 @@ When you create or extend a GifLab dataset for ML tasks, **follow the checklist 
 
 For implementation details, see `giflab/data_prep.py` (to be added) and the ML checklist in the plan document.
 
+## 📚 Documentation
+
+### Core Documentation
+- **[Beginner's Guide](BEGINNER_GUIDE.md)** - Step-by-step introduction for new users
+- **[Setup Guide](SETUP_GUIDE.md)** - Installation and configuration instructions
+- **[Project Scope](PROJECT_SCOPE.md)** - Goals, requirements, and architecture overview
+
+### Technical Documentation
+- **[Quality Metrics Expansion Plan](QUALITY_METRICS_EXPANSION_PLAN.md)** - Comprehensive metrics system design
+- **[Positional Sampling Approach](POSITIONAL_SAMPLING_APPROACH.md)** - Frame sampling optimization for production
+- **[Tagging Approach](TAGGING_APPROACH.md)** - Content classification and metadata system
+- **[Engine Comparison](ENGINE_COMPARISON.md)** - Analysis of different compression engines
+
+### Analysis & Research
+- **[Color Reduction Analysis](COLOR_REDUCTION_ANALYSIS.md)** - Palette optimization strategies
+- **[Quality Metrics Approach](QUALITY_METRICS_APPROACH.md)** - Measurement methodologies
+- **[Notebook Implementation Plan](S10_NOTEBOOK_IMPLEMENTATION_PLAN.md)** - Jupyter notebook development guide
+
 ## License
 
 MIT License - see LICENSE file for details.
