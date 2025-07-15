@@ -779,6 +779,11 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
             'sharpness_similarity': [],
         }
 
+        # Store raw (un-normalised) metric values where necessary
+        raw_metric_values = {
+            'psnr': [],  # PSNR is normalised for main reporting; keep raw values separately
+        }
+
         for orig_frame, comp_frame in aligned_pairs:
             # Traditional SSIM calculation
             try:
@@ -806,14 +811,16 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
             # PSNR calculation
             try:
                 frame_psnr = psnr(orig_frame, comp_frame, data_range=255.0)
-                # Store raw PSNR for raw_metrics flag
-                raw_psnr = frame_psnr
+                # Keep un-scaled PSNR for optional raw metrics output
+                raw_metric_values['psnr'].append(frame_psnr)
+
                 # Normalize PSNR to 0-1 range (assume max useful PSNR is 50dB)
                 normalized_psnr = min(frame_psnr / 50.0, 1.0)
                 metric_values['psnr'].append(max(0.0, normalized_psnr))
             except Exception as e:
                 logger.warning(f"PSNR calculation failed for frame: {e}")
                 metric_values['psnr'].append(0.0)
+                raw_metric_values['psnr'].append(0.0)
 
             # New metrics - MSE and RMSE
             try:
@@ -944,16 +951,21 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
         # Add raw metrics if requested
         if config.RAW_METRICS:
-            # For metrics that are already in raw form, just copy them
-            for metric_name, values in metric_values.items():
-                if metric_name in ['mse', 'rmse', 'gmsd']:  # These are already raw
-                    result[f"{metric_name}_raw"] = result[metric_name]
-                else:
-                    # For normalized metrics, we'd need to store raw values during calculation
-                    # For now, just copy the normalized values
-                    result[f"{metric_name}_raw"] = result[metric_name]
-            
-            result['temporal_consistency_raw'] = result['temporal_consistency']
+            # Metrics already reported in raw (un-scaled) form – directly copy.
+            raw_equivalent_metrics = [
+                'ssim', 'ms_ssim', 'mse', 'rmse', 'fsim', 'gmsd',
+                'chist', 'edge_similarity', 'texture_similarity',
+                'sharpness_similarity', 'temporal_consistency'
+            ]
+
+            for metric_name in raw_equivalent_metrics:
+                result[f"{metric_name}_raw"] = result[metric_name]
+
+            # Handle PSNR separately: use un-scaled mean value
+            if raw_metric_values['psnr']:
+                result['psnr_raw'] = float(np.mean(raw_metric_values['psnr']))
+            else:
+                result['psnr_raw'] = 0.0
 
         return result
 
