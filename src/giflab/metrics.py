@@ -11,6 +11,8 @@ import numpy as np
 from PIL import Image
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
+import math
+from skimage.feature import local_binary_pattern
 
 from .config import DEFAULT_METRICS_CONFIG, MetricsConfig
 
@@ -555,3 +557,198 @@ def calculate_compression_ratio(original_size_kb: float, compressed_size_kb: flo
         raise ValueError("Compressed size must be positive")
 
     return original_size_kb / compressed_size_kb
+
+# ---------------- New helper and metric functions (Stage-1) ---------------- #
+
+def _resize_if_needed(frame1: np.ndarray, frame2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Resize both frames to the smallest common size if their shapes differ.
+
+    The function keeps the aspect ratio by simply resizing to the *minimum* of the
+    two input shapes. This avoids any padding/cropping artefacts while ensuring
+    metric functions receive arrays with identical dimensions.
+    """
+    if frame1.shape[:2] == frame2.shape[:2]:
+        return frame1, frame2
+
+    target_h = min(frame1.shape[0], frame2.shape[0])
+    target_w = min(frame1.shape[1], frame2.shape[1])
+
+    try:
+        frame1_resized = cv2.resize(frame1, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        frame2_resized = cv2.resize(frame2, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    except Exception as exc:  # pragma: no cover – surface as ValueError for callers
+        raise ValueError(f"Failed to resize frames to common size: {exc}") from exc
+
+    return frame1_resized, frame2_resized
+
+
+def mse(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Mean-Squared Error (lower is better).
+
+    Returns a non-negative float. Identical frames ⇒ 0.0.
+    """
+    f1, f2 = _resize_if_needed(frame1, frame2)
+    return float(np.mean((f1.astype(np.float32) - f2.astype(np.float32)) ** 2))
+
+
+def rmse(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Root-Mean-Squared Error (sqrt of MSE)."""
+    return math.sqrt(mse(frame1, frame2))
+
+
+def fsim(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Feature Similarity Index (approximated implementation).
+
+    This lightweight approximation returns the *mean* of the combined
+    gradient-magnitude and phase-congruency similarity maps, which empirically
+    yields higher scores for identical images and lower scores for dissimilar
+    ones.
+    """
+    f1, f2 = _resize_if_needed(frame1, frame2)
+
+    # Grayscale conversion.
+    if f1.ndim == 3:
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    else:
+        gray1, gray2 = f1, f2
+
+    gray1 = gray1.astype(np.float32)
+    gray2 = gray2.astype(np.float32)
+
+    # Gradient magnitude (Sobel).
+    def _grad_mag(img: np.ndarray) -> np.ndarray:
+        gx = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
+        return np.sqrt(gx ** 2 + gy ** 2)
+
+    G1 = _grad_mag(gray1)
+    G2 = _grad_mag(gray2)
+
+    # Phase-congruency proxy using Laplacian magnitude.
+    PC1 = np.abs(cv2.Laplacian(gray1, cv2.CV_32F))
+    PC2 = np.abs(cv2.Laplacian(gray2, cv2.CV_32F))
+
+    T1 = 1e-3
+    T2 = 1e-3
+    gradient_sim = (2 * G1 * G2 + T1) / (G1 ** 2 + G2 ** 2 + T1)
+    pc_sim = (2 * PC1 * PC2 + T2) / (PC1 ** 2 + PC2 ** 2 + T2)
+
+    fsim_map = gradient_sim * pc_sim
+
+    return float(np.clip(np.mean(fsim_map), 0.0, 1.0))
+
+
+def gmsd(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Gradient Magnitude Similarity Deviation (lower is better)."""
+    f1, f2 = _resize_if_needed(frame1, frame2)
+
+    if f1.ndim == 3:
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    else:
+        gray1, gray2 = f1, f2
+
+    gray1 = gray1.astype(np.float32)
+    gray2 = gray2.astype(np.float32)
+
+    # Prewitt kernels.
+    prewitt_x = np.array([[1, 0, -1], [1, 0, -1], [1, 0, -1]], dtype=np.float32) / 3.0
+    prewitt_y = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]], dtype=np.float32) / 3.0
+
+    def _prewitt(img: np.ndarray) -> np.ndarray:
+        gx = cv2.filter2D(img, -1, prewitt_x)
+        gy = cv2.filter2D(img, -1, prewitt_y)
+        return np.sqrt(gx ** 2 + gy ** 2)
+
+    M1 = _prewitt(gray1)
+    M2 = _prewitt(gray2)
+
+    C = 1e-3  # stability constant
+    gms_map = (2 * M1 * M2 + C) / (M1 ** 2 + M2 ** 2 + C)
+
+    return float(np.std(gms_map))
+
+
+def chist(frame1: np.ndarray, frame2: np.ndarray, bins: int = 32) -> float:
+    """Colour-Histogram Correlation (0-1, higher is better)."""
+    f1, f2 = _resize_if_needed(frame1, frame2)
+    scores: list[float] = []
+    for ch in range(3):  # R,G,B channels
+        h1 = cv2.calcHist([f1], [ch], None, [bins], [0, 256])
+        h2 = cv2.calcHist([f2], [ch], None, [bins], [0, 256])
+        cv2.normalize(h1, h1)
+        cv2.normalize(h2, h2)
+        corr = cv2.compareHist(h1, h2, cv2.HISTCMP_CORREL)
+        scores.append(corr)
+    # cv2 correlation in [-1,1] – map to [0,1]
+    return float(np.clip((np.mean(scores) + 1) / 2.0, 0.0, 1.0))
+
+
+def edge_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Edge-Map Jaccard similarity (0-1, higher is better)."""
+    f1, f2 = _resize_if_needed(frame1, frame2)
+
+    if f1.ndim == 3:
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    else:
+        gray1, gray2 = f1, f2
+
+    edges1 = cv2.Canny(gray1, 50, 150)
+    edges2 = cv2.Canny(gray2, 50, 150)
+
+    intersection = np.logical_and(edges1 > 0, edges2 > 0).sum()
+    union = np.logical_or(edges1 > 0, edges2 > 0).sum()
+    if union == 0:
+        return 1.0  # no edges at all
+    return float(intersection / union)
+
+
+def texture_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Texture-Histogram correlation using uniform LBP (0-1, higher is better)."""
+    f1, f2 = _resize_if_needed(frame1, frame2)
+
+    if f1.ndim == 3:
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    else:
+        gray1, gray2 = f1, f2
+
+    radius = 1
+    n_points = 8 * radius
+    lbp1 = local_binary_pattern(gray1, n_points, radius, "uniform")
+    lbp2 = local_binary_pattern(gray2, n_points, radius, "uniform")
+
+    hist1, _ = np.histogram(lbp1.ravel(), bins=10, range=(0, n_points + 2), density=True)
+    hist2, _ = np.histogram(lbp2.ravel(), bins=10, range=(0, n_points + 2), density=True)
+
+    if np.std(hist1) == 0 or np.std(hist2) == 0:
+        return 1.0  # completely uniform textures
+
+    corr = np.corrcoef(hist1, hist2)[0, 1]
+    return float(np.clip((corr + 1) / 2.0, 0.0, 1.0))
+
+
+def sharpness_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
+    """Sharpness similarity based on Laplacian variance ratio (0-1, higher is better)."""
+    f1, f2 = _resize_if_needed(frame1, frame2)
+
+    if f1.ndim == 3:
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    else:
+        gray1, gray2 = f1, f2
+
+    var1 = float(np.var(cv2.Laplacian(gray1, cv2.CV_64F)))
+    var2 = float(np.var(cv2.Laplacian(gray2, cv2.CV_64F)))
+
+    # Both completely flat ⇒ identical sharpness.
+    if var1 == 0 and var2 == 0:
+        return 1.0
+    if max(var1, var2) == 0:
+        return 0.0
+
+    return float(min(var1, var2) / max(var1, var2))
+
+# --------------------------------------------------------------------------- #
