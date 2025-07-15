@@ -121,8 +121,12 @@ class CompressionPipeline:
         for pattern in gif_patterns:
             gif_files.extend(raw_dir.glob(pattern))
         
-        self.logger.info(f"Discovered {len(gif_files)} GIF files in {raw_dir}")
-        return gif_files
+        # Remove duplicates that can occur on case-insensitive filesystems
+        # where both *.gif and *.GIF patterns match the same files
+        unique_gif_files = list(set(gif_files))
+        
+        self.logger.info(f"Discovered {len(unique_gif_files)} GIF files in {raw_dir}")
+        return unique_gif_files
     
     def generate_jobs(self, gif_paths: List[Path]) -> List[CompressionJob]:
         """Generate all compression jobs for the given GIF files.

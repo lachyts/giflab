@@ -126,7 +126,7 @@ class TestApplyLossyCompression:
                 Path("output.gif"),
                 0,
                 1.0,  # frame_keep_ratio
-                "invalid_engine"  # This will cause the error
+                "invalid_engine"  # type: ignore[arg-type]  # This will cause the error
             )
 
 
@@ -162,7 +162,15 @@ class TestCompressWithGifsicle:
         result = compress_with_gifsicle(input_path, output_path, 0, 1.0)
         
         # Verify command construction (no frame reduction for ratio 1.0)
-        expected_cmd = ["gifsicle", "--optimize", str(input_path), "--output", str(output_path)]
+        from giflab.config import DEFAULT_ENGINE_CONFIG
+        expected_cmd = [
+            DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
+            "--optimize",
+            str(input_path.resolve()),
+            "--output",
+            str(output_path.resolve())
+        ]
+        
         mock_run.assert_called_once_with(
             expected_cmd,
             capture_output=True,
@@ -198,10 +206,22 @@ class TestCompressWithGifsicle:
         mock_run.return_value = mock_result
         mock_exists.return_value = True
         
-        result = compress_with_gifsicle(Path("input.gif"), Path("output.gif"), 40, 1.0)
+        input_path = Path("input.gif")
+        output_path = Path("output.gif")
+        
+        result = compress_with_gifsicle(input_path, output_path, 40, 1.0)
         
         # Verify lossy flag is included
-        expected_cmd = ["gifsicle", "--optimize", "--lossy=40", "input.gif", "--output", "output.gif"]
+        from giflab.config import DEFAULT_ENGINE_CONFIG
+        expected_cmd = [
+            DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
+            "--optimize",
+            "--lossy=40",
+            str(input_path.resolve()),
+            "--output",
+            str(output_path.resolve())
+        ]
+        
         mock_run.assert_called_once_with(
             expected_cmd,
             capture_output=True,
@@ -238,10 +258,23 @@ class TestCompressWithGifsicle:
         mock_run.return_value = mock_result
         mock_exists.return_value = True
         
-        result = compress_with_gifsicle(Path("input.gif"), Path("output.gif"), 0, 0.8)
+        input_path = Path("input.gif")
+        output_path = Path("output.gif")
+        
+        result = compress_with_gifsicle(input_path, output_path, 0, 0.8)
         
         # Verify frame reduction arguments are included
-        expected_cmd = ["gifsicle", "--optimize", "--delete", "#1", "--delete", "#3", "input.gif", "--output", "output.gif"]
+        from giflab.config import DEFAULT_ENGINE_CONFIG
+        expected_cmd = [
+            DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
+            "--optimize",
+            "--delete", "#1",
+            "--delete", "#3",
+            str(input_path.resolve()),
+            "--output",
+            str(output_path.resolve())
+        ]
+        
         mock_run.assert_called_once_with(
             expected_cmd,
             capture_output=True,
@@ -333,10 +366,21 @@ class TestCompressWithAnimately:
         # Mock animately launcher and output file both exist
         mock_exists.return_value = True
         
-        result = compress_with_animately(Path("input.gif"), Path("output.gif"), 0, 1.0)
+        input_path = Path("input.gif")
+        output_path = Path("output.gif")
+        
+        result = compress_with_animately(input_path, output_path, 0, 1.0)
         
         # Verify command construction
-        expected_cmd = ["/Users/lachlants/bin/launcher", "gif", "optimize", "input.gif", "output.gif"]
+        from giflab.config import DEFAULT_ENGINE_CONFIG
+        expected_cmd = [
+            DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH,
+            "--input",
+            str(input_path.resolve()),
+            "--output",
+            str(output_path.resolve())
+        ]
+        
         mock_run.assert_called_once_with(
             expected_cmd,
             capture_output=True,
@@ -575,10 +619,22 @@ class TestColorIntegration:
         mock_run.return_value = mock_result
         mock_exists.return_value = True
         
-        result = compress_with_gifsicle(Path("input.gif"), Path("output.gif"), 0, 1.0, 64)
+        input_path = Path("input.gif")
+        output_path = Path("output.gif")
+        
+        result = compress_with_gifsicle(input_path, output_path, 0, 1.0, 64)
         
         # Verify color reduction arguments are included
-        expected_cmd = ["gifsicle", "--optimize", "--colors", "64", "input.gif", "--output", "output.gif"]
+        from giflab.config import DEFAULT_ENGINE_CONFIG
+        expected_cmd = [
+            DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH,
+            "--optimize",
+            "--colors", "64",
+            str(input_path.resolve()),
+            "--output",
+            str(output_path.resolve())
+        ]
+        
         mock_run.assert_called_once_with(
             expected_cmd,
             capture_output=True,

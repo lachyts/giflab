@@ -65,7 +65,7 @@ def test_config(temp_dirs):
 def sample_gif_metadata():
     """Create sample GIF metadata for testing."""
     return GifMetadata(
-        gif_sha="abc123def456",
+        gif_sha="abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc",
         orig_filename="test.gif",
         orig_kilobytes=100.5,
         orig_width=480,
@@ -162,7 +162,8 @@ class TestCompressionPipeline:
         assert first_job.color_keep_count in compression_config.COLOR_KEEP_COUNTS
         
         # Check that output path uses per-GIF folder structure
-        assert "test_abc123def456" in str(first_job.output_path)
+        expected_folder = f"test_{sample_gif_metadata.gif_sha}"
+        assert expected_folder in str(first_job.output_path)
         assert first_job.output_path.name.startswith("gifsicle_l")
         assert first_job.output_path.name.endswith(".gif")
     
@@ -210,19 +211,21 @@ class TestCompressionPipeline:
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config)
         
-        # Create test CSV file
+        # Create test CSV file with valid 64-character SHA hashes
         csv_path = temp_dirs["csv"] / "test.csv"
-        csv_content = """gif_sha,orig_filename,engine,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
-abc123,test1.gif,gifsicle,0,1.0,256,50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00
-def456,test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,2024-01-01T10:00:00"""
+        sha1 = "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
+        sha2 = "def4567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        csv_content = f"""gif_sha,orig_filename,engine,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
+{sha1},test1.gif,gifsicle,0,1.0,256,50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00
+{sha2},test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,2024-01-01T10:00:00"""
         
         csv_path.write_text(csv_content)
         
         records = pipeline._load_existing_csv_records(csv_path)
         
         assert len(records) == 2
-        assert ("abc123", "gifsicle", 0, 1.0, 256) in records
-        assert ("def456", "gifsicle", 40, 0.8, 64) in records
+        assert (sha1, "gifsicle", 0, 1.0, 256) in records
+        assert (sha2, "gifsicle", 40, 0.8, 64) in records
     
     def test_filter_existing_jobs(self, test_config, temp_dirs, sample_job):
         """Test filtering of existing jobs."""
@@ -360,8 +363,8 @@ def456,test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,20
         # Setup mock to return our test metadata
         mock_extract_metadata.return_value = sample_gif_metadata
         
-        # Test successful lookup
-        found_path = pipeline.find_original_gif_by_sha("abc123def456", temp_dirs["raw"])
+        # Test successful lookup with the correct SHA
+        found_path = pipeline.find_original_gif_by_sha(sample_gif_metadata.gif_sha, temp_dirs["raw"])
         assert found_path == gif_path
         
         # Test with non-existent SHA

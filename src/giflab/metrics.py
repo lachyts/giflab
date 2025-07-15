@@ -314,7 +314,7 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
         frame2 = frames[i + 1].astype(np.float32)
         
         # Calculate frame-to-frame difference
-        diff = np.mean(np.abs(frame1 - frame2))
+        diff = float(np.mean(np.abs(frame1 - frame2)))
         frame_differences.append(diff)
     
     if not frame_differences:
@@ -322,8 +322,8 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     
     # Calculate consistency as inverse of variance in frame differences
     # More consistent animations have lower variance in frame-to-frame changes
-    mean_diff = np.mean(frame_differences)
-    variance_diff = np.var(frame_differences)
+    mean_diff = float(np.mean(frame_differences))
+    variance_diff = float(np.var(frame_differences))
     
     # Normalize to 0-1 range (higher = more consistent)
     if mean_diff == 0:
@@ -338,7 +338,7 @@ def calculate_temporal_consistency(frames: List[np.ndarray]) -> float:
     # Use max to ensure we don't divide by zero
     denominator = max(mean_diff, epsilon)
     consistency = 1.0 / (1.0 + variance_diff / denominator)
-    return max(0.0, min(1.0, consistency))
+    return float(max(0.0, min(1.0, consistency)))
 
 
 def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, config: Optional[MetricsConfig] = None) -> Dict[str, float]:

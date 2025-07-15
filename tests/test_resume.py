@@ -64,7 +64,7 @@ def test_config(temp_dirs):
 def sample_gif_metadata():
     """Create sample GIF metadata for testing."""
     return GifMetadata(
-        gif_sha="abc123def456789abcdef123456789abcdef123456789abcdef123456789abc",
+        gif_sha="abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc",
         orig_filename="test.gif",
         orig_kilobytes=100.5,
         orig_width=480,
@@ -149,6 +149,7 @@ class TestResumeLoadCSVRecords:
         pipeline = CompressionPipeline(compression_config, path_config)
         
         csv_path = temp_dirs["csv"] / "test.csv"
+        sha2 = "def4567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
         test_records = [
             {
                 "gif_sha": sample_gif_metadata.gif_sha,
@@ -170,7 +171,7 @@ class TestResumeLoadCSVRecords:
                 "timestamp": "2024-01-01T10:00:00"
             },
             {
-                "gif_sha": "def456abc789",
+                "gif_sha": sha2,
                 "orig_filename": "test2.gif",
                 "engine": "gifsicle",
                 "lossy": "40",
@@ -196,7 +197,7 @@ class TestResumeLoadCSVRecords:
         
         assert len(records) == 2
         assert (sample_gif_metadata.gif_sha, "gifsicle", 0, 1.0, 256) in records
-        assert ("def456abc789", "gifsicle", 40, 0.8, 64) in records
+        assert (sha2, "gifsicle", 40, 0.8, 64) in records
     
     def test_load_existing_csv_records_invalid_data(self, test_config, temp_dirs):
         """Test loading CSV with invalid/corrupted records."""
@@ -207,9 +208,11 @@ class TestResumeLoadCSVRecords:
         
         # Create CSV with only valid records to test successful parsing
         # Invalid records cause the entire CSV to be rejected due to error handling
+        sha1 = "a" * 64  # 64 'a' characters - valid hex
+        sha2 = "b" * 64  # 64 'b' characters - valid hex
         test_records = [
             {
-                "gif_sha": "valid123",
+                "gif_sha": sha1,
                 "orig_filename": "test.gif",
                 "engine": "gifsicle",
                 "lossy": "0",
@@ -228,7 +231,7 @@ class TestResumeLoadCSVRecords:
                 "timestamp": "2024-01-01T10:00:00"
             },
             {
-                "gif_sha": "valid456",
+                "gif_sha": sha2,
                 "orig_filename": "test2.gif",
                 "engine": "gifsicle",
                 "lossy": "40",
@@ -254,8 +257,8 @@ class TestResumeLoadCSVRecords:
         
         # Should load valid records successfully
         assert len(records) == 2
-        assert ("valid123", "gifsicle", 0, 1.0, 256) in records
-        assert ("valid456", "gifsicle", 40, 0.8, 64) in records
+        assert (sha1, "gifsicle", 0, 1.0, 256) in records
+        assert (sha2, "gifsicle", 40, 0.8, 64) in records
     
     def test_load_existing_csv_records_malformed_file(self, test_config, temp_dirs):
         """Test loading from malformed CSV file."""
@@ -440,7 +443,7 @@ class TestResumeIntegration:
         
         # Mock metadata for different GIFs
         metadata1 = GifMetadata(
-            gif_sha="sha111" + "0" * 58,  # 64-char SHA
+            gif_sha="a" * 64,  # 64-char valid hex SHA
             orig_filename="test1.gif",
             orig_kilobytes=100.0,
             orig_width=480,
@@ -452,7 +455,7 @@ class TestResumeIntegration:
         )
         
         metadata2 = GifMetadata(
-            gif_sha="sha222" + "0" * 58,  # 64-char SHA
+            gif_sha="b" * 64,  # 64-char valid hex SHA
             orig_filename="test2.gif",
             orig_kilobytes=80.0,
             orig_width=320,
@@ -571,8 +574,13 @@ class TestResumeIntegration:
         # Create large CSV with many records
         large_records = []
         for i in range(1000):  # Simulate 1000 completed jobs
+            # Generate valid hex SHA using only hex characters
+            sha_num = f"{i:06d}"  # e.g., "000001", "000002", etc.
+            remaining_chars = 64 - len(sha_num)
+            sha_hex = sha_num + "a" * remaining_chars  # pad with 'a' to get 64 chars
+            
             large_records.append({
-                "gif_sha": f"sha{i:06d}" + "0" * 58,
+                "gif_sha": sha_hex,
                 "orig_filename": f"test{i}.gif",
                 "engine": "gifsicle",
                 "lossy": str(i % 3 * 40),  # 0, 40, 80
@@ -599,8 +607,8 @@ class TestResumeIntegration:
         assert len(records) == 1000
         
         # Verify some records are loaded correctly
-        assert ("sha000000" + "0" * 58, "gifsicle", 0, 1.0, 256) in records
+        assert ("000000" + "a" * 58, "gifsicle", 0, 1.0, 256) in records
         # For i=999: 999 % 3 = 0, so 0 * 40 = 0 (not 40)
-        assert ("sha000999" + "0" * 58, "gifsicle", 0, 1.0, 256) in records
+        assert ("000999" + "a" * 58, "gifsicle", 0, 1.0, 256) in records
         # For i=1: 1 % 3 = 1, so 1 * 40 = 40  
-        assert ("sha000001" + "0" * 58, "gifsicle", 40, 1.0, 256) in records 
+        assert ("000001" + "a" * 58, "gifsicle", 40, 1.0, 256) in records 

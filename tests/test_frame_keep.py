@@ -217,6 +217,7 @@ class TestGetFrameReductionInfo:
         # Mock PIL Image
         mock_img = MagicMock()
         mock_img.format = 'GIF'
+        mock_img.n_frames = 3  # Explicitly set n_frames to an integer
         mock_img.seek.side_effect = [None, None, EOFError()]  # 3 frames (2 seeks, then EOFError)
         mock_img.tell.return_value = 0
         mock_open.return_value.__enter__.return_value = mock_img
@@ -274,6 +275,7 @@ class TestGetFrameReductionInfo:
         
         mock_img = MagicMock()
         mock_img.format = 'GIF'
+        mock_img.n_frames = 1  # Explicitly set n_frames to 1
         mock_img.seek.side_effect = [EOFError()]  # Only 1 frame
         mock_img.tell.return_value = 0
         mock_open.return_value.__enter__.return_value = mock_img

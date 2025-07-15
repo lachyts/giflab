@@ -136,11 +136,8 @@ class TaggingPipeline:
         if not orig_filename:
             return None
         
-        gif_path = raw_dir / orig_filename
-        if gif_path.exists() and gif_path.is_file():
-            return gif_path
-        
-        # Try case-insensitive search
+        # Always use case-insensitive search to find the actual file
+        # This ensures we get the correct case even on case-insensitive filesystems
         try:
             for file_path in raw_dir.iterdir():
                 if file_path.is_file() and file_path.name.lower() == orig_filename.lower():

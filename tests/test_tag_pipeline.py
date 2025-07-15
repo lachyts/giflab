@@ -497,7 +497,7 @@ class TestValidateTaggedCsv:
         with patch('giflab.tag_pipeline.pd.read_csv') as mock_read:
             mock_df = Mock()
             mock_df.columns = fieldnames
-            mock_df.__len__.return_value = 1
+            mock_df.__len__ = Mock(return_value=1)
             mock_read.return_value = mock_df
             
             result = validate_tagged_csv(csv_path)
@@ -519,7 +519,7 @@ class TestValidateTaggedCsv:
         with patch('giflab.tag_pipeline.pd.read_csv') as mock_read:
             mock_df = Mock()
             mock_df.columns = partial_columns
-            mock_df.__len__.return_value = 0
+            mock_df.__len__ = Mock(return_value=0)
             mock_read.return_value = mock_df
             
             result = validate_tagged_csv(csv_path)
