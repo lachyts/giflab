@@ -625,7 +625,9 @@ class TestExtendedComprehensiveMetrics:
         expected_raw_metrics = [
             'ssim_raw', 'ms_ssim_raw', 'psnr_raw', 'mse_raw', 'rmse_raw', 
             'fsim_raw', 'gmsd_raw', 'chist_raw', 'edge_similarity_raw', 
-            'texture_similarity_raw', 'sharpness_similarity_raw', 'temporal_consistency_raw'
+            'texture_similarity_raw', 'sharpness_similarity_raw',
+            'temporal_consistency_raw', 'temporal_consistency_pre_raw',
+            'temporal_consistency_post_raw', 'temporal_consistency_delta_raw'
         ]
         
         for raw_metric in expected_raw_metrics:
@@ -680,19 +682,20 @@ class TestExtendedComprehensiveMetrics:
         # Test without raw metrics
         metrics = calculate_comprehensive_metrics(original_path, compressed_path)
 
-        # Should have base metrics + aggregation descriptors + positional sampling
-        # 12 base metrics * 4 (mean, std, min, max) = 48
-        # + 3 system metrics (composite_quality, kilobytes, render_ms) = 51
-        # + 16 positional sampling metrics (4 metrics * 4 positions each) = 67
-        expected_count = 12 * 4 + 3 + 16  # 67 metrics
+        # Should have base metrics + aggregation descriptors + positional sampling + new temporal keys (pre, post, delta)
+        # 12 base metrics * 4 = 48
+        # + 3 system metrics = 51
+        # + 16 positional sampling = 67
+        # + 3 new temporal consistency variants (pre, post, delta) = 70
+        expected_count = 70
         assert len(metrics) == expected_count, f"Expected {expected_count} metrics, got {len(metrics)}"
 
         # Test with raw metrics
         config = MetricsConfig(RAW_METRICS=True)
         metrics_with_raw = calculate_comprehensive_metrics(original_path, compressed_path, config)
         
-        # Should have all previous metrics + 12 raw metrics + 16 positional sampling = 95
-        expected_count_with_raw = expected_count + 12  # 79 metrics
+        # Should have all previous metrics + 15 raw metrics + 16 positional sampling = 101
+        expected_count_with_raw = expected_count + 15  # 85 metrics
         assert len(metrics_with_raw) == expected_count_with_raw, f"Expected {expected_count_with_raw} metrics with raw, got {len(metrics_with_raw)}"
 
     def test_aggregation_helper_function(self):

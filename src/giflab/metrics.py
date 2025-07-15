@@ -882,10 +882,14 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 logger.warning(f"Sharpness similarity calculation failed for frame: {e}")
                 metric_values['sharpness_similarity'].append(0.0)
 
-        # Calculate temporal consistency
-        temporal_consistency = 0.0
+        # Calculate temporal consistency for original and compressed GIFs
+        temporal_pre = 0.0
+        temporal_post = 0.0
         if config.TEMPORAL_CONSISTENCY_ENABLED:
-            temporal_consistency = calculate_temporal_consistency(compressed_frames)
+            temporal_pre = calculate_temporal_consistency(original_frames)
+            temporal_post = calculate_temporal_consistency(compressed_frames)
+
+        temporal_delta = abs(temporal_post - temporal_pre)
 
         # Aggregate all metrics with descriptive statistics
         result = {}
@@ -895,10 +899,16 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
             result.update(_aggregate_metric(values, metric_name))
         
         # Add temporal consistency (single value, not frame-level)
-        result['temporal_consistency'] = float(temporal_consistency)
+        # Keep legacy key pointing to *post*-compression value for backward compatibility
+        result['temporal_consistency'] = float(temporal_post)
         result['temporal_consistency_std'] = 0.0
-        result['temporal_consistency_min'] = float(temporal_consistency)
-        result['temporal_consistency_max'] = float(temporal_consistency)
+        result['temporal_consistency_min'] = float(temporal_post)
+        result['temporal_consistency_max'] = float(temporal_post)
+
+        # New keys: pre, post (explicit) and delta
+        result['temporal_consistency_pre'] = float(temporal_pre)
+        result['temporal_consistency_post'] = float(temporal_post)
+        result['temporal_consistency_delta'] = float(temporal_delta)
 
         # Calculate composite quality using traditional metrics only
         composite_quality = (
@@ -955,7 +965,8 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
             raw_equivalent_metrics = [
                 'ssim', 'ms_ssim', 'mse', 'rmse', 'fsim', 'gmsd',
                 'chist', 'edge_similarity', 'texture_similarity',
-                'sharpness_similarity', 'temporal_consistency'
+                'sharpness_similarity', 'temporal_consistency',
+                'temporal_consistency_pre', 'temporal_consistency_post', 'temporal_consistency_delta'
             ]
 
             for metric_name in raw_equivalent_metrics:
@@ -966,6 +977,11 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 result['psnr_raw'] = float(np.mean(raw_metric_values['psnr']))
             else:
                 result['psnr_raw'] = 0.0
+
+            # Raw copies for temporal consistency variants
+            result['temporal_consistency_pre_raw'] = result['temporal_consistency_pre']
+            result['temporal_consistency_post_raw'] = result['temporal_consistency_post']
+            result['temporal_consistency_delta_raw'] = result['temporal_consistency_delta']
 
         return result
 
