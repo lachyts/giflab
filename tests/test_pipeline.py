@@ -216,9 +216,9 @@ class TestCompressionPipeline:
         csv_path = temp_dirs["csv"] / "test.csv"
         sha1 = "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
         sha2 = "def4567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        csv_content = f"""gif_sha,orig_filename,engine,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
-{sha1},test1.gif,gifsicle,0,1.0,256,50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00
-{sha2},test2.gif,gifsicle,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,2024-01-01T10:00:00"""
+        csv_content = f"""gif_sha,orig_filename,engine,engine_version,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
+{sha1},test1.gif,gifsicle,1.94,0,1.0,256,50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00
+{sha2},test2.gif,gifsicle,1.94,40,0.8,64,25.5,0.85,800,80.0,320,240,16,12.0,64,3.8,2024-01-01T10:00:00"""
 
         csv_path.write_text(csv_content)
 
@@ -235,8 +235,8 @@ class TestCompressionPipeline:
 
         # Create CSV with existing record
         csv_path = temp_dirs["csv"] / "test.csv"
-        csv_content = f"""gif_sha,orig_filename,engine,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
-{sample_job.metadata.gif_sha},{sample_job.metadata.orig_filename},{sample_job.engine},{sample_job.lossy},{sample_job.frame_keep_ratio},{sample_job.color_keep_count},50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00"""
+        csv_content = f"""gif_sha,orig_filename,engine,engine_version,lossy,frame_keep_ratio,color_keep_count,kilobytes,ssim,render_ms,orig_kilobytes,orig_width,orig_height,orig_frames,orig_fps,orig_n_colors,entropy,timestamp
+{sample_job.metadata.gif_sha},{sample_job.metadata.orig_filename},{sample_job.engine},1.94,{sample_job.lossy},{sample_job.frame_keep_ratio},{sample_job.color_keep_count},50.5,0.95,1200,100.0,480,270,24,24.0,128,4.2,2024-01-01T10:00:00"""
 
         csv_path.write_text(csv_content)
 
@@ -302,6 +302,7 @@ class TestCompressionPipeline:
             gif_sha="abc123def456",
             orig_filename="test.gif",
             engine="gifsicle",
+            engine_version="1.94",
             lossy=0,
             frame_keep_ratio=1.0,
             color_keep_count=256,

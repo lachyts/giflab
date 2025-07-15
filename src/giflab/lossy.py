@@ -30,10 +30,10 @@ Key Differences:
 Usage Examples:
     # Gifsicle frame reduction (keep every other frame)
     gifsicle --optimize input.gif #0 #2 #4 #6 --output output.gif
-    
+
     # Animately frame reduction (keep 50% of frames)
     animately --input input.gif --reduce 0.50 --output output.gif
-    
+
     # Both engines with lossy compression
     gifsicle --optimize --lossy=40 input.gif --output output.gif
     animately --input input.gif --lossy 40 --output output.gif
@@ -64,6 +64,134 @@ class LossyEngine(Enum):
     """Supported lossy compression engines."""
     GIFSICLE = "gifsicle"
     ANIMATELY = "animately"
+
+
+def get_gifsicle_version() -> str:
+    """Get the version of gifsicle.
+
+    Returns:
+        Version string of gifsicle (e.g., "1.94")
+
+    Raises:
+        RuntimeError: If gifsicle is not available or version cannot be determined
+    """
+    gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
+
+    if not gifsicle_path or not Path(gifsicle_path).exists():
+        raise RuntimeError(f"Gifsicle not found at {gifsicle_path}")
+
+    try:
+        result = subprocess.run(
+            [gifsicle_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Gifsicle version check failed: {result.stderr}")
+
+        # Parse version from output (e.g., "LCDF Gifsicle 1.94")
+        output_lines = result.stdout.strip().split('\n')
+        for line in output_lines:
+            if 'gifsicle' in line.lower() and any(char.isdigit() for char in line):
+                # Extract version number (e.g., "1.94" from "LCDF Gifsicle 1.94")
+                words = line.split()
+                for word in words:
+                    if '.' in word and any(char.isdigit() for char in word):
+                        return word
+
+        # Fallback - return first line if version parsing fails
+        return output_lines[0] if output_lines else "unknown"
+
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Gifsicle version check timed out") from None
+    except Exception as e:
+        raise RuntimeError(f"Failed to get gifsicle version: {str(e)}") from e
+
+
+def get_animately_version() -> str:
+    """Get the version of animately.
+
+    Returns:
+        Version string of animately (e.g., "1.0.0" or "animately-engine" if version not detectable)
+
+    Raises:
+        RuntimeError: If animately is not available
+    """
+    animately_path = DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH
+
+    if not animately_path or not Path(animately_path).exists():
+        raise RuntimeError(f"Animately not found at {animately_path}")
+
+    try:
+        # Try --version first
+        result = subprocess.run(
+            [animately_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            output_lines = result.stdout.strip().split('\n')
+            for line in output_lines:
+                if any(char.isdigit() for char in line):
+                    # Extract version number if found
+                    words = line.split()
+                    for word in words:
+                        if '.' in word and any(char.isdigit() for char in word):
+                            return word
+            return output_lines[0] if output_lines else "animately-engine"
+
+        # If --version fails, try --help and look for version info
+        result = subprocess.run(
+            [animately_path, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode == 0 or result.stderr:
+            # Check both stdout and stderr for version information
+            output_text = (result.stdout + result.stderr).lower()
+            if 'version' in output_text:
+                # Try to extract version from help text
+                lines = output_text.split('\n')
+                for line in lines:
+                    if 'version' in line and any(char.isdigit() for char in line):
+                        words = line.split()
+                        for word in words:
+                            if '.' in word and any(char.isdigit() for char in word):
+                                return word
+
+        # Fallback - return a generic identifier
+        return "animately-engine"
+
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Animately version check timed out") from None
+    except Exception as e:
+        raise RuntimeError(f"Failed to get animately version: {str(e)}") from e
+
+
+def get_engine_version(engine: LossyEngine) -> str:
+    """Get the version of the specified engine.
+
+    Args:
+        engine: Engine to get version for
+
+    Returns:
+        Version string of the engine
+
+    Raises:
+        RuntimeError: If engine is not available or version cannot be determined
+    """
+    if engine == LossyEngine.GIFSICLE:
+        return get_gifsicle_version()
+    elif engine == LossyEngine.ANIMATELY:
+        return get_animately_version()
+    else:
+        raise ValueError(f"Unsupported engine: {engine}")
 
 
 def apply_lossy_compression(
@@ -121,7 +249,7 @@ def compress_with_gifsicle(
 
     Constructs and executes a gifsicle command following best practices from:
     https://www.lcdf.org/gifsicle/
-    
+
     Command Construction:
     1. Base: gifsicle --optimize
     2. Lossy: --lossy=LEVEL (if level > 0)
@@ -129,14 +257,14 @@ def compress_with_gifsicle(
     4. Input: INPUT_FILE (must come before frame selection)
     5. Frames: #0 #2 #4 (frame selection, if frame_keep_ratio < 1.0)
     6. Output: --output OUTPUT_FILE
-    
+
     Example Commands:
         # Lossless with frame reduction
         gifsicle --optimize input.gif #0 #2 #4 #6 --output output.gif
-        
+
         # Lossy with color reduction
         gifsicle --optimize --lossy=40 --colors 64 input.gif --output output.gif
-        
+
         # Full optimization
         gifsicle --optimize --lossy=40 --colors 64 input.gif #0 #2 #4 --output output.gif
 
@@ -158,7 +286,7 @@ def compress_with_gifsicle(
     Raises:
         RuntimeError: If gifsicle command fails or binary not found
         ValueError: If paths contain dangerous characters
-        
+
     Note:
         Frame selection (#0 #2 #4) must come AFTER input file for gifsicle.
         This is different from --delete which conflicts with --optimize.
@@ -231,9 +359,16 @@ def compress_with_gifsicle(
         if not output_path.exists():
             raise RuntimeError(f"Gifsicle failed to create output file: {output_path}")
 
+        # Get engine version
+        try:
+            engine_version = get_gifsicle_version()
+        except RuntimeError:
+            engine_version = "unknown"
+
         return {
             "render_ms": render_ms,
             "engine": "gifsicle",
+            "engine_version": engine_version,
             "lossy_level": lossy_level,
             "frame_keep_ratio": frame_keep_ratio,
             "color_keep_count": color_keep_count,
@@ -269,7 +404,7 @@ def compress_with_animately(
     """Compress GIF using animately CLI with lossy, frame reduction, and color reduction options.
 
     Constructs and executes an animately command using its flag-based interface.
-    
+
     Animately CLI Reference:
     Usage: animately.exe [OPTION...]
       -i, --input arg        Path to input gif file
@@ -288,7 +423,7 @@ def compress_with_animately(
       -e, --meta arg         GIF metadata
       -y, --loops arg        Loop count
       -h, --help             Show help
-    
+
     Command Construction:
     1. Base: animately
     2. Input: --input INPUT_FILE
@@ -296,14 +431,14 @@ def compress_with_animately(
     4. Lossy: --lossy LEVEL (if level > 0)
     5. Frames: --reduce RATIO (if frame_keep_ratio < 1.0)
     6. Colors: --colors N (if color_keep_count specified)
-    
+
     Example Commands:
         # Lossless with frame reduction
         animately --input input.gif --reduce 0.50 --output output.gif
-        
+
         # Lossy with color reduction
         animately --input input.gif --lossy 40 --colors 64 --output output.gif
-        
+
         # Full optimization
         animately --input input.gif --lossy 40 --reduce 0.50 --colors 64 --output output.gif
 
@@ -325,7 +460,7 @@ def compress_with_animately(
     Raises:
         RuntimeError: If animately command fails or binary not found
         ValueError: If paths contain dangerous characters
-        
+
     Note:
         Animately uses decimal ratios (0.50 for 50%) and consistent flag syntax.
         All parameters are specified via flags, unlike gifsicle's mixed approach.
@@ -399,9 +534,16 @@ def compress_with_animately(
         if not output_path.exists():
             raise RuntimeError(f"Animately failed to create output file: {output_path}")
 
+        # Get engine version
+        try:
+            engine_version = get_animately_version()
+        except RuntimeError:
+            engine_version = "unknown"
+
         return {
             "render_ms": render_ms,
             "engine": "animately",
+            "engine_version": engine_version,
             "lossy_level": lossy_level,
             "frame_keep_ratio": frame_keep_ratio,
             "color_keep_count": color_keep_count,

@@ -132,11 +132,12 @@ class TestApplyLossyCompression:
 class TestCompressWithGifsicle:
     """Tests for compress_with_gifsicle function."""
 
+    @patch('giflab.lossy.get_gifsicle_version')
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('time.time')
-    def test_successful_compression_lossless(self, mock_time, mock_exists, mock_run, mock_metadata):
+    def test_successful_compression_lossless(self, mock_time, mock_exists, mock_run, mock_metadata, mock_version):
         """Test successful gifsicle compression with lossless setting."""
         # Mock time progression
         mock_time.side_effect = [1000.0, 1000.5]  # 500ms execution
@@ -146,6 +147,9 @@ class TestCompressWithGifsicle:
         mock_meta.orig_frames = 10
         mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
+
+        # Mock version detection
+        mock_version.return_value = "1.94"
 
         # Mock successful subprocess
         mock_result = MagicMock()
@@ -186,11 +190,12 @@ class TestCompressWithGifsicle:
         assert result["original_frames"] == 10
         assert result["command"] == " ".join(expected_cmd)
 
+    @patch('giflab.lossy.get_gifsicle_version')
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('time.time')
-    def test_successful_compression_lossy(self, mock_time, mock_exists, mock_run, mock_metadata):
+    def test_successful_compression_lossy(self, mock_time, mock_exists, mock_run, mock_metadata, mock_version):
         """Test successful gifsicle compression with lossy setting."""
         mock_time.side_effect = [1000.0, 1001.0]  # 1000ms execution
 
@@ -199,6 +204,9 @@ class TestCompressWithGifsicle:
         mock_meta.orig_frames = 20
         mock_meta.orig_n_colors = 256
         mock_metadata.return_value = mock_meta
+
+        # Mock version detection
+        mock_version.return_value = "1.94"
 
         mock_result = MagicMock()
         mock_result.stderr = ""
@@ -234,12 +242,13 @@ class TestCompressWithGifsicle:
         assert result["frame_keep_ratio"] == 1.0
         assert result["original_frames"] == 20
 
+    @patch('giflab.lossy.get_gifsicle_version')
     @patch('giflab.lossy.build_gifsicle_frame_args')
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('time.time')
-    def test_compression_with_frame_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_frame_args):
+    def test_compression_with_frame_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_frame_args, mock_version):
         """Test gifsicle compression with frame reduction."""
         mock_time.side_effect = [1000.0, 1000.8]  # 800ms execution
 
@@ -251,6 +260,9 @@ class TestCompressWithGifsicle:
 
         # Mock frame reduction arguments (new frame selection syntax)
         mock_frame_args.return_value = ["#0", "#2", "#4", "#6"]
+
+        # Mock version detection
+        mock_version.return_value = "1.94"
 
         mock_result = MagicMock()
         mock_result.stderr = ""
@@ -343,11 +355,12 @@ class TestCompressWithGifsicle:
 class TestCompressWithAnimately:
     """Tests for compress_with_animately function."""
 
+    @patch('giflab.lossy.get_animately_version')
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('time.time')
-    def test_successful_compression_lossless(self, mock_time, mock_exists, mock_run, mock_metadata):
+    def test_successful_compression_lossless(self, mock_time, mock_exists, mock_run, mock_metadata, mock_version):
         """Test successful animately compression with lossless setting."""
         mock_time.side_effect = [1000.0, 1000.3]  # 300ms execution
 
@@ -356,6 +369,9 @@ class TestCompressWithAnimately:
         mock_meta.orig_frames = 15
         mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
+
+        # Mock version detection
+        mock_version.return_value = "animately-engine"
 
         mock_result = MagicMock()
         mock_result.stderr = ""
@@ -594,12 +610,13 @@ class TestFrameKeepRatioValidation:
 class TestColorIntegration:
     """Tests for color reduction integration in compression functions."""
 
+    @patch('giflab.lossy.get_gifsicle_version')
     @patch('giflab.lossy.build_gifsicle_color_args')
     @patch('giflab.lossy.extract_gif_metadata')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('time.time')
-    def test_gifsicle_with_color_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_color_args):
+    def test_gifsicle_with_color_reduction(self, mock_time, mock_exists, mock_run, mock_metadata, mock_color_args, mock_version):
         """Test gifsicle compression with color reduction."""
         mock_time.side_effect = [1000.0, 1000.5]  # 500ms execution
 
@@ -611,6 +628,9 @@ class TestColorIntegration:
 
         # Mock color reduction arguments (includes dithering parameter)
         mock_color_args.return_value = ["--colors", "64", "--no-dither"]
+
+        # Mock version detection
+        mock_version.return_value = "1.94"
 
         mock_result = MagicMock()
         mock_result.stderr = ""

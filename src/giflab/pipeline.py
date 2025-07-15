@@ -36,6 +36,7 @@ class CompressionResult:
     gif_sha: str
     orig_filename: str
     engine: str
+    engine_version: str
     lossy: int
     frame_keep_ratio: float
     color_keep_count: int
@@ -84,7 +85,7 @@ class CompressionPipeline:
 
         # CSV fieldnames based on project scope
         self.csv_fieldnames = [
-            "gif_sha", "orig_filename", "engine", "lossy",
+            "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
             "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
             "render_ms", "orig_kilobytes", "orig_width", "orig_height",
             "orig_frames", "orig_fps", "orig_n_colors", "entropy", "timestamp"
@@ -327,7 +328,7 @@ class CompressionPipeline:
             engine_enum = LossyEngine.GIFSICLE if job.engine == "gifsicle" else LossyEngine.ANIMATELY
 
             # Execute compression with all parameters in single pass
-            apply_compression_with_all_params(
+            compression_result = apply_compression_with_all_params(
                 input_path=job.gif_path,
                 output_path=job.output_path,
                 lossy_level=job.lossy,
@@ -347,12 +348,13 @@ class CompressionPipeline:
                 gif_sha=job.metadata.gif_sha,
                 orig_filename=job.metadata.orig_filename,
                 engine=job.engine,
+                engine_version=compression_result.get("engine_version", "unknown"),
                 lossy=job.lossy,
                 frame_keep_ratio=job.frame_keep_ratio,
                 color_keep_count=job.color_keep_count,
                 kilobytes=metrics_result["kilobytes"],
                 ssim=metrics_result["ssim"],
-                render_ms=metrics_result["render_ms"],
+                render_ms=int(metrics_result["render_ms"]),
                 orig_kilobytes=job.metadata.orig_kilobytes,
                 orig_width=job.metadata.orig_width,
                 orig_height=job.metadata.orig_height,
