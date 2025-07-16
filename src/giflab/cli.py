@@ -12,6 +12,7 @@ from .config import (
     PathConfig,
 )
 from .pipeline import CompressionPipeline
+from .validation import validate_raw_dir, validate_worker_count, ValidationError
 
 
 @click.group()
@@ -69,6 +70,21 @@ def run(
     RAW_DIR: Directory containing original GIF files to analyze
     """
     try:
+        # Validate RAW_DIR input
+        try:
+            validated_raw_dir = validate_raw_dir(raw_dir, require_gifs=not dry_run)
+        except ValidationError as e:
+            click.echo(f"❌ Invalid RAW_DIR: {e}", err=True)
+            click.echo("💡 Please provide a valid directory containing GIF files", err=True)
+            sys.exit(1)
+        
+        # Validate worker count
+        try:
+            validated_workers = validate_worker_count(workers)
+        except ValidationError as e:
+            click.echo(f"❌ Invalid worker count: {e}", err=True)
+            sys.exit(1)
+        
         # Create path configuration
         path_config = PathConfig()
 
@@ -82,7 +98,7 @@ def run(
         pipeline = CompressionPipeline(
             compression_config=DEFAULT_COMPRESSION_CONFIG,
             path_config=path_config,
-            workers=workers,
+            workers=validated_workers,
             resume=resume,
         )
 
@@ -95,21 +111,21 @@ def run(
         csv.parent.mkdir(parents=True, exist_ok=True)
 
         click.echo("🎞️  GifLab Compression Pipeline")
-        click.echo(f"📁 Input directory: {raw_dir}")
+        click.echo(f"📁 Input directory: {validated_raw_dir}")
         click.echo(f"📊 Output CSV: {csv}")
         click.echo(f"🎬 Renders directory: {path_config.RENDERS_DIR}")
         click.echo(f"❌ Bad GIFs directory: {path_config.BAD_GIFS_DIR}")
         click.echo(
-            f"👥 Workers: {workers if workers > 0 else multiprocessing.cpu_count()}"
+            f"👥 Workers: {validated_workers if validated_workers > 0 else multiprocessing.cpu_count()}"
         )
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
 
         if dry_run:
             click.echo("🔍 DRY RUN MODE - Analysis only")
-            _run_dry_run(pipeline, raw_dir, csv)
+            _run_dry_run(pipeline, validated_raw_dir, csv)
         else:
             click.echo("🚀 Starting compression pipeline...")
-            _run_pipeline(pipeline, raw_dir, csv)
+            _run_pipeline(pipeline, validated_raw_dir, csv)
 
     except KeyboardInterrupt:
         click.echo("\n⏹️  Pipeline interrupted by user", err=True)
@@ -276,9 +292,24 @@ def tag(
     try:
         from .tag_pipeline import TaggingPipeline, validate_tagged_csv
 
+        # Validate RAW_DIR input
+        try:
+            validated_raw_dir = validate_raw_dir(raw_dir, require_gifs=True)
+        except ValidationError as e:
+            click.echo(f"❌ Invalid RAW_DIR: {e}", err=True)
+            click.echo("💡 Please provide a valid directory containing GIF files", err=True)
+            sys.exit(1)
+        
+        # Validate worker count
+        try:
+            validated_workers = validate_worker_count(workers)
+        except ValidationError as e:
+            click.echo(f"❌ Invalid worker count: {e}", err=True)
+            sys.exit(1)
+
         click.echo("🏷️  GifLab Comprehensive Tagging Pipeline")
         click.echo(f"📊 Input CSV: {csv_file}")
-        click.echo(f"📁 Raw GIFs directory: {raw_dir}")
+        click.echo(f"📁 Raw GIFs directory: {validated_raw_dir}")
 
         if validate_only:
             click.echo("🔍 Validation mode - checking CSV structure...")
@@ -302,16 +333,16 @@ def tag(
         else:
             click.echo("📄 Output CSV: auto-timestamped in same directory")
 
-        click.echo(f"👥 Workers: {workers} (parallel processing not yet implemented)")
+        click.echo(f"👥 Workers: {validated_workers} (parallel processing not yet implemented)")
         click.echo("🎯 Will add 25 comprehensive tagging scores")
 
         # Initialize tagging pipeline
         click.echo("\n🔧 Initializing hybrid tagging system...")
-        pipeline = TaggingPipeline(workers=workers)
+        pipeline = TaggingPipeline(workers=validated_workers)
 
         # Run comprehensive tagging
         click.echo("🚀 Starting comprehensive tagging analysis...")
-        result = pipeline.run(csv_file, raw_dir, output)
+        result = pipeline.run(csv_file, validated_raw_dir, output)
 
         # Report results
         status = result["status"]

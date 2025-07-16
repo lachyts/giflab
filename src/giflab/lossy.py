@@ -58,6 +58,7 @@ from .frame_keep import (
     validate_frame_keep_ratio,
 )
 from .meta import extract_gif_metadata
+from .validation import validate_path_security
 
 
 class LossyEngine(Enum):
@@ -318,14 +319,11 @@ def compress_with_gifsicle(
         cmd.extend(color_args)
 
     # Add input and output with path validation
-    input_str = str(input_path.resolve())  # Resolve to absolute path
-    output_str = str(output_path.resolve())  # Resolve to absolute path
-
-    # Validate paths don't contain suspicious characters
-    if any(char in input_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
-    if any(char in output_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
+    validated_input = validate_path_security(input_path)
+    validated_output = validate_path_security(output_path)
+    
+    input_str = str(validated_input.resolve())  # Resolve to absolute path
+    output_str = str(validated_output.resolve())  # Resolve to absolute path
 
     # Add input file first (required for frame operations)
     cmd.append(input_str)
@@ -486,14 +484,11 @@ def compress_with_animately(
     cmd = [animately_path]
 
     # Add input and output with path validation
-    input_str = str(input_path.resolve())  # Resolve to absolute path
-    output_str = str(output_path.resolve())  # Resolve to absolute path
-
-    # Validate paths don't contain suspicious characters
-    if any(char in input_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Input path contains potentially dangerous characters: {input_path}")
-    if any(char in output_str for char in [';', '&', '|', '`', '$']):
-        raise ValueError(f"Output path contains potentially dangerous characters: {output_path}")
+    validated_input = validate_path_security(input_path)
+    validated_output = validate_path_security(output_path)
+    
+    input_str = str(validated_input.resolve())  # Resolve to absolute path
+    output_str = str(validated_output.resolve())  # Resolve to absolute path
 
     # Add input and output paths
     cmd.extend(["--input", input_str, "--output", output_str])
