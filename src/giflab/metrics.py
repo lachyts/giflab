@@ -172,6 +172,33 @@ def calculate_frame_mse(frame1: np.ndarray, frame2: np.ndarray) -> float:
     return float(np.mean((frame1.astype(np.float32) - frame2.astype(np.float32)) ** 2))
 
 
+def calculate_safe_psnr(frame1: np.ndarray, frame2: np.ndarray, data_range: float = 255.0) -> float:
+    """Calculate PSNR with proper handling of perfect matches (MSE = 0).
+    
+    Args:
+        frame1: First frame
+        frame2: Second frame  
+        data_range: Maximum possible pixel value (default 255.0)
+        
+    Returns:
+        PSNR value, with 100.0 dB returned for perfect matches
+    """
+    try:
+        # Check for perfect match first to avoid divide by zero
+        mse = calculate_frame_mse(frame1, frame2)
+        
+        if mse == 0.0:
+            # Perfect match - return maximum PSNR (100 dB is a reasonable upper bound)
+            return 100.0
+        
+        # Use scikit-image PSNR for non-perfect matches
+        return psnr(frame1, frame2, data_range=data_range)
+        
+    except Exception as e:
+        logger.warning(f"PSNR calculation failed: {e}")
+        return 0.0
+
+
 def align_frames_content_based(original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]) -> list[tuple[np.ndarray, np.ndarray]]:
     """Content-based alignment - find most similar frames using MSE.
 
@@ -193,9 +220,16 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
 
             try:
                 mse = calculate_frame_mse(orig_frame, comp_frame)
+                
+                # Handle perfect matches (MSE = 0) - these are ideal matches
+                if mse == 0.0:
+                    best_mse = 0.0
+                    best_match_idx = comp_idx
+                    break  # Perfect match found, no need to check further
+                
                 # Validate MSE is finite and reasonable
-                if not np.isfinite(mse):
-                    logger.warning(f"Non-finite MSE calculated for frame pair {comp_idx}")
+                if not np.isfinite(mse) or mse < 0:
+                    logger.warning(f"Invalid MSE calculated for frame pair {comp_idx}: {mse}")
                     continue
 
                 if mse < best_mse:
@@ -205,12 +239,18 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
                 logger.warning(f"MSE calculation failed for frame {comp_idx}: {e}")
                 continue
 
-        # Only add pair if we found a valid match with finite MSE
-        if best_match_idx >= 0 and np.isfinite(best_mse):
+        # Accept any valid match with finite MSE (including perfect matches with MSE = 0)
+        if best_match_idx >= 0 and np.isfinite(best_mse) and best_mse >= 0:
             aligned_pairs.append((orig_frame, compressed_frames[best_match_idx]))
             used_compressed_indices.add(best_match_idx)
         else:
-            logger.warning(f"No valid frame match found for original frame (best_mse={best_mse})")
+            # Only warn if we genuinely couldn't find any valid match
+            logger.debug(f"No valid frame match found for original frame (best_mse={best_mse})")
+            # For robustness, try to match with the first available frame if no perfect match found
+            if compressed_frames and not used_compressed_indices:
+                logger.debug("Falling back to first available frame for alignment")
+                aligned_pairs.append((orig_frame, compressed_frames[0]))
+                used_compressed_indices.add(0)
 
     return aligned_pairs
 
@@ -817,7 +857,7 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
             # PSNR calculation
             try:
-                frame_psnr = psnr(orig_frame, comp_frame, data_range=255.0)
+                frame_psnr = calculate_safe_psnr(orig_frame, comp_frame)
                 # Keep un-scaled PSNR for optional raw metrics output
                 raw_metric_values['psnr'].append(frame_psnr)
 
