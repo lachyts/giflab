@@ -111,25 +111,13 @@ def _extract_tenor_metadata_from_path(path_parts: Tuple[str, ...]) -> Dict[str, 
 def _extract_animately_metadata_from_path(path_parts: Tuple[str, ...]) -> Dict[str, Any]:
     """Extract Animately-specific metadata from directory path.
     
-    Expected structure: animately/context/file.gif
+    Expected structure: animately/file.gif (flat structure)
     """
     metadata = {}
     
-    if len(path_parts) >= 2:
-        # Second part is the collection context
-        context_dir = path_parts[1]
-        
-        # Map common directory names to intents
-        intent_mapping = {
-            "uploads": "compression",
-            "user_uploads": "compression",
-            "test_data": "analysis",
-            "samples": "analysis",
-            "demos": "demonstration",
-        }
-        
-        metadata["collection_context"] = context_dir
-        metadata["upload_intent"] = intent_mapping.get(context_dir, "unknown")
+    # All files in animately directory are user uploads
+    metadata["collection_context"] = "user_uploads"
+    metadata["upload_intent"] = "compression"
     
     return metadata
 
@@ -137,14 +125,12 @@ def _extract_animately_metadata_from_path(path_parts: Tuple[str, ...]) -> Dict[s
 def _extract_tgif_metadata_from_path(path_parts: Tuple[str, ...]) -> Dict[str, Any]:
     """Extract TGIF dataset metadata from directory path.
     
-    Expected structure: tgif_dataset/category/file.gif
+    Expected structure: tgif_dataset/file.gif (flat structure)
     """
     metadata = {}
     
-    if len(path_parts) >= 2:
-        # Second part is the category
-        category_dir = path_parts[1]
-        metadata["category"] = category_dir
+    # All files in tgif_dataset directory are research data
+    metadata["collection_context"] = "research_dataset"
     
     return metadata
 
@@ -206,17 +192,24 @@ This directory contains GIFs uploaded to the Animately platform.
 
 ## Organization
 
-Organize GIFs by context:
-- `user_uploads/` - Regular user uploads
-- `test_data/` - Test/development data
-- `samples/` - Sample GIFs for demos
+All GIFs go directly in this directory:
+- No subdirectories needed - all files are user uploads with similar characteristics
+- Flat structure simplifies management and processing
 
 ## Metadata
 
 GIFs in this directory will automatically have:
 - `source_platform`: "animately"
-- `collection_context`: Based on subdirectory name
-- `upload_intent`: Automatically inferred from context
+- `collection_context`: "user_uploads"
+- `upload_intent`: "compression"
+
+## Example
+```
+data/raw/animately/
+├── c6815a1e-0bd9-4cb2-a798-cc39b3dec84d__xQ8n2hf.gif
+├── 7e9c7349-c796-488e-9c47-fb8f0d5e9935__ROEzwVN.gif
+└── d538a01b-dd07-46b3-b22e-06bdb0fa0b74__sb2g4kN.gif
+```
 """,
         "tgif_dataset": """# TGIF Dataset GIFs
 
@@ -224,16 +217,25 @@ This directory contains GIFs from the TGIF dataset.
 
 ## Organization
 
-Organize GIFs by category:
-- `human_action/` - Human activities
-- `animal_action/` - Animal activities
-- `object_motion/` - Object movements
+All GIFs go directly in this directory:
+- No subdirectories needed - all files are from the same research dataset
+- Content categories (human/animal/object) are better captured in metadata than directory structure
+- Flat structure simplifies management and processing
 
 ## Metadata
 
 GIFs in this directory will automatically have:
 - `source_platform`: "tgif_dataset"
-- `category`: Based on subdirectory name
+- `collection_context`: "research_dataset"
+- Additional content categorization can be added via AI tagging
+
+## Example
+```
+data/raw/tgif_dataset/
+├── dancing_action.gif
+├── cat_playing.gif
+└── car_moving.gif
+```
 """,
         "unknown": """# Unknown Source GIFs
 
@@ -270,13 +272,14 @@ GifLab automatically detects GIF sources based on directory structure:
 │   ├── 📁 love/              # GIFs from "love" search
 │   ├── 📁 marketing/         # GIFs from "marketing" search
 │   └── 📁 email_campaign/    # GIFs for email campaigns
-├── 📁 animately/
-│   ├── 📁 user_uploads/      # Regular user uploads
-│   ├── 📁 test_data/         # Test/development data
-│   └── 📁 samples/           # Sample GIFs
-├── 📁 tgif_dataset/
-│   ├── 📁 human_action/      # Human activities
-│   └── 📁 animal_action/     # Animal activities
+├── 📁 animately/             # All Animately user uploads (flat structure)
+│   ├── user_upload_1.gif
+│   ├── user_upload_2.gif
+│   └── user_upload_3.gif
+├── 📁 tgif_dataset/          # All TGIF research data (flat structure)
+│   ├── research_gif_1.gif
+│   ├── research_gif_2.gif
+│   └── research_gif_3.gif
 └── 📁 unknown/               # Ungrouped GIFs
 
 ✨ Benefits:

@@ -85,13 +85,14 @@ data/raw/
 │   ├── love/           # "love" search results
 │   ├── marketing/      # "marketing" search results
 │   └── email_campaign/ # Email campaign GIFs
-├── animately/          # GIFs from Animately platform
-│   ├── user_uploads/   # User uploads
-│   ├── test_data/      # Test data
-│   └── samples/        # Sample GIFs
+├── animately/          # GIFs from Animately platform (all user uploads)
+│   ├── user_upload_1.gif
+│   ├── user_upload_2.gif
+│   └── user_upload_3.gif
 ├── tgif_dataset/       # GIFs from TGIF research dataset
-│   ├── human_action/   # Human activities
-│   └── animal_action/  # Animal activities
+│   ├── research_gif_1.gif
+│   ├── research_gif_2.gif
+│   └── research_gif_3.gif
 └── unknown/            # Ungrouped GIFs
 ```
 
@@ -105,6 +106,8 @@ data/raw/
 | Unknown | `unknown/` | Fallback | Unclassified or mixed sources |
 
 **Why "tgif_dataset"?** The "_dataset" suffix distinguishes research datasets from live platforms, making the data source clear. Both `tgif/` and `tgif_dataset/` are supported.
+
+**Why flat structure for some platforms?** Animately and TGIF files have uniform characteristics within each platform, so subdirectories don't add meaningful organization. Tenor search queries, however, create content differences worth preserving in the directory structure.
 
 ### Quick Start
 ```bash

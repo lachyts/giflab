@@ -66,11 +66,14 @@ data/raw/
 ├── tenor/
 │   ├── love/              # "love" search results
 │   └── marketing/         # "marketing" search results
-├── animately/
-│   ├── user_uploads/      # User uploads
-│   └── test_data/         # Test data
-└── tgif_dataset/
-    └── human_action/      # Human activities
+├── animately/             # All user uploads (flat structure)
+│   ├── user_upload_1.gif
+│   ├── user_upload_2.gif
+│   └── user_upload_3.gif
+└── tgif_dataset/          # All research data (flat structure)
+    ├── research_gif_1.gif
+    ├── research_gif_2.gif
+    └── research_gif_3.gif
 ```
 
 **Option B: Simple organization**

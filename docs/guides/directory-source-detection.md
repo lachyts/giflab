@@ -14,16 +14,14 @@ data/raw/
 │   ├── marketing/      # "marketing" search results
 │   ├── email_campaign/ # Email campaign GIFs
 │   └── reactions/      # Reaction GIFs
-├── animately/          # GIFs from Animately platform
-│   ├── user_uploads/   # User uploads
-│   ├── test_data/      # Test/development data
-│   ├── samples/        # Sample GIFs for demos
-│   └── api_examples/   # API integration examples
+├── animately/          # GIFs from Animately platform (all user uploads)
+│   ├── user_upload_1.gif
+│   ├── user_upload_2.gif
+│   └── user_upload_3.gif
 ├── tgif_dataset/       # GIFs from TGIF research dataset
-│   ├── human_action/   # Human activities
-│   ├── animal_action/  # Animal activities
-│   ├── object_motion/  # Object movements
-│   └── scenes/         # Scene changes
+│   ├── research_gif_1.gif
+│   ├── research_gif_2.gif
+│   └── research_gif_3.gif
 └── unknown/            # Ungrouped/unclassified GIFs
 ```
 
@@ -40,6 +38,8 @@ data/raw/
 - **Clarity**: Makes it clear this is a research dataset, not a live platform
 - **Distinction**: Separates research datasets from live platforms
 - **Flexibility**: Both `tgif/` and `tgif_dataset/` are supported (alternative names)
+
+**Why flat structure for some platforms?** Animately and TGIF files have uniform characteristics within each platform, so subdirectories don't add meaningful organization. Tenor search queries, however, create content differences worth preserving in the directory structure.
 
 ## Setup and Usage
 
@@ -74,21 +74,17 @@ data/raw/
 │       ├── success_thumbs_up.gif
 │       └── handshake.gif
 ├── animately/
-│   ├── user_uploads/
-│   │   ├── custom_animation.gif
-│   │   └── logo_animation.gif
-│   └── test_data/
-│       ├── compression_test.gif
-│       └── quality_reference.gif
+│   ├── custom_animation.gif
+│   ├── logo_animation.gif
+│   ├── compression_test.gif
+│   └── quality_reference.gif
 └── tgif_dataset/
-    ├── human_action/
-    │   ├── dancing.gif
-    │   ├── running.gif
-    │   └── jumping.gif
-    └── animal_action/
-        ├── cat_playing.gif
-        ├── dog_running.gif
-        └── bird_flying.gif
+    ├── dancing.gif
+    ├── running.gif
+    ├── jumping.gif
+    ├── cat_playing.gif
+    ├── dog_running.gif
+    └── bird_flying.gif
 ```
 
 ### 3. Run Analysis
@@ -113,15 +109,12 @@ python -m giflab run data/raw/ --no-detect-source-from-directory
 - **Collection Context**: Extracted from subdirectory (`tenor/love/reactions/` → `"reactions"`)
 
 #### Animately Platform
-- **Collection Context**: Extracted from directory name (`animately/user_uploads/` → `"user_uploads"`)
-- **Upload Intent**: Automatically inferred from context:
-  - `user_uploads/` → `"compression"`
-  - `test_data/` → `"analysis"`
-  - `samples/` → `"analysis"`
-  - `demos/` → `"demonstration"`
+- **Collection Context**: All files are `"user_uploads"`
+- **Upload Intent**: All files are `"compression"`
 
 #### TGIF Dataset
-- **Category**: Extracted from directory name (`tgif_dataset/human_action/` → `"human_action"`)
+- **Collection Context**: All files are `"research_dataset"`
+- **Content Categorization**: Added via AI tagging rather than directory structure
 
 ### Example Metadata Output
 
@@ -134,19 +127,19 @@ python -m giflab run data/raw/ --no-detect-source-from-directory
   "collection_context": "cute_cat.gif"
 }
 
-// animately/user_uploads/animation.gif
+// animately/animation.gif
 {
   "detected_from": "directory", 
-  "directory_path": "animately/user_uploads",
+  "directory_path": "animately",
   "collection_context": "user_uploads",
   "upload_intent": "compression"
 }
 
-// tgif_dataset/human_action/dancing.gif
+// tgif_dataset/dancing.gif
 {
   "detected_from": "directory",
-  "directory_path": "tgif_dataset/human_action", 
-  "category": "human_action"
+  "directory_path": "tgif_dataset", 
+  "collection_context": "research_dataset"
 }
 ```
 
@@ -160,8 +153,8 @@ python -m giflab run data/raw/ --no-detect-source-from-directory
 ```csv
 gif_sha,orig_filename,source_platform,source_metadata,timestamp
 abc123,heart_eyes.gif,tenor,"{\"query\":\"love\",\"detected_from\":\"directory\",\"directory_path\":\"tenor/love\"}",2024-01-15T10:30:15Z
-def456,animation.gif,animately,"{\"collection_context\":\"user_uploads\",\"upload_intent\":\"compression\",\"detected_from\":\"directory\"}",2024-01-15T10:30:20Z
-ghi789,dancing.gif,tgif_dataset,"{\"category\":\"human_action\",\"detected_from\":\"directory\"}",2024-01-15T10:30:25Z
+def456,animation.gif,animately,"{\"collection_context\":\"user_uploads\",\"upload_intent\":\"compression\",\"detected_from\":\"directory\",\"directory_path\":\"animately\"}",2024-01-15T10:30:20Z
+ghi789,dancing.gif,tgif_dataset,"{\"collection_context\":\"research_dataset\",\"detected_from\":\"directory\",\"directory_path\":\"tgif_dataset\"}",2024-01-15T10:30:25Z
 ```
 
 ## Analysis Examples
