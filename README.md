@@ -21,6 +21,60 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 Each variant is measured for file size, SSIM quality, and render time.
 
+## 🗂️ Directory-Based Source Detection
+
+GifLab automatically detects GIF sources based on directory structure, making it easy to organize and analyze GIFs from different platforms:
+
+### Directory Structure
+```
+data/raw/
+├── tenor/              # GIFs from Tenor platform
+│   ├── love/           # "love" search results
+│   ├── marketing/      # "marketing" search results
+│   └── email_campaign/ # Email campaign GIFs
+├── animately/          # GIFs from Animately platform
+│   ├── user_uploads/   # User uploads
+│   ├── test_data/      # Test data
+│   └── samples/        # Sample GIFs
+├── tgif_dataset/       # GIFs from TGIF research dataset
+│   ├── human_action/   # Human activities
+│   └── animal_action/  # Animal activities
+└── unknown/            # Ungrouped GIFs
+```
+
+### Platform Naming Convention
+
+| Platform | Directory Name | Type | Notes |
+|----------|----------------|------|-------|
+| Tenor | `tenor/` | Live Platform | Google's GIF search platform |
+| Animately | `animately/` | Live Platform | Your compression platform |
+| TGIF Dataset | `tgif_dataset/` | Research Dataset | Academic research dataset |
+| Unknown | `unknown/` | Fallback | Unclassified or mixed sources |
+
+**Why "tgif_dataset"?** The "_dataset" suffix distinguishes research datasets from live platforms, making the data source clear. Both `tgif/` and `tgif_dataset/` are supported.
+
+### Quick Start
+```bash
+# 1. Create directory structure
+python -m giflab organize-directories data/raw/
+
+# 2. Move GIFs to appropriate directories
+# (manually or via collection scripts)
+
+# 3. Run analysis with automatic source detection
+python -m giflab run data/raw/
+
+# 4. Optional: Disable source detection
+python -m giflab run data/raw/ --no-detect-source-from-directory
+```
+
+### CSV Output
+The resulting CSV includes source tracking columns:
+- `source_platform`: Platform identifier (tenor, animately, tgif_dataset, unknown)
+- `source_metadata`: JSON metadata with query, context, and collection details
+
+📖 **For detailed documentation, see:** [Directory-Based Source Detection Guide](docs/guides/directory-source-detection.md)
+
 ## SSIM Quality Analysis
 
 GifLab provides multiple SSIM (Structural Similarity Index) calculation modes optimized for different use cases:

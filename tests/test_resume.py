@@ -469,7 +469,7 @@ class TestResumeIntegration:
             entropy=3.8
         )
 
-        def mock_metadata_side_effect(path):
+        def mock_metadata_side_effect(path, source_platform="unknown", source_metadata=None):
             if path.name == "test1.gif":
                 return metadata1
             elif path.name == "test2.gif":

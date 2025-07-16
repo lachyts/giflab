@@ -72,6 +72,8 @@ giflab/
 | orig_fps             | float | `24.0`                     |
 | orig_n_colors        | int   | `220`                      |
 | entropy (optional)   | float | `4.1`                      |
+| source_platform      | str   | `tenor`                    |
+| source_metadata      | str   | `{"query":"love","tenor_id":"xyz123"}` |
 | tags (optional)      | str   | `vector-art;low-fps`       |
 | timestamp            | str   | ISO-8601                   |
 

@@ -1,5 +1,6 @@
 """Compression pipeline orchestrator with resume functionality."""
 
+import json
 import multiprocessing
 import signal
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -12,6 +13,7 @@ from .config import CompressionConfig, PathConfig
 from .io import append_csv_row, move_bad_gif, read_csv_as_dicts, setup_logging
 from .lossy import LossyEngine, apply_compression_with_all_params
 from .meta import GifMetadata, extract_gif_metadata
+from .directory_source_detection import detect_source_from_directory
 from .metrics import calculate_comprehensive_metrics
 from . import __version__ as GIFLAB_VERSION
 
@@ -73,6 +75,10 @@ class CompressionResult:
     orig_fps: float
     orig_n_colors: int
     entropy: float | None
+    
+    # Source tracking
+    source_platform: str
+    source_metadata: str | None  # JSON string for CSV compatibility
 
     # Timestamp
     timestamp: str
@@ -91,7 +97,8 @@ class CompressionPipeline:
         compression_config: CompressionConfig,
         path_config: PathConfig,
         workers: int = 0,
-        resume: bool = True
+        resume: bool = True,
+        detect_source_from_directory: bool = True
     ):
         """Initialize the compression pipeline.
 
@@ -100,11 +107,13 @@ class CompressionPipeline:
             path_config: Configuration for file paths
             workers: Number of worker processes (0 = CPU count)
             resume: Whether to resume from existing progress
+            detect_source_from_directory: Whether to detect source from directory structure
         """
         self.compression_config = compression_config
         self.path_config = path_config
         self.workers = workers if workers > 0 else multiprocessing.cpu_count()
         self.resume = resume
+        self.detect_source_from_directory = detect_source_from_directory
         self.logger = setup_logging(path_config.LOGS_DIR)
 
         # CSV fieldnames based on project scope
@@ -112,7 +121,8 @@ class CompressionPipeline:
             "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
             "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
             "render_ms", "orig_kilobytes", "orig_width", "orig_height",
-            "orig_frames", "orig_fps", "orig_n_colors", "entropy", "timestamp",
+            "orig_frames", "orig_fps", "orig_n_colors", "entropy", 
+            "source_platform", "source_metadata", "timestamp",
             "giflab_version", "code_commit", "dataset_version"
         ]
 
@@ -151,11 +161,12 @@ class CompressionPipeline:
         self.logger.info(f"Discovered {len(unique_gif_files)} GIF files in {raw_dir}")
         return unique_gif_files
 
-    def generate_jobs(self, gif_paths: list[Path]) -> list[CompressionJob]:
+    def generate_jobs(self, gif_paths: list[Path], raw_dir: Path | None = None) -> list[CompressionJob]:
         """Generate all compression jobs for the given GIF files.
 
         Args:
             gif_paths: List of GIF file paths
+            raw_dir: Raw directory path (needed for directory-based source detection)
 
         Returns:
             List of compression jobs to execute
@@ -164,8 +175,18 @@ class CompressionPipeline:
 
         for gif_path in gif_paths:
             try:
-                # Extract metadata
-                metadata = extract_gif_metadata(gif_path)
+                # Detect source from directory structure if enabled
+                if self.detect_source_from_directory and raw_dir is not None:
+                    source_platform, source_metadata = detect_source_from_directory(gif_path, raw_dir)
+                else:
+                    source_platform, source_metadata = "unknown", None
+                
+                # Extract metadata with source information
+                metadata = extract_gif_metadata(
+                    gif_path,
+                    source_platform=source_platform,
+                    source_metadata=source_metadata
+                )
 
                 # Create per-GIF folder name: {original_filename}_{gif_sha}
                 folder_name = self._create_gif_folder_name(metadata.orig_filename, metadata.gif_sha)
@@ -387,6 +408,8 @@ class CompressionPipeline:
                 orig_fps=job.metadata.orig_fps,
                 orig_n_colors=job.metadata.orig_n_colors,
                 entropy=job.metadata.entropy,
+                source_platform=job.metadata.source_platform,
+                source_metadata=json.dumps(job.metadata.source_metadata) if job.metadata.source_metadata else None,
                 timestamp=datetime.now().isoformat()
             )
 
@@ -430,7 +453,7 @@ class CompressionPipeline:
             return {"status": "no_files", "processed": 0, "failed": 0, "skipped": 0}
 
         # Generate jobs
-        all_jobs = self.generate_jobs(gif_paths)
+        all_jobs = self.generate_jobs(gif_paths, raw_dir)
         if not all_jobs:
             self.logger.warning("No valid compression jobs generated")
             return {"status": "no_jobs", "processed": 0, "failed": 0, "skipped": 0}

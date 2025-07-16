@@ -43,18 +43,43 @@ choco install python ffmpeg gifsicle
 ```
 
 #### Step 2: Organize Your GIFs
-```bash
-# Create the directory structure
-mkdir -p data/raw
-mkdir -p data/renders
-mkdir -p data/csv
-mkdir -p seed
-mkdir -p logs
 
-# Add your GIF files to data/raw/
-# You can copy them or create symlinks
+GifLab can automatically detect GIF sources based on directory structure, making it easy to organize and analyze GIFs from different platforms:
+
+```bash
+# Create the directory structure with automatic source detection
+python -m giflab organize-directories data/raw/
+
+# This creates organized directories:
+# data/raw/tenor/          - GIFs from Tenor
+# data/raw/animately/      - GIFs from Animately platform  
+# data/raw/tgif_dataset/   - GIFs from TGIF research dataset
+# data/raw/unknown/        - Ungrouped GIFs
+```
+
+**Two approaches for organizing:**
+
+**Option A: Directory-based source detection (Recommended)**
+```bash
+# Move GIFs to appropriate directories for automatic detection
+data/raw/
+├── tenor/
+│   ├── love/              # "love" search results
+│   └── marketing/         # "marketing" search results
+├── animately/
+│   ├── user_uploads/      # User uploads
+│   └── test_data/         # Test data
+└── tgif_dataset/
+    └── human_action/      # Human activities
+```
+
+**Option B: Simple organization**
+```bash
+# Or just put all GIFs in data/raw/ for simple analysis
 cp /path/to/your/gifs/*.gif data/raw/
 ```
+
+📖 **For detailed organization guide, see:** [Directory-Based Source Detection Guide](directory-source-detection.md)
 
 ### Phase 2: Analysis & Planning (10-30 minutes)
 

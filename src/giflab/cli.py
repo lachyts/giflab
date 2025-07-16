@@ -53,6 +53,11 @@ def main():
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory for rendered variants (default: data/renders)",
 )
+@click.option(
+    "--detect-source-from-directory/--no-detect-source-from-directory",
+    default=True,
+    help="Detect source platform from directory structure (default: true)",
+)
 def run(
     raw_dir: Path,
     workers: int,
@@ -61,6 +66,7 @@ def run(
     csv: Path | None,
     dry_run: bool,
     renders_dir: Path | None,
+    detect_source_from_directory: bool,
 ):
     """Run compression analysis on GIFs in RAW_DIR.
 
@@ -100,6 +106,7 @@ def run(
             path_config=path_config,
             workers=validated_workers,
             resume=resume,
+            detect_source_from_directory=detect_source_from_directory,
         )
 
         # Generate CSV path if not provided
@@ -119,6 +126,7 @@ def run(
             f"👥 Workers: {validated_workers if validated_workers > 0 else multiprocessing.cpu_count()}"
         )
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
+        click.echo(f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}")
 
         if dry_run:
             click.echo("🔍 DRY RUN MODE - Analysis only")
@@ -389,6 +397,37 @@ def tag(
         sys.exit(1)
     except Exception as e:
         click.echo(f"❌ Tagging failed: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument(
+    "raw_dir",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+)
+def organize_directories(raw_dir: Path):
+    """Create organized directory structure for source-based GIF collection.
+    
+    Creates subdirectories in RAW_DIR for different GIF sources:
+    - tenor/      - GIFs from Tenor
+    - animately/  - GIFs from Animately platform
+    - tgif_dataset/ - GIFs from TGIF dataset
+    - unknown/    - Ungrouped GIFs
+    
+    Each directory includes a README with organization guidelines.
+    """
+    from .directory_source_detection import create_directory_structure, get_directory_organization_help
+    
+    try:
+        click.echo("🗂️  Creating directory structure for source organization...")
+        create_directory_structure(raw_dir)
+        
+        click.echo("✅ Directory structure created successfully!")
+        click.echo(f"📁 Organized directories in: {raw_dir}")
+        click.echo("\n" + get_directory_organization_help())
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to create directory structure: {e}", err=True)
         sys.exit(1)
 
 

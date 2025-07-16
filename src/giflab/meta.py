@@ -3,6 +3,7 @@
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -21,6 +22,10 @@ class GifMetadata:
     orig_fps: float
     orig_n_colors: int
     entropy: float | None = None
+    
+    # Source tracking fields
+    source_platform: str = "unknown"
+    source_metadata: dict[str, Any] | None = None
 
 
 def compute_file_sha256(file_path: Path) -> str:
@@ -40,11 +45,17 @@ def compute_file_sha256(file_path: Path) -> str:
     return sha256_hash.hexdigest()
 
 
-def extract_gif_metadata(file_path: Path) -> GifMetadata:
+def extract_gif_metadata(
+    file_path: Path,
+    source_platform: str = "unknown",
+    source_metadata: dict[str, Any] | None = None
+) -> GifMetadata:
     """Extract metadata from a GIF file.
 
     Args:
         file_path: Path to the GIF file
+        source_platform: Platform where this GIF was sourced from
+        source_metadata: Additional metadata about the source/collection context
 
     Returns:
         GifMetadata object with extracted information
@@ -158,7 +169,9 @@ def extract_gif_metadata(file_path: Path) -> GifMetadata:
         orig_frames=frame_count,
         orig_fps=round(orig_fps, 2),
         orig_n_colors=orig_n_colors,
-        entropy=entropy
+        entropy=entropy,
+        source_platform=source_platform,
+        source_metadata=source_metadata
     )
 
 

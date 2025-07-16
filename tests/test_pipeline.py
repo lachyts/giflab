@@ -316,6 +316,8 @@ class TestCompressionPipeline:
             orig_fps=24.0,
             orig_n_colors=128,
             entropy=4.2,
+            source_platform="unknown",
+            source_metadata=None,
             timestamp=datetime.now().isoformat()
         )
 

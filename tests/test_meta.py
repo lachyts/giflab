@@ -109,6 +109,8 @@ class TestGifMetadata:
         assert metadata.orig_fps == 24.0
         assert metadata.orig_n_colors == 256
         assert metadata.entropy == 5.5
+        assert metadata.source_platform == "unknown"
+        assert metadata.source_metadata is None
 
     def test_gif_metadata_optional_entropy(self):
         """Test GifMetadata with optional entropy field."""
@@ -124,6 +126,8 @@ class TestGifMetadata:
         )
 
         assert metadata.entropy is None
+        assert metadata.source_platform == "unknown"
+        assert metadata.source_metadata is None
 
 
 class TestExtractGifMetadata:
