@@ -3,7 +3,7 @@
 import multiprocessing
 import signal
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +13,25 @@ from .io import append_csv_row, move_bad_gif, read_csv_as_dicts, setup_logging
 from .lossy import LossyEngine, apply_compression_with_all_params
 from .meta import GifMetadata, extract_gif_metadata
 from .metrics import calculate_comprehensive_metrics
+from . import __version__ as GIFLAB_VERSION
+
+
+def _get_git_commit_hash() -> str:
+    """Return short git commit hash if repository is available, else 'unknown'."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:  # pragma: no cover
+        pass
+    return "unknown"
 
 
 @dataclass
@@ -58,6 +77,11 @@ class CompressionResult:
     # Timestamp
     timestamp: str
 
+    # Version metadata (auto-populated)
+    giflab_version: str = field(init=False, default=GIFLAB_VERSION)
+    code_commit: str = field(init=False, default_factory=_get_git_commit_hash)
+    dataset_version: str = field(init=False, default_factory=lambda: datetime.now().strftime("%Y%m%d"))
+
 
 class CompressionPipeline:
     """Main pipeline for orchestrating GIF compression with resume capability."""
@@ -88,7 +112,8 @@ class CompressionPipeline:
             "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
             "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
             "render_ms", "orig_kilobytes", "orig_width", "orig_height",
-            "orig_frames", "orig_fps", "orig_n_colors", "entropy", "timestamp"
+            "orig_frames", "orig_fps", "orig_n_colors", "entropy", "timestamp",
+            "giflab_version", "code_commit", "dataset_version"
         ]
 
         # Setup signal handling for graceful shutdown

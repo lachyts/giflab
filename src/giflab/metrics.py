@@ -556,8 +556,15 @@ def chist(frame1: np.ndarray, frame2: np.ndarray, bins: int = 32) -> float:
     return float(np.clip((np.mean(scores) + 1) / 2.0, 0.0, 1.0))
 
 
-def edge_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
-    """Edge-Map Jaccard similarity (0-1, higher is better)."""
+def edge_similarity(frame1: np.ndarray, frame2: np.ndarray, threshold1: int = 50, threshold2: int = 150) -> float:
+    """Edge-Map Jaccard similarity (0-1, higher is better).
+
+    Args:
+        frame1: First frame (RGB or grayscale)
+        frame2: Second frame (RGB or grayscale)
+        threshold1: Lower Canny threshold
+        threshold2: Upper Canny threshold
+    """
     f1, f2 = _resize_if_needed(frame1, frame2)
 
     if f1.ndim == 3:
@@ -566,8 +573,8 @@ def edge_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
     else:
         gray1, gray2 = f1, f2
 
-    edges1 = cv2.Canny(gray1, 50, 150)
-    edges2 = cv2.Canny(gray2, 50, 150)
+    edges1 = cv2.Canny(gray1, threshold1, threshold2)
+    edges2 = cv2.Canny(gray2, threshold1, threshold2)
 
     intersection = np.logical_and(edges1 > 0, edges2 > 0).sum()
     union = np.logical_or(edges1 > 0, edges2 > 0).sum()
@@ -814,8 +821,8 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 # Keep un-scaled PSNR for optional raw metrics output
                 raw_metric_values['psnr'].append(frame_psnr)
 
-                # Normalize PSNR to 0-1 range (assume max useful PSNR is 50dB)
-                normalized_psnr = min(frame_psnr / 50.0, 1.0)
+                # Normalize PSNR using configurable upper bound
+                normalized_psnr = min(frame_psnr / float(config.PSNR_MAX_DB), 1.0)
                 metric_values['psnr'].append(max(0.0, normalized_psnr))
             except Exception as e:
                 logger.warning(f"PSNR calculation failed for frame: {e}")
@@ -860,7 +867,10 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
             # Edge similarity
             try:
-                frame_edge = edge_similarity(orig_frame, comp_frame)
+                frame_edge = edge_similarity(
+                    orig_frame, comp_frame,
+                    config.EDGE_CANNY_THRESHOLD1,
+                    config.EDGE_CANNY_THRESHOLD2)
                 metric_values['edge_similarity'].append(frame_edge)
             except Exception as e:
                 logger.warning(f"Edge similarity calculation failed for frame: {e}")
@@ -941,7 +951,10 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 'fsim': fsim,
                 'gmsd': gmsd,
                 'chist': chist,
-                'edge_similarity': edge_similarity,
+                'edge_similarity': lambda f1, f2: edge_similarity(
+                    f1, f2,
+                    config.EDGE_CANNY_THRESHOLD1,
+                    config.EDGE_CANNY_THRESHOLD2),
                 'texture_similarity': texture_similarity,
                 'sharpness_similarity': sharpness_similarity,
             }

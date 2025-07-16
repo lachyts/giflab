@@ -67,6 +67,13 @@ class MetricsConfig:
     PSNR_WEIGHT: float = 0.25
     TEMPORAL_WEIGHT: float = 0.10
 
+    # PSNR normalisation upper bound (dB) – values ≥ this map to 1.0
+    PSNR_MAX_DB: float = 50.0
+
+    # Edge-similarity Canny thresholds
+    EDGE_CANNY_THRESHOLD1: int = 50
+    EDGE_CANNY_THRESHOLD2: int = 150
+
     def __post_init__(self) -> None:
         # Validate weights sum to 1.0 with proper floating point tolerance
         total_weight = (self.SSIM_WEIGHT + self.MS_SSIM_WEIGHT +
@@ -90,6 +97,16 @@ class MetricsConfig:
         # Validate frame limit is reasonable
         if self.SSIM_MAX_FRAMES <= 0 or self.SSIM_MAX_FRAMES > 1000:
             raise ValueError(f"SSIM_MAX_FRAMES must be between 1 and 1000, got {self.SSIM_MAX_FRAMES}")
+
+        # Validate PSNR max dB
+        if self.PSNR_MAX_DB <= 0:
+            raise ValueError("PSNR_MAX_DB must be positive")
+
+        # Validate Canny thresholds
+        if self.EDGE_CANNY_THRESHOLD1 <= 0 or self.EDGE_CANNY_THRESHOLD2 <= 0:
+            raise ValueError("Canny thresholds must be positive")
+        if self.EDGE_CANNY_THRESHOLD1 >= self.EDGE_CANNY_THRESHOLD2:
+            raise ValueError("EDGE_CANNY_THRESHOLD1 must be < EDGE_CANNY_THRESHOLD2")
 
         # Set default positional metrics if not provided
         if self.POSITIONAL_METRICS is None:
