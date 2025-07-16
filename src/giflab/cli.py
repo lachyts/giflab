@@ -11,6 +11,7 @@ from .config import (
     DEFAULT_COMPRESSION_CONFIG,
     PathConfig,
 )
+from .experiment import ExperimentalConfig, ExperimentalPipeline, create_experimental_pipeline
 from .pipeline import CompressionPipeline
 from .validation import validate_raw_dir, validate_worker_count, ValidationError
 
@@ -428,6 +429,144 @@ def organize_directories(raw_dir: Path):
         
     except Exception as e:
         click.echo(f"❌ Failed to create directory structure: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.option(
+    "--gifs",
+    "-g",
+    type=int,
+    default=10,
+    help="Number of test GIFs to generate (default: 10)",
+)
+@click.option(
+    "--workers",
+    "-j",
+    type=int,
+    default=0,
+    help=f"Number of worker processes (default: {multiprocessing.cpu_count()} = CPU count)",
+)
+@click.option(
+    "--sample-gifs-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Directory containing sample GIFs to use instead of generating new ones",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Directory to save experiment results (default: data/experimental/results)",
+)
+@click.option(
+    "--strategies",
+    type=click.Choice([
+        "pure_gifsicle",
+        "pure_animately",
+        "animately_then_gifsicle",
+        "gifsicle_dithered",
+        "gifsicle_optimized",
+        "all"
+    ]),
+    multiple=True,
+    default=["all"],
+    help="Compression strategies to test (default: all)",
+)
+@click.option(
+    "--no-analysis",
+    is_flag=True,
+    help="Disable detailed analysis report generation",
+)
+def experiment(
+    gifs: int,
+    workers: int,
+    sample_gifs_dir: Path | None,
+    output_dir: Path | None,
+    strategies: tuple[str, ...],
+    no_analysis: bool,
+):
+    """Run experimental compression testing with diverse sample GIFs.
+    
+    This command tests different compression strategies on a small set of
+    diverse GIFs to validate workflows and identify optimal parameters
+    before running on large datasets.
+    """
+    try:
+        # Validate worker count
+        try:
+            validated_workers = validate_worker_count(workers)
+        except ValidationError as e:
+            click.echo(f"❌ Invalid worker count: {e}", err=True)
+            sys.exit(1)
+        
+        # Expand strategy selection
+        all_strategies = [
+            "pure_gifsicle",
+            "pure_animately",
+            "animately_then_gifsicle",
+            "gifsicle_dithered",
+            "gifsicle_optimized"
+        ]
+        
+        if "all" in strategies:
+            selected_strategies = all_strategies
+        else:
+            selected_strategies = list(strategies)
+        
+        # Create experimental configuration
+        config = ExperimentalConfig(
+            TEST_GIFS_COUNT=gifs,
+            STRATEGIES=selected_strategies,
+            ENABLE_DETAILED_ANALYSIS=not no_analysis
+        )
+        
+        # Override paths if provided
+        if sample_gifs_dir:
+            config.SAMPLE_GIFS_PATH = sample_gifs_dir
+        if output_dir:
+            config.RESULTS_PATH = output_dir
+        
+        # Create experimental pipeline
+        pipeline = ExperimentalPipeline(config, validated_workers)
+        
+        click.echo("🧪 GifLab Experimental Testing")
+        click.echo(f"📊 Test GIFs: {gifs}")
+        click.echo(f"🛠️ Strategies: {', '.join(selected_strategies)}")
+        click.echo(f"📁 Sample GIFs: {config.SAMPLE_GIFS_PATH}")
+        click.echo(f"📈 Results: {config.RESULTS_PATH}")
+        click.echo(f"👥 Workers: {validated_workers}")
+        click.echo(f"📊 Analysis: {'Enabled' if not no_analysis else 'Disabled'}")
+        
+        # Load sample GIFs
+        sample_gifs = None
+        if sample_gifs_dir and sample_gifs_dir.exists():
+            sample_gifs = list(sample_gifs_dir.glob("*.gif"))
+            if not sample_gifs:
+                click.echo(f"⚠️ No GIF files found in {sample_gifs_dir}")
+                click.echo("Will generate test GIFs instead")
+                sample_gifs = None
+            else:
+                click.echo(f"📂 Found {len(sample_gifs)} sample GIFs")
+        
+        # Run experiment
+        click.echo("\n🚀 Starting experimental pipeline...")
+        results_path = pipeline.run_experiment(sample_gifs)
+        
+        if results_path.exists():
+            click.echo(f"\n✅ Experiment completed successfully!")
+            click.echo(f"📊 Results saved to: {results_path}")
+            
+            # Show quick summary
+            if not no_analysis:
+                analysis_path = results_path.parent / "analysis_report.json"
+                if analysis_path.exists():
+                    click.echo(f"📈 Analysis report: {analysis_path}")
+                    
+        else:
+            click.echo(f"\n❌ Experiment failed - no results generated")
+            sys.exit(1)
+            
+    except Exception as e:
+        click.echo(f"❌ Experiment failed: {e}", err=True)
         sys.exit(1)
 
 

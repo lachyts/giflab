@@ -21,6 +21,59 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 Each variant is measured for file size, SSIM quality, and render time.
 
+## 🧪 Experimental Testing Framework
+
+Before running compression analysis on large datasets, use GifLab's experimental testing framework to validate workflows and optimize settings with a small set of diverse test GIFs.
+
+### Key Features
+- **Small-scale validation**: Test with ~10 diverse GIFs before scaling
+- **Workflow comparison**: Compare pure Gifsicle vs Animately+Gifsicle workflows
+- **Advanced options**: Test different optimization levels and dithering modes
+- **Anomaly detection**: Identify issues before they affect large datasets
+- **Performance analysis**: Comprehensive metrics and visualization
+
+### Quick Start
+```bash
+# Test all compression strategies with default settings
+poetry run python -m giflab experiment
+
+# Compare main workflows (addresses your specific question)
+poetry run python -m giflab experiment --strategies pure_gifsicle --strategies animately_then_gifsicle
+
+# Test dithering vs non-dithering
+poetry run python -m giflab experiment --strategies pure_gifsicle --strategies gifsicle_dithered
+
+# Use your own test GIFs
+poetry run python -m giflab experiment --sample-gifs-dir data/my_test_gifs
+```
+
+### Supported Strategies
+- **pure_gifsicle**: All operations through gifsicle (current approach)
+- **animately_then_gifsicle**: Hybrid workflow - process with Animately, compress with Gifsicle
+- **gifsicle_dithered**: Gifsicle with Floyd-Steinberg dithering
+- **gifsicle_optimized**: Gifsicle with `-O3` optimization level
+
+### Output
+The framework generates timestamped results in `data/experimental/results/`:
+- **experiment_results.csv**: Raw performance data
+- **analysis_report.json**: Strategy comparison and recommendations
+- **visualizations/**: Performance charts and graphs
+
+### Integration with Main Pipeline
+After experimental validation, apply findings to your main compression pipeline:
+```bash
+# 1. Run experiments to identify optimal strategy
+poetry run python -m giflab experiment
+
+# 2. Review results and update configuration
+# (modify src/giflab/config.py based on findings)
+
+# 3. Run full pipeline with optimized settings
+poetry run python -m giflab run data/raw data/
+```
+
+📖 **For detailed documentation, see:** [Experimental Testing Guide](docs/guides/experimental-testing.md)
+
 ## 🗂️ Directory-Based Source Detection
 
 GifLab automatically detects GIF sources based on directory structure, making it easy to organize and analyze GIFs from different platforms:
