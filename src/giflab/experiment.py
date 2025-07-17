@@ -72,6 +72,24 @@ class ExperimentalConfig:
     FRAME_KEEP_RATIOS: List[float] = field(default_factory=lambda: [1.0, 0.8, 0.5])
     COLOR_KEEP_COUNTS: List[int] = field(default_factory=lambda: [256, 64, 16])
     LOSSY_LEVELS: List[int] = field(default_factory=lambda: [0, 40, 120])
+
+    # ------------------------------------------------------------------
+    # Stage-1 additions — variable-based matrix experimentation support
+    # ------------------------------------------------------------------
+    # When *True* the experiment runner will – in future stages – ignore the
+    # legacy STRATEGIES list and instead build pipelines dynamically from
+    # VARIABLE_SLOTS.  We introduce the flag here so downstream code can
+    # start probing for it without breaking existing behaviour.
+    ENABLE_MATRIX_MODE: bool = False
+
+    # The canonical slot order described in docs/technical/next-tools-priority.md
+    VARIABLE_SLOTS: List[str] = field(
+        default_factory=lambda: [
+            "frame_reduction",  # executed first
+            "color_reduction",  # executed second
+            "lossy_compression",  # executed last
+        ]
+    )
     
     # Analysis settings
     ANOMALY_THRESHOLD: float = 2.0  # Standard deviations for anomaly detection
