@@ -17,3 +17,21 @@ from .tool_interfaces import (
 )
 
 from .system_tools import verify_required_tools, ToolInfo
+
+# Stage-2: capability wrappers ------------------------------------------------
+
+from .tool_wrappers import (
+    GifsicleColorReducer,
+    GifsicleFrameReducer,
+    GifsicleLossyCompressor,
+    AnimatelyColorReducer,
+    AnimatelyFrameReducer,
+    AnimatelyLossyCompressor,
+    ImageMagickColorReducer,
+    ImageMagickFrameReducer,
+    ImageMagickLossyCompressor,
+    FFmpegColorReducer,
+    FFmpegFrameReducer,
+    FFmpegLossyCompressor,
+    GifskiLossyCompressor,
+)
