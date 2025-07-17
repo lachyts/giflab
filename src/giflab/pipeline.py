@@ -7,7 +7,11 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Dict
+
+# dynamic pipeline support
+from .dynamic_pipeline import generate_all_pipelines, Pipeline
+from .tool_interfaces import ExternalTool
 
 from .config import CompressionConfig, PathConfig
 from .io import append_csv_row, move_bad_gif, read_csv_as_dicts, setup_logging
@@ -98,7 +102,8 @@ class CompressionPipeline:
         path_config: PathConfig,
         workers: int = 0,
         resume: bool = True,
-        detect_source_from_directory: bool = True
+        detect_source_from_directory: bool = True,
+        selected_pipelines: List[str] | None = None,
     ):
         """Initialize the compression pipeline.
 
@@ -114,6 +119,7 @@ class CompressionPipeline:
         self.workers = workers if workers > 0 else multiprocessing.cpu_count()
         self.resume = resume
         self.detect_source_from_directory = detect_source_from_directory
+        self.selected_pipelines = selected_pipelines
         self.logger = setup_logging(path_config.LOGS_DIR)
 
         # CSV fieldnames based on project scope
@@ -192,25 +198,42 @@ class CompressionPipeline:
                 folder_name = self._create_gif_folder_name(metadata.orig_filename, metadata.gif_sha)
                 gif_folder = self.path_config.RENDERS_DIR / folder_name
 
-                # Generate jobs for all compression variants
-                for engine in self.compression_config.ENGINES:
-                    for lossy in self.compression_config.LOSSY_LEVELS:
-                        for ratio in self.compression_config.FRAME_KEEP_RATIOS:
-                            for colors in self.compression_config.COLOR_KEEP_COUNTS:
-                                # Generate clean output filename within the GIF's folder
-                                output_filename = f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
-                                output_path = gif_folder / output_filename
-
-                                job = CompressionJob(
-                                    gif_path=gif_path,
-                                    metadata=metadata,
-                                    engine=engine,
-                                    lossy=lossy,
-                                    frame_keep_ratio=ratio,
-                                    color_keep_count=colors,
-                                    output_path=output_path
-                                )
-                                jobs.append(job)
+                if self.selected_pipelines is not None:
+                    pipeline_map: Dict[str, Pipeline] = {p.identifier(): p for p in generate_all_pipelines()}
+                    missing = [pid for pid in self.selected_pipelines if pid not in pipeline_map]
+                    if missing:
+                        self.logger.warning(f"Unknown pipeline identifiers: {missing}")
+                    for pid in self.selected_pipelines:
+                        if pid not in pipeline_map:
+                            continue
+                        pipe_obj = pipeline_map[pid]
+                        for lossy in self.compression_config.LOSSY_LEVELS:
+                            for ratio in self.compression_config.FRAME_KEEP_RATIOS:
+                                for colors in self.compression_config.COLOR_KEEP_COUNTS:
+                                    jobs.append(
+                                        self._create_job_from_pipeline(
+                                            gif_path, metadata, gif_folder,
+                                            pipe_obj, lossy, ratio, colors
+                                        )
+                                    )
+                else:
+                    # Legacy engine grid
+                    for engine in self.compression_config.ENGINES:
+                        for lossy in self.compression_config.LOSSY_LEVELS:
+                            for ratio in self.compression_config.FRAME_KEEP_RATIOS:
+                                for colors in self.compression_config.COLOR_KEEP_COUNTS:
+                                    output_filename = f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+                                    output_path = gif_folder / output_filename
+                                    job = CompressionJob(
+                                        gif_path=gif_path,
+                                        metadata=metadata,
+                                        engine=engine,
+                                        lossy=lossy,
+                                        frame_keep_ratio=ratio,
+                                        color_keep_count=colors,
+                                        output_path=output_path,
+                                    )
+                                    jobs.append(job)
 
             except Exception as e:
                 self.logger.error(f"Failed to process {gif_path}: {e}")
@@ -223,6 +246,33 @@ class CompressionPipeline:
 
         self.logger.info(f"Generated {len(jobs)} compression jobs")
         return jobs
+
+    # Reuse helper from Experiment (duplicated for brevity)
+    def _create_job_from_pipeline(
+        self,
+        gif_path: Path,
+        metadata: GifMetadata,
+        gif_folder: Path,
+        pipeline: Pipeline,
+        lossy: int,
+        ratio: float,
+        colors: int,
+    ) -> CompressionJob:
+        identifier = pipeline.identifier()
+        output_path = gif_folder / f"{identifier}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+
+        job = CompressionJob(
+            gif_path=gif_path,
+            metadata=metadata,
+            engine="dynamic",
+            lossy=lossy,
+            frame_keep_ratio=ratio,
+            color_keep_count=colors,
+            output_path=output_path,
+        )
+        # attach pipeline object for executor via attribute injection
+        job.pipeline = pipeline  # type: ignore[attr-defined]
+        return job
 
     def _create_gif_folder_name(self, orig_filename: str, gif_sha: str) -> str:
         """Create a filesystem-safe folder name for a GIF and its renders.

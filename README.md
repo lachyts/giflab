@@ -64,44 +64,6 @@ GifLab's experimental framework tests multiple algorithmic combinations to:
 
 *See [ML Strategy Documentation](docs/technical/ml-strategy.md) for detailed implementation plans.*
 
-## 🧪 Experimental Testing Framework
-
-Before running compression analysis on large datasets, use GifLab's experimental testing framework to validate workflows and optimize settings with a small set of diverse test GIFs.
-
-### Key Features
-- **Small-scale validation**: Test with ~10 diverse GIFs before scaling
-- **Workflow comparison**: Compare pure Gifsicle vs Animately+Gifsicle workflows
-- **Advanced options**: Test different optimization levels and dithering modes
-- **Anomaly detection**: Identify issues before they affect large datasets
-- **Performance analysis**: Comprehensive metrics and visualization
-
-### Quick Start
-```bash
-# Test all compression strategies with default settings
-poetry run python -m giflab experiment
-
-# Compare main workflows (addresses your specific question)
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies animately_then_gifsicle
-
-# Test dithering vs non-dithering
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies gifsicle_dithered
-
-# Use your own test GIFs
-poetry run python -m giflab experiment --sample-gifs-dir data/my_test_gifs
-```
-
-### Supported Strategies
-- **pure_gifsicle**: All operations through gifsicle (current approach)
-- **animately_then_gifsicle**: Hybrid workflow - process with Animately, compress with Gifsicle
-- **gifsicle_dithered**: Gifsicle with Floyd-Steinberg dithering
-- **gifsicle_optimized**: Gifsicle with `-O3` optimization level
-
-### Output
-The framework generates timestamped results in `data/experimental/results/`:
-- **experiment_results.csv**: Raw performance data
-- **analysis_report.json**: Strategy comparison and recommendations
-- **visualizations/**: Performance charts and graphs
-
 ### Integration with Main Pipeline
 After experimental validation, apply findings to your main compression pipeline:
 ```bash
@@ -252,8 +214,14 @@ All metrics are exposed via `giflab.metrics.calculate_comprehensive_metrics` and
 # Install dependencies (requires Poetry)
 poetry install
 
-# Run compression analysis
-poetry run python -m giflab run data/raw data/
+# Test all compression strategies with default settings
+poetry run python -m giflab experiment --matrix
+
+# Pick top 3 pipelines by SSIM
+poetry run python -m giflab select-pipelines experiment_results.csv --top 3 -o winners.yaml
+
+# Run production compression on full dataset with chosen pipelines
+poetry run python -m giflab run data/raw --pipelines winners.yaml
 
 # Add AI-generated tags
 poetry run python -m giflab tag results.csv data/raw

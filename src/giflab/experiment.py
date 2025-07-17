@@ -34,6 +34,12 @@ from .lossy_extended import (
 from .meta import GifMetadata, extract_gif_metadata
 from .metrics import calculate_comprehensive_metrics
 from .pipeline import CompressionJob, CompressionPipeline
+from tempfile import NamedTemporaryFile
+
+# Stage-4 dynamic pipeline support
+from .dynamic_pipeline import Pipeline, PipelineStep, generate_all_pipelines
+from .tool_interfaces import ExternalTool
+from .tool_wrappers import NoOpColorReducer, NoOpFrameReducer, NoOpLossyCompressor
 
 
 @dataclass
@@ -107,14 +113,17 @@ class ExperimentJob:
     
     gif_path: Path
     metadata: GifMetadata
-    strategy: str
-    engine: str
-    optimization_level: str
-    dithering_option: str
+    strategy: str  # legacy or pipeline identifier
+    engine: str  # legacy only – left for CSV compatibility
+    optimization_level: str  # legacy only
+    dithering_option: str  # legacy only
     lossy: int
     frame_keep_ratio: float
     color_keep_count: int
     output_path: Path
+
+    # New for dynamic matrix mode
+    pipeline: Pipeline | None = None
     
     def get_identifier(self) -> str:
         """Get unique identifier for this job."""
@@ -412,7 +421,18 @@ class ExperimentalPipeline:
                 gif_folder = self.results_dir / metadata.gif_sha[:8]
                 gif_folder.mkdir(parents=True, exist_ok=True)
                 
-                # Generate jobs for each strategy
+                if self.config.ENABLE_MATRIX_MODE:
+                    for pipeline in generate_all_pipelines():
+                        for lossy in self.config.LOSSY_LEVELS:
+                            for ratio in self.config.FRAME_KEEP_RATIOS:
+                                for colors in self.config.COLOR_KEEP_COUNTS:
+                                    jobs.append(self._create_job_from_pipeline(
+                                        gif_path, metadata, gif_folder,
+                                        pipeline, lossy, ratio, colors
+                                    ))
+                    continue  # skip legacy strategies when matrix mode active
+
+                # Legacy strategy handling
                 for strategy in self.config.STRATEGIES:
                     for lossy in self.config.LOSSY_LEVELS:
                         for ratio in self.config.FRAME_KEEP_RATIOS:
@@ -481,6 +501,37 @@ class ExperimentalPipeline:
             color_keep_count=colors,
             output_path=output_path
         )
+
+    # ------------------------------------------------------------------
+    # Dynamic-pipeline helper
+    # ------------------------------------------------------------------
+
+    def _create_job_from_pipeline(
+        self,
+        gif_path: Path,
+        metadata: GifMetadata,
+        gif_folder: Path,
+        pipeline: Pipeline,
+        lossy: int,
+        ratio: float,
+        colors: int,
+    ) -> ExperimentJob:
+        identifier = pipeline.identifier()
+        output_path = gif_folder / f"{identifier}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+
+        return ExperimentJob(
+            gif_path=gif_path,
+            metadata=metadata,
+            strategy=identifier,
+            engine="dynamic",
+            optimization_level="n/a",
+            dithering_option="n/a",
+            lossy=lossy,
+            frame_keep_ratio=ratio,
+            color_keep_count=colors,
+            output_path=output_path,
+            pipeline=pipeline,
+        )
     
     def execute_job(self, job: ExperimentJob) -> ExperimentResult:
         """Execute a single experimental job.
@@ -495,7 +546,9 @@ class ExperimentalPipeline:
         
         try:
             # Execute compression based on strategy
-            if job.strategy == "animately_then_gifsicle":
+            if job.pipeline is not None:
+                compression_result = self._execute_dynamic_pipeline(job)
+            elif job.strategy == "animately_then_gifsicle":
                 compression_result = self._execute_hybrid_compression(job)
             else:
                 compression_result = self._execute_single_engine_compression(job)
@@ -577,7 +630,7 @@ class ExperimentalPipeline:
         )
     
     def _execute_hybrid_compression(self, job: ExperimentJob) -> Dict[str, Any]:
-        """Execute hybrid compression (Animately then Gifsicle)."""
+        """Two-step animately → gifsicle compression."""
         # Step 1: Process with Animately
         temp_path = job.output_path.parent / f"temp_{job.output_path.name}"
         
@@ -611,6 +664,52 @@ class ExperimentalPipeline:
             "step1_result": animately_result,
             "step2_result": gifsicle_result
         }
+
+    # ------------------------------------------------------------------
+    # Dynamic pipeline executor
+    # ------------------------------------------------------------------
+
+    def _execute_dynamic_pipeline(self, job: ExperimentJob) -> Dict[str, Any]:
+        assert job.pipeline is not None, "pipeline missing"
+
+        current_input = job.gif_path
+        metadata_chain: list[dict[str, Any]] = []
+
+        # Execute each step sequentially
+        tmp_files: list[Path] = []
+        for i, step in enumerate(job.pipeline.steps):
+            wrapper_cls = step.tool_cls
+            wrapper: ExternalTool = wrapper_cls()  # type: ignore[abstract]
+
+            # Determine output for this step (last step -> final output)
+            if i == len(job.pipeline.steps) - 1:
+                out_path = job.output_path
+            else:
+                tmp_path = current_input.parent / f"tmp_{job.get_identifier()}_{i}.gif"
+                out_path = tmp_path
+                tmp_files.append(tmp_path)
+
+            # Build params for this variable
+            if step.variable == "frame_reduction":
+                params = {"ratio": job.frame_keep_ratio}
+            elif step.variable == "color_reduction":
+                params = {"colors": job.color_keep_count}
+            else:  # lossy
+                params = {"lossy_level": job.lossy}
+
+            meta = wrapper.apply(current_input, out_path, params=params)
+            metadata_chain.append(meta)
+
+            current_input = out_path  # feed into next step
+
+        # Cleanup temporary artifacts
+        for p in tmp_files:
+            try:
+                p.unlink(missing_ok=True)  # Py3.11
+            except Exception:
+                pass
+
+        return {"steps": metadata_chain, "engine": "dynamic"}
     
     def run_experiment(self, sample_gifs: Optional[List[Path]] = None) -> Path:
         """Run the complete experimental pipeline.

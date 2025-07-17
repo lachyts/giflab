@@ -14,6 +14,9 @@ from .config import (
 from .experiment import ExperimentalConfig, ExperimentalPipeline, create_experimental_pipeline
 from .pipeline import CompressionPipeline
 from .validation import validate_raw_dir, validate_worker_count, ValidationError
+from .utils_pipeline_yaml import read_pipelines_yaml, write_pipelines_yaml
+from .analysis_tools import performance_matrix
+import pandas as pd
 
 
 @click.group()
@@ -59,6 +62,11 @@ def main():
     default=True,
     help="Detect source platform from directory structure (default: true)",
 )
+@click.option(
+    "--pipelines",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="YAML file listing pipeline identifiers to run (overrides engine grid)",
+)
 def run(
     raw_dir: Path,
     workers: int,
@@ -68,6 +76,7 @@ def run(
     dry_run: bool,
     renders_dir: Path | None,
     detect_source_from_directory: bool,
+    pipelines: Path | None,
 ):
     """Run compression analysis on GIFs in RAW_DIR.
 
@@ -101,13 +110,17 @@ def run(
         if renders_dir:
             path_config.RENDERS_DIR = renders_dir
 
-        # Create compression pipeline
+        selected_pipes = None
+        if pipelines is not None:
+            selected_pipes = read_pipelines_yaml(pipelines)
+
         pipeline = CompressionPipeline(
             compression_config=DEFAULT_COMPRESSION_CONFIG,
             path_config=path_config,
             workers=validated_workers,
             resume=resume,
             detect_source_from_directory=detect_source_from_directory,
+            selected_pipelines=selected_pipes,
         )
 
         # Generate CSV path if not provided
@@ -127,6 +140,8 @@ def run(
             f"👥 Workers: {validated_workers if validated_workers > 0 else multiprocessing.cpu_count()}"
         )
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
+        if pipelines:
+            click.echo(f"🎛️  Selected pipelines: {len(selected_pipes)} from {pipelines}")
         click.echo(f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}")
 
         if dry_run:
@@ -472,6 +487,11 @@ def organize_directories(raw_dir: Path):
     help="Compression strategies to test (default: all)",
 )
 @click.option(
+    "--matrix/--no-matrix",
+    default=False,
+    help="Enable dynamic matrix mode (ignores --strategies)",
+)
+@click.option(
     "--no-analysis",
     is_flag=True,
     help="Disable detailed analysis report generation",
@@ -483,6 +503,7 @@ def experiment(
     output_dir: Path | None,
     strategies: tuple[str, ...],
     no_analysis: bool,
+    matrix: bool,
 ):
     """Run experimental compression testing with diverse sample GIFs.
     
@@ -513,26 +534,27 @@ def experiment(
             selected_strategies = list(strategies)
         
         # Create experimental configuration
-        config = ExperimentalConfig(
+        cfg = ExperimentalConfig(
             TEST_GIFS_COUNT=gifs,
             STRATEGIES=selected_strategies,
-            ENABLE_DETAILED_ANALYSIS=not no_analysis
+            ENABLE_DETAILED_ANALYSIS=not no_analysis,
+            ENABLE_MATRIX_MODE=matrix,
         )
         
         # Override paths if provided
         if sample_gifs_dir:
-            config.SAMPLE_GIFS_PATH = sample_gifs_dir
+            cfg.SAMPLE_GIFS_PATH = sample_gifs_dir
         if output_dir:
-            config.RESULTS_PATH = output_dir
+            cfg.RESULTS_PATH = output_dir
         
         # Create experimental pipeline
-        pipeline = ExperimentalPipeline(config, validated_workers)
+        pipeline = ExperimentalPipeline(cfg, validated_workers)
         
         click.echo("🧪 GifLab Experimental Testing")
         click.echo(f"📊 Test GIFs: {gifs}")
         click.echo(f"🛠️ Strategies: {', '.join(selected_strategies)}")
-        click.echo(f"📁 Sample GIFs: {config.SAMPLE_GIFS_PATH}")
-        click.echo(f"📈 Results: {config.RESULTS_PATH}")
+        click.echo(f"📁 Sample GIFs: {cfg.SAMPLE_GIFS_PATH}")
+        click.echo(f"📈 Results: {cfg.RESULTS_PATH}")
         click.echo(f"👥 Workers: {validated_workers}")
         click.echo(f"📊 Analysis: {'Enabled' if not no_analysis else 'Disabled'}")
         
@@ -568,6 +590,37 @@ def experiment(
     except Exception as e:
         click.echo(f"❌ Experiment failed: {e}", err=True)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# select-pipelines command
+# ---------------------------------------------------------------------------
+
+
+@main.command("select-pipelines")
+@click.argument(
+    "csv_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--metric", default="ssim", help="Quality metric to optimise (default: ssim)")
+@click.option("--top", default=1, help="Top-N pipelines to pick (per variable)")
+@click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=Path("winners.yaml"))
+def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
+    """Pick the best pipelines from an experiment CSV and write a YAML list."""
+
+    click.echo("📊 Loading experiment results…")
+    df = pd.read_csv(csv_file)
+
+    if metric not in df.columns:
+        click.echo(f"❌ Metric '{metric}' not found in CSV", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"🔎 Selecting top {top} pipelines by {metric}…")
+    grouped = df.groupby("strategy")[metric].mean().sort_values(ascending=False)
+    winners = list(grouped.head(top).index)
+
+    write_pipelines_yaml(output, winners)
+    click.echo(f"✅ Wrote {len(winners)} pipelines to {output}")
 
 
 if __name__ == "__main__":
