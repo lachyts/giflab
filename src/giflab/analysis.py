@@ -67,7 +67,11 @@ class ExperimentalAnalyzer:
             # Calculate additional metrics
             df['compression_ratio'] = df['orig_kilobytes'] / df['kilobytes'].replace(0, 1)
             df['file_size_reduction'] = (df['orig_kilobytes'] - df['kilobytes']) / df['orig_kilobytes']
-            df['quality_score'] = (df['ssim'] + df['composite_quality']) / 2
+            # Use composite quality directly as overall quality baseline
+            # This avoids double-counting SSIM because composite_quality already
+            # incorporates SSIM, MS-SSIM, PSNR and temporal consistency based
+            # on the configurable weights in MetricsConfig.
+            df['quality_score'] = df['composite_quality']
             
             return df
             
