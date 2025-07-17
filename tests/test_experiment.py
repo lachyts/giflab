@@ -325,15 +325,15 @@ class TestExperimentIntegration:
         
         # Mock metadata extraction globally
         mock_metadata = GifMetadata(
-            gif_sha="mock_sha",
-            orig_filename="test.gif",
-            orig_kilobytes=100.0,
-            orig_width=100,
-            orig_height=100,
-            orig_frames=10,
-            orig_fps=10.0,
-            orig_n_colors=256
-        )
+                gif_sha="mock_sha",
+                orig_filename="test.gif",
+                orig_kilobytes=100.0,
+                orig_width=100,
+                orig_height=100,
+                orig_frames=10,
+                orig_fps=10.0,
+                orig_n_colors=256
+            )
         
         # Mock the compression and metrics functions
         with patch('src.giflab.experiment.apply_compression_with_all_params') as mock_compress, \

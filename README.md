@@ -21,6 +21,32 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 Each variant is measured for file size, SSIM quality, and render time.
 
+## 🤖 ML-Driven Optimization Strategy
+
+**GifLab's Vision**: Use machine learning to automatically select the optimal compression tool combination based on GIF characteristics.
+
+### The Problem
+Different GIF compression tools excel at different types of content:
+- **Gifsicle**: Better for simple graphics, text, high-contrast content
+- **Animately**: Superior for complex gradients, many colors, photo-realistic content
+- **Hybrid approaches**: Can combine strengths of multiple tools
+
+### The Solution
+GifLab's experimental framework tests multiple algorithmic combinations to:
+
+1. **Build a dataset** of GIF characteristics (colors, frames, complexity, content type) paired with optimal tool combinations
+2. **Train ML models** to predict the best compression strategy for new GIFs
+3. **Create intelligent routing** that automatically selects optimal tool chains
+4. **Continuously improve** through feedback and expanded testing
+
+### Research Approach
+- **Comprehensive tool testing**: Expand beyond gifsicle/animately to include ImageMagick, FFmpeg, gifski, and other tools
+- **Content classification**: Develop automated content type detection (text, photo, animation, etc.)
+- **Performance prediction**: Train models to predict compression ratio and quality trade-offs
+- **Algorithmic innovation**: Test novel tool combinations and parameter settings
+
+*See [ML Strategy Documentation](docs/technical/ml-strategy.md) for detailed implementation plans.*
+
 ## 🧪 Experimental Testing Framework
 
 Before running compression analysis on large datasets, use GifLab's experimental testing framework to validate workflows and optimize settings with a small set of diverse test GIFs.

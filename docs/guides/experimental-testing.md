@@ -19,24 +19,29 @@ poetry run python -m giflab experiment --gifs 15 --strategies pure_gifsicle --st
 poetry run python -m giflab experiment --sample-gifs-dir data/my_samples --gifs 5
 ```
 
-## Supported Compression Strategies
+## Compression Strategy Model (Dynamic)
 
-The framework tests several compression strategies to answer your specific questions:
+The experimental runner now generates strategies **dynamically** using the slot-based capability registry described in *next-tools-priority.md*.
 
-### 1. Pure Gifsicle Workflow (Current Implementation)
-- **pure_gifsicle**: Basic gifsicle with `--optimize`
-- **gifsicle_dithered**: Gifsicle with Floyd-Steinberg dithering enabled
-- **gifsicle_optimized**: Gifsicle with `-O3` optimization level
+• **Single-tool pipelines** – Each tool is tested in isolation for every slot it advertises.
 
-### 2. Pure Anamely Workflow
-- **pure_animately**: All operations through the Anamely engine
+• **Combined pipelines** – The runner automatically explores every valid combination of tools across Frame, Color and Lossy slots.  When two consecutive slots are handled by the same tool and that tool has `combines: true`, they are executed in a single pass without creating intermediate GIFs.
 
-### 3. Hybrid Workflow (Anamely + Gifsicle)
-- **animately_then_gifsicle**: Process with Anamely, then compress with Gifsicle
+### Filtering Examples
 
-This directly addresses your question about comparing:
-- **Full Gifsicle workflow** (pure_gifsicle, gifsicle_dithered, gifsicle_optimized)
-- **Anamely + Gifsicle workflow** (animately_then_gifsicle)
+Run only pipelines that use Gifsicle in any slot:
+
+```bash
+poetry run python -m giflab experiment --include-tool gifsicle
+```
+
+Run pipelines where Animately handles Color reduction (no matter what fills the other slots):
+
+```bash
+poetry run python -m giflab experiment --include color=animately
+```
+
+The legacy **pure_gifsicle**, **pure_animately**, and **animately_then_gifsicle** names still work as convenience aliases, but internally they resolve to the new dynamic model.
 
 ### Extended Gifsicle Options
 
@@ -170,11 +175,13 @@ The framework measures:
 
 To specifically answer your question about comparing workflows:
 
-### 1. Pure Gifsicle vs Anamely + Gifsicle
+### 1. Single-tool vs Combined-tool Comparison
 
 ```bash
-# Test the two main workflows
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies animately_then_gifsicle
+# Compare a single-tool pipeline against a combined pipeline generated dynamically
+poetry run python -m giflab experiment \
+  --include-tool gifsicle --slots frame,color,lossy \
+  --include frame=animately --include lossy=gifsicle
 ```
 
 This will help you understand:

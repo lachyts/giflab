@@ -3,19 +3,27 @@
 ---
 
 ## 0 Objective
+
+### Core Mission
 Analyse every GIF in `data/raw/` by generating a grid of compression variants and writing **one CSV row per variant** with:
 
 * **Frame keep ratio** `frame_keep_ratio` ∈ { 1.00 · 0.90 · 0.80 · 0.70 · 0.50 }
 * **Palette keep count** `color_keep_count` ∈ { 256 · 128 · 64 }
 * **Lossy level** `lossy` ∈ { 0 · 40 · 120 }
-* **Engine** `gifsicle`, `animately`
+* **Engine** `gifsicle`, `animately` (expanding to ImageMagick, FFmpeg, gifski, etc.)
 
-Requirements:
+### ML-Driven Vision
+**Long-term Goal**: Train machine learning models to automatically select the optimal compression tool combination based on GIF content characteristics.
 
+**Strategy**: Use experimental testing framework to build comprehensive datasets of tool performance across diverse content types, then train ML models for intelligent tool selection.
+
+### Requirements
 * Parallel execution, resumable after interruption.
 * Corrupt/unreadable GIFs moved to `data/bad_gifs/`.
 * Works on macOS and Windows/WSL.
 * Keeps each GIF's original file-name **and** a content hash for deduplication.
+* **NEW**: Content classification and feature extraction for ML training
+* **NEW**: Experimental framework for testing additional tools and strategies
 
 ---
 
@@ -193,7 +201,30 @@ poetry install
 poetry run python -m giflab run data/raw data/
 ```
 
-## 7  ML Dataset Quality Requirements
+## 7  ML-Driven Tool Selection Strategy
+
+### Experimental Framework
+- **Purpose**: Test diverse compression tools and strategies on curated GIF datasets
+- **Scope**: Small-scale validation (~10 GIFs) before large-scale analysis
+- **Tools**: Expand beyond gifsicle/animately to include ImageMagick, FFmpeg, gifski, WebP, AVIF
+- **Output**: Performance databases for training ML models
+
+### Machine Learning Pipeline
+1. **Content Classification**: Automatically categorize GIFs (text, photo, animation, graphics)
+2. **Feature Extraction**: Extract visual, structural, and semantic features
+3. **Performance Prediction**: Predict compression results for tool combinations
+4. **Tool Selection**: Intelligently route GIFs to optimal compression strategies
+
+### Tool Integration Priority
+1. **Tier 1 (Immediate)**: ImageMagick, FFmpeg, gifski
+2. **Tier 2 (Strategic)**: WebP conversion, AVIF conversion, Pillow
+3. **Tier 3 (Research)**: Neural compression, custom hybrid chains
+
+*See [ML Strategy Documentation](docs/technical/ml-strategy.md) for detailed implementation plans.*
+
+---
+
+## 8  ML Dataset Quality Requirements
 
 All future stages must comply with the “Machine-Learning Dataset Best Practices” checklist in `README.md` and the detailed guidance in *Section 8* of `QUALITY_METRICS_EXPANSION_PLAN.md`.  In short, any code that produces or mutates metric data **MUST**:
 
