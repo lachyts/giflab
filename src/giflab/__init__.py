@@ -39,3 +39,4 @@ from .tool_wrappers import (
 # Capability registry --------------------------------------------------------
 
 from .capability_registry import tools_for as tools_for_variable, all_single_variable_strategies
+from .analysis_tools import performance_matrix, recommend_tools, pipeline_to_mermaid
