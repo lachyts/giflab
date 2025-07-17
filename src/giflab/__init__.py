@@ -35,3 +35,7 @@ from .tool_wrappers import (
     FFmpegLossyCompressor,
     GifskiLossyCompressor,
 )
+
+# Capability registry --------------------------------------------------------
+
+from .capability_registry import tools_for as tools_for_variable, all_single_variable_strategies

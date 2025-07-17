@@ -326,4 +326,56 @@ class GifskiLossyCompressor(LossyCompressionTool):
         return discover_tool("gifski").version or "unknown"
 
     def apply(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:  # pragma: no cover
-        raise NotImplementedError("gifski lossy compression not implemented yet") 
+        raise NotImplementedError("gifski lossy compression not implemented yet")
+
+# ---------------------------------------------------------------------------
+# No-Operation fallbacks (always available)
+# ---------------------------------------------------------------------------
+
+import shutil
+import time
+
+
+class _BaseNoOpTool:
+    """Mixin shared by no-operation tool wrappers."""
+
+    @classmethod
+    def available(cls) -> bool:  # noqa: D401
+        return True  # always available
+
+    @classmethod
+    def version(cls) -> str:  # noqa: D401
+        return "none"
+
+    def _copy_file(self, src: Path, dst: Path) -> Dict[str, Any]:
+        start = time.time()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, dst)
+        return {"render_ms": int((time.time() - start) * 1000), "engine": self.NAME}
+
+
+class NoOpColorReducer(_BaseNoOpTool, ColorReductionTool):
+    """Placeholder that performs no color reduction (identity copy)."""
+
+    NAME = "none-color"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        return self._copy_file(input_path, output_path)
+
+
+class NoOpFrameReducer(_BaseNoOpTool, FrameReductionTool):
+    """Placeholder that performs no frame reduction (identity copy)."""
+
+    NAME = "none-frame"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        return self._copy_file(input_path, output_path)
+
+
+class NoOpLossyCompressor(_BaseNoOpTool, LossyCompressionTool):
+    """Placeholder that performs no lossy compression (identity copy)."""
+
+    NAME = "none-lossy"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        return self._copy_file(input_path, output_path) 
