@@ -21,6 +21,23 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 Each variant is measured for file size, SSIM quality, and render time.
 
+### Dual-Mode Workflow
+
+GifLab is intentionally split into **two complementary modes**:
+
+1. **Experimental Mode** – Generate a *small* synthetic or curated GIF set and exhaustively test *all* valid tool-pipelines (produced by the dynamic matrix generator).  This surfaces the most promising combinations **before** touching large datasets.
+2. **Production Mode** – Run the *selected* top pipelines on full datasets (thousands of GIFs) to produce final compressed outputs and metric CSVs.
+
+Workflow summary:
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| 1. Explore | `giflab experiment` | Builds sample GIFs, enumerates pipelines via matrix generator, benchmarks them, writes `experiment_results.csv`. |
+| 2. Analyse | Use notebooks / `giflab.analysis_tools` | Plot performance matrices, call `recommend_tools()` to pick winners. |
+| 3. Run | `giflab run data/raw/` | Executes chosen pipelines at scale, writing results and renders. |
+
+The **Experiment → Analyse → Run** loop keeps production runs fast and data-driven.
+
 ## 🤖 ML-Driven Optimization Strategy
 
 **GifLab's Vision**: Use machine learning to automatically select the optimal compression tool combination based on GIF characteristics.
