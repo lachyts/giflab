@@ -52,6 +52,7 @@ from .system_tools import discover_tool, ToolInfo
 
 class GifsicleColorReducer(ColorReductionTool):
     NAME = "gifsicle-color"
+    COMBINE_GROUP = "gifsicle"
 
     @classmethod
     def available(cls) -> bool:
@@ -76,9 +77,13 @@ class GifsicleColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 
 class GifsicleFrameReducer(FrameReductionTool):
     NAME = "gifsicle-frame"
+    COMBINE_GROUP = "gifsicle"
 
     @classmethod
     def available(cls) -> bool:
@@ -103,9 +108,13 @@ class GifsicleFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 
 class GifsicleLossyCompressor(LossyCompressionTool):
     NAME = "gifsicle-lossy"
+    COMBINE_GROUP = "gifsicle"
 
     @classmethod
     def available(cls) -> bool:
@@ -129,6 +138,9 @@ class GifsicleLossyCompressor(LossyCompressionTool):
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
+
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
 # ANIMATELY
@@ -136,6 +148,7 @@ class GifsicleLossyCompressor(LossyCompressionTool):
 
 class AnimatelyColorReducer(ColorReductionTool):
     NAME = "animately-color"
+    COMBINE_GROUP = "animately"
 
     @classmethod
     def available(cls) -> bool:
@@ -160,9 +173,13 @@ class AnimatelyColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 
 class AnimatelyFrameReducer(FrameReductionTool):
     NAME = "animately-frame"
+    COMBINE_GROUP = "animately"
 
     @classmethod
     def available(cls) -> bool:
@@ -187,9 +204,13 @@ class AnimatelyFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 
 class AnimatelyLossyCompressor(LossyCompressionTool):
     NAME = "animately-lossy"
+    COMBINE_GROUP = "animately"
 
     @classmethod
     def available(cls) -> bool:
@@ -213,6 +234,9 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
+
+    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
 # ImageMagick (stub)
