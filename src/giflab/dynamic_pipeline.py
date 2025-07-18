@@ -3,7 +3,7 @@ from __future__ import annotations
 """Dynamic pipeline generator (Stage-4).
 
 Builds all combinations of (frame → color → lossy) slots using the capability
-registry.  Consecutive steps are merged when `combines_with()` returns *True*.
+registry.
 """
 
 import itertools
@@ -48,21 +48,6 @@ class Pipeline:
 _VARIABLE_ORDER = ["frame_reduction", "color_reduction", "lossy_compression"]
 
 
-def _collapse_steps(raw_steps: List[PipelineStep]) -> List[PipelineStep]:
-    """Merge consecutive steps when their tool_cls can combine."""
-    if not raw_steps:
-        return []
-
-    collapsed: List[PipelineStep] = [raw_steps[0]]
-    for step in raw_steps[1:]:
-        last = collapsed[-1]
-        if last.tool_cls().combines_with(step.tool_cls()):  # type: ignore[arg-type]
-            # Skip adding new step – treated as merged.
-            continue
-        collapsed.append(step)
-    return collapsed
-
-
 def generate_all_pipelines() -> List[Pipeline]:
     """Return *every* valid 3-slot pipeline (may be hundreds)."""
 
@@ -77,7 +62,6 @@ def generate_all_pipelines() -> List[Pipeline]:
             PipelineStep("color_reduction", trio[1]),
             PipelineStep("lossy_compression", trio[2]),
         ]
-        steps = _collapse_steps(raw_steps)
-        pipelines.append(Pipeline(steps))
+        pipelines.append(Pipeline(raw_steps))
 
     return pipelines 

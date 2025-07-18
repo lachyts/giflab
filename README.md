@@ -38,6 +38,14 @@ Workflow summary:
 
 The **Experiment → Analyse → Run** loop keeps production runs fast and data-driven.
 
+> ⚠️ **Job-count warning**: With dynamic matrix mode enabled (default from S6
+> onward) GifLab will test *every* combination of frame-ratio × palette size ×
+> lossy level × engine optimisation flag × tool chain.  The default settings
+> easily create several thousand pipeline runs for the 10 sample GIFs, which can
+> take minutes on a modern laptop.  If you only want a subset, trim the
+> `ExperimentalConfig` lists (e.g. `LOSSY_LEVELS`, `COLOR_KEEP_COUNTS`) or run
+> with fewer sample GIFs.
+
 ## 🤖 ML-Driven Optimization Strategy
 
 **GifLab's Vision**: Use machine learning to automatically select the optimal compression tool combination based on GIF characteristics.
@@ -106,7 +114,7 @@ data/raw/
 | Platform | Directory Name | Type | Notes |
 |----------|----------------|------|-------|
 | Tenor | `tenor/` | Live Platform | Google's GIF search platform |
-| Animately | `animately/` | Live Platform | Your compression platform |
+| Anamely | `animately/` | Live Platform | Your compression platform |
 | TGIF Dataset | `tgif_dataset/` | Research Dataset | Academic research dataset |
 | Unknown | `unknown/` | Fallback | Unclassified or mixed sources |
 

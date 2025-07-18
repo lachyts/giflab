@@ -155,7 +155,9 @@ def compress_with_gifsicle_extended(
         raise ValueError(f"lossy_level must be between 0 and 200, got {lossy_level}")
     
     validate_frame_keep_ratio(frame_keep_ratio)
-    validate_color_keep_count(color_keep_count)
+    # Allow *None* to preserve existing palette (no validation or color args)
+    if color_keep_count is not None:
+        validate_color_keep_count(color_keep_count)
     
     if not input_path.exists():
         raise OSError(f"Input file not found: {input_path}")
@@ -194,10 +196,11 @@ def compress_with_gifsicle_extended(
         cmd.extend([f"--lossy={lossy_level}"])
     
     # Add extended color reduction arguments
-    color_args = build_gifsicle_color_args_extended(
-        color_keep_count, original_colors, dithering_mode, color_method
-    )
-    cmd.extend(color_args)
+    if color_keep_count is not None:
+        color_args = build_gifsicle_color_args_extended(
+            color_keep_count, original_colors, dithering_mode, color_method
+        )
+        cmd.extend(color_args)
     
     # Add input file
     cmd.append(input_str)

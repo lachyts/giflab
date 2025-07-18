@@ -1,15 +1,6 @@
 """Experimental testing framework for GIF compression workflows.
 
-This module provides comprehensive testing capabilities for comparing different
-compression strategies, engine options, and workflow approaches. It's designed
-for systematic evaluation of compression effectiveness before running on large datasets.
-
-Key Features:
-- Small-scale testing with ~10 diverse GIFs
-- Multiple compression workflow comparison
-- Extended engine options (dithering, optimization levels)
-- Comprehensive results analysis and anomaly detection
-- Experimental configuration management
+# flake8: noqa: E501  # temporarily ignore long lines in this module
 """
 
 import json
@@ -21,25 +12,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from PIL import Image, ImageDraw
 
-from .config import CompressionConfig, PathConfig, DEFAULT_COMPRESSION_CONFIG
 from .io import append_csv_row, setup_logging
 from .lossy import LossyEngine, apply_compression_with_all_params
 from .lossy_extended import (
     GifsicleOptimizationLevel, GifsicleDitheringMode,
-    compress_with_gifsicle_extended, apply_compression_strategy
+    compress_with_gifsicle_extended,
 )
 from .meta import GifMetadata, extract_gif_metadata
 from .metrics import calculate_comprehensive_metrics
-from .pipeline import CompressionJob, CompressionPipeline
-from tempfile import NamedTemporaryFile
-
 # Stage-4 dynamic pipeline support
-from .dynamic_pipeline import Pipeline, PipelineStep, generate_all_pipelines
+from .dynamic_pipeline import Pipeline, generate_all_pipelines
 from .tool_interfaces import ExternalTool
-from .tool_wrappers import NoOpColorReducer, NoOpFrameReducer, NoOpLossyCompressor
+from .combiner_registry import combiner_for
 
 
 @dataclass
@@ -86,7 +72,9 @@ class ExperimentalConfig:
     # legacy STRATEGIES list and instead build pipelines dynamically from
     # VARIABLE_SLOTS.  We introduce the flag here so downstream code can
     # start probing for it without breaking existing behaviour.
-    ENABLE_MATRIX_MODE: bool = False
+    # Enable dynamic matrix pipelines by default – legacy STRATEGIES (e.g. "pure_gifsicle")
+    # are now deprecated and will be ignored unless this flag is explicitly set to *False*.
+    ENABLE_MATRIX_MODE: bool = True
 
     # The canonical slot order described in docs/technical/next-tools-priority.md
     VARIABLE_SLOTS: List[str] = field(
@@ -671,41 +659,72 @@ class ExperimentalPipeline:
 
     def _execute_dynamic_pipeline(self, job: ExperimentJob) -> Dict[str, Any]:
         assert job.pipeline is not None, "pipeline missing"
+        from .lossy_extended import GifsicleOptimizationLevel
 
         current_input = job.gif_path
         metadata_chain: list[dict[str, Any]] = []
-
-        # Execute each step sequentially
         tmp_files: list[Path] = []
-        for i, step in enumerate(job.pipeline.steps):
-            wrapper_cls = step.tool_cls
-            wrapper: ExternalTool = wrapper_cls()  # type: ignore[abstract]
 
-            # Determine output for this step (last step -> final output)
-            if i == len(job.pipeline.steps) - 1:
+        steps = list(job.pipeline.steps)
+        i = 0
+        while i < len(steps):
+            step = steps[i]
+            wrapper_cls = step.tool_cls
+            wrapper_group = getattr(wrapper_cls, "COMBINE_GROUP", None)
+
+            # Collect consecutive steps that can be combined with this wrapper
+            params_combined: dict[str, Any] = {}
+            j = i
+            candidate_opt_level: GifsicleOptimizationLevel | None = None
+
+            while j < len(steps):
+                next_step = steps[j]
+                if not wrapper_cls().combines_with(next_step.tool_cls()):
+                    break
+
+                # Map variable → param key/value
+                if next_step.variable == "frame_reduction":
+                    params_combined["ratio"] = job.frame_keep_ratio
+                elif next_step.variable == "color_reduction":
+                    params_combined["colors"] = job.color_keep_count
+                else:  # lossy
+                    params_combined["lossy_level"] = job.lossy
+
+                # Capture optimisation level if available on the wrapper class
+                if hasattr(next_step.tool_cls, "_OPT_LEVEL"):
+                    candidate_opt_level = getattr(next_step.tool_cls, "_OPT_LEVEL")
+
+                j += 1
+
+            # Determine output path for this group
+            is_last_group = j == len(steps)
+            if is_last_group:
                 out_path = job.output_path
             else:
                 tmp_path = current_input.parent / f"tmp_{job.get_identifier()}_{i}.gif"
                 out_path = tmp_path
                 tmp_files.append(tmp_path)
 
-            # Build params for this variable
-            if step.variable == "frame_reduction":
-                params = {"ratio": job.frame_keep_ratio}
-            elif step.variable == "color_reduction":
-                params = {"colors": job.color_keep_count}
-            else:  # lossy
-                params = {"lossy_level": job.lossy}
+            # Pass optimisation hint
+            if candidate_opt_level is not None:
+                params_combined["_opt_level"] = candidate_opt_level
 
-            meta = wrapper.apply(current_input, out_path, params=params)
+            combiner = combiner_for(wrapper_group)
+            if combiner is not None:
+                meta = combiner(current_input, out_path, params_combined)
+            else:
+                # Fallback: single wrapper apply (no collapse)
+                wrapper: ExternalTool = wrapper_cls()  # type: ignore[abstract]
+                meta = wrapper.apply(current_input, out_path, params=params_combined)
+
             metadata_chain.append(meta)
+            current_input = out_path
+            i = j  # move to first unprocessed step
 
-            current_input = out_path  # feed into next step
-
-        # Cleanup temporary artifacts
+        # Cleanup temp files
         for p in tmp_files:
             try:
-                p.unlink(missing_ok=True)  # Py3.11
+                p.unlink(missing_ok=True)
             except Exception:
                 pass
 

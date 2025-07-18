@@ -1,0 +1,63 @@
+# Fast Test-Suite Checklist (≤ 20 s wall-time)
+
+## 1. Flatten the parameter grid
+- [ ] Add an **autouse** fixture in `conftest.py` that patches  
+      `ExperimentalConfig.__dataclass_fields__[NAME].default_factory`  
+      to return a **single-value** list for  
+      • `FRAME_KEEP_RATIOS` → `[1.0]`  
+      • `COLOR_KEEP_COUNTS` → `[256]`  
+      • `LOSSY_LEVELS`      → `[0]`
+- [ ] Inside the same fixture, `assert` that each list’s length is 1  
+      (skip if `GIFLAB_FULL_MATRIX=1` is in env).
+- [ ] Also cap the *number of generated pipelines* in
+      `dynamic_pipeline.generate_all_pipelines()` by honouring an env var  
+      `GIFLAB_MAX_PIPES` (default **50**) to avoid huge cartesian products
+      when new tool wrappers land.
+
+## 2. External-binary integration tests
+- [ ] Keep input GIF tiny (≤ 50×50, ≤ 10 frames).  
+- [ ] Ensure every `subprocess.run()` has `timeout=<10` s.  
+- [ ] If any test grows, mark it `@pytest.mark.slow`.
+
+## 3. Dynamic-pipeline unit tests
+- [ ] Maintain `generate_all_pipelines()[:50]` slice in `test_dynamic_pipeline.py`.
+
+## 4. Pytest configuration
+- [ ] Add / edit `pytest.ini`  
+  ```ini
+  [pytest]
+  addopts = --durations=10
+  markers =
+      slow: long-running or external-binary tests
+  ```
+- [ ] CI command should run `pytest -m "not slow"`.
+- [ ] Add a *secondary* marker `fast` so helpers like `fast_compress` can
+      monkey-patch binaries only when desired (see §5).
+
+## 5. Documentation & tooling helpers
+- [ ] Document this 20-second rule in `docs/testing-strategy.md`.
+- [ ] Provide helper fixture `fast_compress(monkeypatch)` that stubs
+      `compress_with_gifsicle` / `compress_with_animately` with a no-op copy.
+
+## 6. Continuous monitoring
+- [ ] Watch `pytest --durations=10` output; investigate any test > 2 s. 
+
+## 7. Next-Stage Roadmap
+
+### 7.1 Parallel execution stability
+- [ ] Refactor: move `execute_job()` to a *top-level* helper (or switch to
+      `ThreadPoolExecutor`) so the fast suite doesn’t hit pickle errors on
+      macOS / Windows.
+
+### 7.2 Type-safety
+- [ ] Update `compress_with_gifsicle_extended` and callers to accept `color_keep_count: int | None` and mark accordingly.
+- [ ] Run mypy to confirm wrappers (`_BaseGifsicleLossyOptim` etc.) are clean.
+
+### 7.3 Pipeline combinatorics guard-rails
+- [ ] Skip `NoOp*` wrappers in `generate_all_pipelines()` **or** rely on the
+      `GIFLAB_MAX_PIPES` cap (see §1) to keep CI fast.
+- [ ] Update `test_dynamic_pipeline.py` to assert the cap via
+      `len(pipelines) <= 50` instead of hard-coded slice.
+
+### 7.4 Placeholder combiners
+- [ ] Extend `_noop_copy` to add basic size/ssim metrics so downstream analysis isn’t skewed.
