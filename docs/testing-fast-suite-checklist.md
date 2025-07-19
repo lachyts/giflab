@@ -1,15 +1,14 @@
 # Fast Test-Suite Checklist (≤ 20 s wall-time)
 
 ## 1. Flatten the parameter grid
-- [ ] Add an **autouse** fixture in `conftest.py` that patches  
-      `ExperimentalConfig.__dataclass_fields__[NAME].default_factory`  
-      to return a **single-value** list for  
-      • `FRAME_KEEP_RATIOS` → `[1.0]`  
-      • `COLOR_KEEP_COUNTS` → `[256]`  
+- [x] Add an **autouse** fixture in `conftest.py` that patches  
+      `ExperimentalConfig` to return a **single-value** list for
+      • `FRAME_KEEP_RATIOS` → `[1.0]`
+      • `COLOR_KEEP_COUNTS` → `[256]`
       • `LOSSY_LEVELS`      → `[0]`
-- [ ] Inside the same fixture, `assert` that each list’s length is 1  
+- [x] Inside the same fixture, `assert` that each list’s length is 1  
       (skip if `GIFLAB_FULL_MATRIX=1` is in env).
-- [ ] Also cap the *number of generated pipelines* in
+- [x] Also cap the *number of generated pipelines* in
       `dynamic_pipeline.generate_all_pipelines()` by honouring an env var  
       `GIFLAB_MAX_PIPES` (default **50**) to avoid huge cartesian products
       when new tool wrappers land.
@@ -20,10 +19,10 @@
 - [ ] If any test grows, mark it `@pytest.mark.slow`.
 
 ## 3. Dynamic-pipeline unit tests
-- [ ] Maintain `generate_all_pipelines()[:50]` slice in `test_dynamic_pipeline.py`.
+- [x] Maintain `generate_all_pipelines()[:50]` slice in `test_dynamic_pipeline.py`.
 
 ## 4. Pytest configuration
-- [ ] Add / edit `pytest.ini`  
+- [x] Add / edit `pytest.ini`  
   ```ini
   [pytest]
   addopts = --durations=10
@@ -31,7 +30,7 @@
       slow: long-running or external-binary tests
   ```
 - [ ] CI command should run `pytest -m "not slow"`.
-- [ ] Add a *secondary* marker `fast` so helpers like `fast_compress` can
+- [x] Add a *secondary* marker `fast` so helpers like `fast_compress` can
       monkey-patch binaries only when desired (see §5).
 
 ## 5. Documentation & tooling helpers
@@ -40,7 +39,7 @@
       `compress_with_gifsicle` / `compress_with_animately` with a no-op copy.
 
 ## 6. Continuous monitoring
-- [ ] Watch `pytest --durations=10` output; investigate any test > 2 s. 
+- [x] Watch `pytest --durations=10` output; investigate any test > 2 s. 
 
 ## 7. Next-Stage Roadmap
 
