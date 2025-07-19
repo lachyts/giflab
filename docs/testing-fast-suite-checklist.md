@@ -19,7 +19,7 @@
 - [x] If any test grows, mark it `@pytest.mark.slow`.
 
 ## 3. Dynamic-pipeline unit tests
-- [x] Maintain `generate_all_pipelines()[:50]` slice in `test_dynamic_pipeline.py`.
+- [x] Assert in `test_dynamic_pipeline.py` that `len(generate_all_pipelines()) <= GIFLAB_MAX_PIPES` (default 50) instead of slicing.
 
 ## 4. Pytest configuration
 - [x] Add / edit `pytest.ini`  
@@ -59,4 +59,4 @@
       `len(pipelines) <= 50` instead of hard-coded slice.
 
 ### 7.4 Placeholder combiners
-- [ ] Extend `_noop_copy` to add basic size/ssim metrics so downstream analysis isn’t skewed.
+- [x] Extend `_noop_copy` to add basic size/ssim metrics so downstream analysis isn’t skewed.

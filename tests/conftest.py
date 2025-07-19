@@ -230,10 +230,20 @@ def fast_compress(monkeypatch):
         output_path = _Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(input_path, output_path)
+
+        # Basic metrics so downstream analysis is not skewed by placeholders
+        try:
+            size_kb = output_path.stat().st_size / 1024.0
+        except FileNotFoundError:
+            size_kb = 0.0
+
         return {
             "render_ms": 1,
             "engine": "noop",
             "command": "noop-copy",
+            # Size/quality placeholders
+            "kilobytes": size_kb,   # align with metrics.calculate_file_size_kb
+            "ssim": 1.0,            # identical copy => perfect similarity
             # Preserve commonly-inspected kwargs so callers don’t break
             "lossy_level": kwargs.get("lossy_level", 0),
             "frame_keep_ratio": kwargs.get("frame_keep_ratio", 1.0),
