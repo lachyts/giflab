@@ -13,63 +13,7 @@ from src.giflab.meta import GifMetadata
 from src.giflab.pipeline import CompressionJob, CompressionPipeline
 
 
-@pytest.fixture
-def temp_dirs():
-    """Create temporary directories for testing."""
-    temp_dir = Path(tempfile.mkdtemp())
-
-    dirs = {
-        "raw": temp_dir / "raw",
-        "renders": temp_dir / "renders",
-        "csv": temp_dir / "csv",
-        "bad_gifs": temp_dir / "bad_gifs",
-        "logs": temp_dir / "logs"
-    }
-
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    yield dirs
-
-    # Cleanup
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@pytest.fixture
-def test_config(temp_dirs):
-    """Create test configuration."""
-    compression_config = CompressionConfig(
-        FRAME_KEEP_RATIOS=[1.0, 0.8],
-        COLOR_KEEP_COUNTS=[256, 64],
-        LOSSY_LEVELS=[0, 40],
-        ENGINES=["gifsicle"]
-    )
-
-    path_config = PathConfig(
-        RAW_DIR=temp_dirs["raw"],
-        RENDERS_DIR=temp_dirs["renders"],
-        CSV_DIR=temp_dirs["csv"],
-        BAD_GIFS_DIR=temp_dirs["bad_gifs"],
-        LOGS_DIR=temp_dirs["logs"]
-    )
-
-    return compression_config, path_config
-
-
-@pytest.fixture
-def sample_gif_metadata():
-    """Create sample GIF metadata for testing."""
-    return GifMetadata(
-        gif_sha="abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc",
-        orig_filename="test.gif",
-        orig_kilobytes=100.5,
-        orig_width=480,
-        orig_height=270,
-        orig_frames=24,
-        orig_fps=24.0,
-        orig_n_colors=128,
-        entropy=4.2
-    )
+# Fixtures now defined in conftest.py for better performance
 
 
 @pytest.fixture

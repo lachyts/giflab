@@ -18,14 +18,21 @@ import numpy as np
 from PIL import Image
 
 # Conditional imports for CLIP dependencies
-try:
-    import open_clip
-    import torch
-    CLIP_AVAILABLE = True
-except ImportError:
+# Check if CLIP is disabled for testing
+import os
+if os.environ.get('GIFLAB_DISABLE_CLIP'):
     CLIP_AVAILABLE = False
     torch = None
     open_clip = None
+else:
+    try:
+        import open_clip
+        import torch
+        CLIP_AVAILABLE = True
+    except ImportError:
+        CLIP_AVAILABLE = False
+        torch = None
+        open_clip = None
 
 from .meta import extract_gif_metadata
 

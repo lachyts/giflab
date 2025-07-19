@@ -4,24 +4,18 @@ import csv
 from unittest.mock import Mock, patch
 
 import pytest
-from giflab.tag_pipeline import (
+from src.giflab.tag_pipeline import (
     TaggingPipeline,
     create_tagging_pipeline,
     validate_tagged_csv,
 )
-from giflab.tagger import TaggingResult
+from src.giflab.tagger import TaggingResult
 
 
 class TestTaggingPipeline:
     """Tests for TaggingPipeline class."""
 
-    @pytest.fixture
-    def mock_tagger(self):
-        """Create a mock HybridCompressionTagger."""
-        with patch('giflab.tag_pipeline.HybridCompressionTagger') as mock_class:
-            mock_instance = Mock()
-            mock_class.return_value = mock_instance
-            yield mock_instance
+    # mock_tagger fixture is now defined in conftest.py
 
     @pytest.fixture
     def sample_csv_data(self):
@@ -93,11 +87,12 @@ class TestTaggingPipeline:
 
     def test_tagging_pipeline_initialization(self, mock_tagger):
         """Test TaggingPipeline initialization."""
-        pipeline = TaggingPipeline(workers=2)
+        with patch('src.giflab.tag_pipeline.HybridCompressionTagger', return_value=mock_tagger):
+            pipeline = TaggingPipeline(workers=2)
 
-        assert pipeline.workers == 2
-        assert len(pipeline.TAGGING_COLUMNS) == 25
-        assert pipeline.tagger is not None
+            assert pipeline.workers == 2
+            assert len(pipeline.TAGGING_COLUMNS) == 25
+            assert pipeline.tagger is not None
 
     def test_tagging_columns_definition(self):
         """Test that all expected tagging columns are defined."""

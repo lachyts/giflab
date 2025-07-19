@@ -17,7 +17,7 @@ pillow = "^10.0.0"
 numpy = "^1.24.0"
 pandas = "^2.0.0"
 opencv-python = "^4.8.0"
-scikit-image = "^0.21.0"
+scikit-image = "^0.24.0"
 pydantic = ">=2.5"
 matplotlib = "^3.8.0"
 scikit-learn = "^1.4.0"
@@ -80,7 +80,16 @@ ignore = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers --strict-config"
+addopts = [
+    "-ra",
+    "-q", 
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--disable-warnings",
+    "--maxfail=5",
+    "-x"
+]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -88,7 +97,17 @@ python_functions = ["test_*"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests (fast)",
+    "external_tools: marks tests that require external tools (gifsicle, imagemagick, etc.)",
 ]
+# Performance optimizations
+filterwarnings = [
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+# Disable expensive features during testing
+cache_dir = ".pytest_cache"
 
 [tool.mypy]
 python_version = "3.11"
