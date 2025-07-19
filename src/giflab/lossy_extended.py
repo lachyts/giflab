@@ -118,7 +118,7 @@ def compress_with_gifsicle_extended(
     output_path: Path,
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
-    color_keep_count: int = 256,
+    color_keep_count: int | None = 256,
     optimization_level: GifsicleOptimizationLevel = GifsicleOptimizationLevel.BASIC,
     dithering_mode: GifsicleDitheringMode = GifsicleDitheringMode.NONE,
     color_method: Optional[str] = None,
@@ -137,7 +137,7 @@ def compress_with_gifsicle_extended(
         output_path: Path to save compressed GIF
         lossy_level: Lossy compression level (0-200)
         frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
-        color_keep_count: Number of colors to keep
+        color_keep_count: Number of colors to keep (``None`` preserves original palette)
         optimization_level: Gifsicle optimization level
         dithering_mode: Dithering mode for color reduction
         color_method: Color reduction method
@@ -279,8 +279,8 @@ def apply_compression_strategy(
     strategy: str,
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
-    color_keep_count: int = 256,
-    **kwargs
+    color_keep_count: int | None = 256,
+    **kwargs: Any
 ) -> Dict[str, Any]:
     """Apply compression using a named strategy.
     
@@ -297,7 +297,7 @@ def apply_compression_strategy(
         strategy: Strategy name
         lossy_level: Lossy compression level
         frame_keep_ratio: Frame keep ratio
-        color_keep_count: Color keep count
+        color_keep_count: Number of colors to keep (``None`` preserves original palette)
         **kwargs: Additional strategy-specific arguments
         
     Returns:
@@ -358,7 +358,7 @@ def compare_compression_strategies(
     strategies: list[str],
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
-    color_keep_count: int = 256
+    color_keep_count: int | None = 256
 ) -> Dict[str, Dict[str, Any]]:
     """Compare multiple compression strategies on the same input.
     

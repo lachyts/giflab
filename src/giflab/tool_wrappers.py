@@ -35,6 +35,7 @@ from .tool_interfaces import (
     ColorReductionTool,
     FrameReductionTool,
     LossyCompressionTool,
+    ExternalTool,
 )
 from .lossy import (
     compress_with_gifsicle,
@@ -84,7 +85,7 @@ class GifsicleColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -115,7 +116,7 @@ class GifsicleFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -146,7 +147,7 @@ class GifsicleLossyCompressor(LossyCompressionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
@@ -193,7 +194,7 @@ class _BaseGifsicleLossyOptim(LossyCompressionTool):
             dithering_mode=GifsicleDitheringMode.NONE,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -247,7 +248,7 @@ class AnimatelyColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -278,7 +279,7 @@ class AnimatelyFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -309,7 +310,7 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:  # type: ignore[override]
+    def combines_with(self, other: "ExternalTool") -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
@@ -472,6 +473,8 @@ import time
 
 class _BaseNoOpTool:
     """Mixin shared by no-operation tool wrappers."""
+
+    NAME: str = "noop-tool"
 
     @classmethod
     def available(cls) -> bool:  # noqa: D401
