@@ -115,7 +115,19 @@ if ExperimentalConfig is not None:
 
 @pytest.fixture(autouse=True)
 def _assert_fast_suite_limits():
-    """Assert that the flattened parameter lists are respected at runtime."""
+    """Assert that the flattened parameter lists are respected in fast mode.
+
+    The checks should *not* run when the caller explicitly requests the full
+    parameter matrix via the ``GIFLAB_FULL_MATRIX=1`` environment variable.
+    This aligns the behaviour with the guidelines in
+    ``docs/testing-fast-suite-checklist.md``.
+    """
+
+    # Skip the assertion entirely when the full matrix is requested.
+    if os.getenv("GIFLAB_FULL_MATRIX") == "1":
+        yield
+        return
+
     if ExperimentalConfig is None:
         yield
         return
@@ -195,3 +207,45 @@ def pytest_ignore_collect(collection_path: _Path, config):  # noqa: D401
     if os.getenv("GIFLAB_FULL_MATRIX") != "1" and name in heavy_module_names:
         return True  # Ignore collection entirely
     return False
+
+
+# ---------------------------------------------------------------------------
+# Helper fixture: fast_compress – monkey-patch heavy compression binaries
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def fast_compress(monkeypatch):
+    """Stub out gifsicle / Animately invocations for lightning-fast unit tests.
+
+    The fixture replaces ``compress_with_gifsicle`` and ``compress_with_animately``
+    with a no-op implementation that simply copies the source GIF to
+    *output_path* and returns a minimal metadata dictionary mimicking the real
+    wrappers.  This lets higher-level logic be exercised without requiring the
+    external binaries or incurring their runtime cost.
+    """
+    import shutil
+    from pathlib import Path as _Path
+
+    def _noop_copy(input_path: _Path, output_path: _Path, *args, **kwargs):  # noqa: D401
+        output_path = _Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(input_path, output_path)
+        return {
+            "render_ms": 1,
+            "engine": "noop",
+            "command": "noop-copy",
+            # Preserve commonly-inspected kwargs so callers don’t break
+            "lossy_level": kwargs.get("lossy_level", 0),
+            "frame_keep_ratio": kwargs.get("frame_keep_ratio", 1.0),
+            "color_keep_count": kwargs.get("color_keep_count", None),
+        }
+
+    # Patch primary implementations in giflab.lossy
+    monkeypatch.setattr("giflab.lossy.compress_with_gifsicle", _noop_copy, raising=True)
+    monkeypatch.setattr("giflab.lossy.compress_with_animately", _noop_copy, raising=True)
+
+    # Also patch re-exports from giflab.tool_wrappers (safe if missing)
+    monkeypatch.setattr("giflab.tool_wrappers.compress_with_gifsicle", _noop_copy, raising=False)
+    monkeypatch.setattr("giflab.tool_wrappers.compress_with_animately", _noop_copy, raising=False)
+
+    yield

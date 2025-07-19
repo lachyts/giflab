@@ -29,13 +29,13 @@
   markers =
       slow: long-running or external-binary tests
   ```
-- [ ] CI command should run `pytest -m "not slow"`.
+- [x] CI command runs `pytest -m "not slow"`.
 - [x] Add a *secondary* marker `fast` so helpers like `fast_compress` can
       monkey-patch binaries only when desired (see §5).
 
 ## 5. Documentation & tooling helpers
-- [ ] Document this 20-second rule in `docs/testing-strategy.md`.
-- [ ] Provide helper fixture `fast_compress(monkeypatch)` that stubs
+- [x] Document this 20-second rule in `docs/testing-strategy.md`.
+- [x] Provide helper fixture `fast_compress(monkeypatch)` that stubs
       `compress_with_gifsicle` / `compress_with_animately` with a no-op copy.
 
 ## 6. Continuous monitoring

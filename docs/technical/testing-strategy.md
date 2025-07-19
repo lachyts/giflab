@@ -10,6 +10,26 @@ This document outlines the testing strategy used to ensure reliability and corre
 
 ---
 
+## 1.1 Fast Test-Suite Guideline (≤ 20 s)
+
+GifLab’s default test invocation must complete in **≤ 20 seconds** wall-time on a typical laptop.
+To guarantee that speedy feedback loop we apply the following guard-rails:
+
+1. Heavy or external-binary tests are marked `@pytest.mark.slow` and are therefore skipped by the default command:
+   ```bash
+   pytest -m "not slow"
+   ```
+2. `tests/conftest.py` flattens the experimental parameter grid and caps dynamic-pipeline enumeration to **50** combinations.
+3. Integration tests rely on micro GIF fixtures (≤ 50 × 50 px, ≤ 10 frames) and pass `timeout=<10` s to every `subprocess.run`.
+4. Unit tests that still need to call the compression helpers can enable the fixture `fast_compress(monkeypatch)` to monkey-patch
+   `compress_with_gifsicle` / `compress_with_animately` with a no-op copy.
+5. The CI pipeline also runs the same fast subset (`pytest -m "not slow"`).  A full matrix can be triggered manually by exporting
+   `GIFLAB_FULL_MATRIX=1`.
+
+These measures keep day-to-day development lightning-fast while preserving the option for exhaustive coverage in nightly runs.
+
+---
+
 ## 2. Core Testing Principles
 
 ### 2.1 Deterministic Test Fixtures
@@ -467,6 +487,8 @@ pytest -q
 pytest tests/test_additional_metrics.py -v
 pytest tests/test_data_prep.py -v
 pytest tests/test_metric_schema.py -v
+pytest tests/test_temporal_delta.py -v
+pytest tests/test_notebooks.py -v
 ```
 
 **Test Coverage**: 356 tests covering:
