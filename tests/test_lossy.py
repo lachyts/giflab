@@ -179,7 +179,7 @@ class TestCompressWithGifsicle:
             capture_output=True,
             text=True,
             check=True,
-            timeout=300
+            timeout=10
         )
 
         # Verify result
@@ -234,7 +234,7 @@ class TestCompressWithGifsicle:
             capture_output=True,
             text=True,
             check=True,
-            timeout=300
+            timeout=10
         )
 
         assert result["render_ms"] == 1000
@@ -290,7 +290,7 @@ class TestCompressWithGifsicle:
             capture_output=True,
             text=True,
             check=True,
-            timeout=300
+            timeout=10
         )
 
         # Verify frame args function was called
@@ -326,7 +326,7 @@ class TestCompressWithGifsicle:
         mock_meta.orig_n_colors = 128
         mock_metadata.return_value = mock_meta
 
-        mock_run.side_effect = subprocess.TimeoutExpired("gifsicle", 300)
+        mock_run.side_effect = subprocess.TimeoutExpired("gifsicle", 10)
 
         with pytest.raises(RuntimeError, match="Gifsicle timed out"):
             compress_with_gifsicle(Path("input.gif"), Path("output.gif"), 0, 1.0)
@@ -400,7 +400,7 @@ class TestCompressWithAnimately:
             capture_output=True,
             text=True,
             check=True,
-            timeout=300
+            timeout=10
         )
 
         # Timing should be approximately 300ms (allow for floating point precision)
@@ -658,7 +658,7 @@ class TestColorIntegration:
             capture_output=True,
             text=True,
             check=True,
-            timeout=300
+            timeout=10
         )
 
         # Verify color args function was called with dithering parameter

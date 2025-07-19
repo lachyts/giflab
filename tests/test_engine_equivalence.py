@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+pytestmark = pytest.mark.slow
 from PIL import Image, ImageDraw
 
 from giflab.color_keep import count_gif_colors
@@ -20,7 +21,7 @@ from giflab.metrics import extract_gif_frames
 # Helper utilities & fixtures
 # -------------------------
 
-def _create_test_gif(path: Path, frames: int = 12, size: tuple[int, int] = (60, 60)) -> None:
+def _create_test_gif(path: Path, frames: int = 10, size: tuple[int, int] = (50, 50)) -> None:
     """Generate a simple animated GIF for test purposes.
 
     The content purposefully varies per-frame so both colour and frame
@@ -67,7 +68,7 @@ def test_gif_tmp():
     """Provide a temporary GIF shared by tests in this module."""
     with tempfile.TemporaryDirectory() as tmpdir:
         gif_path = Path(tmpdir) / "sample.gif"
-        _create_test_gif(gif_path)
+        _create_test_gif(gif_path, frames=10, size=(50, 50))
         yield gif_path
 
 

@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+pytestmark = pytest.mark.slow
 from giflab.config import DEFAULT_ENGINE_CONFIG
 from giflab.lossy import (
     LossyEngine,
@@ -58,7 +59,7 @@ class TestEngineAvailability:
                 [gifsicle_path, "--version"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=9
             )
             assert result.returncode == 0, f"gifsicle not working: {result.stderr}"
             assert "gifsicle" in result.stdout.lower(), f"Unexpected version output: {result.stdout}"
@@ -79,7 +80,7 @@ class TestEngineAvailability:
                 [animately_path, "--help"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=9
             )
             # Animately might return non-zero for --help, so check output instead
             assert "--input" in result.stdout or "--input" in result.stderr, f"Unexpected help output: {result.stdout}"

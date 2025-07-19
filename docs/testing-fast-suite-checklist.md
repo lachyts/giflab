@@ -14,9 +14,9 @@
       when new tool wrappers land.
 
 ## 2. External-binary integration tests
-- [ ] Keep input GIF tiny (≤ 50×50, ≤ 10 frames).  
-- [ ] Ensure every `subprocess.run()` has `timeout=<10` s.  
-- [ ] If any test grows, mark it `@pytest.mark.slow`.
+- [x] Keep input GIF tiny (≤ 50×50, ≤ 10 frames).  
+- [x] Ensure every `subprocess.run()` has `timeout=<10` s.  
+- [x] If any test grows, mark it `@pytest.mark.slow`.
 
 ## 3. Dynamic-pipeline unit tests
 - [x] Maintain `generate_all_pipelines()[:50]` slice in `test_dynamic_pipeline.py`.

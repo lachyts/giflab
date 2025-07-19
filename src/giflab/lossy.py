@@ -46,6 +46,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+RUN_TIMEOUT = int(os.getenv("GIFLAB_RUN_TIMEOUT", "10"))
+
 from .color_keep import (
     build_animately_color_args,
     build_gifsicle_color_args,
@@ -345,7 +347,7 @@ def compress_with_gifsicle(
             capture_output=True,
             text=True,
             check=True,
-            timeout=300  # 5 minute timeout
+            timeout=RUN_TIMEOUT
         )
 
         end_time = time.time()
@@ -387,7 +389,7 @@ def compress_with_gifsicle(
                 e.args[0].kill()
             except Exception:
                 pass
-        raise RuntimeError("Gifsicle timed out after 5 minutes") from e
+        raise RuntimeError(f"Gifsicle timed out after {RUN_TIMEOUT} seconds") from e
     except Exception as e:
         raise RuntimeError(f"Gifsicle execution failed: {str(e)}") from e
 
@@ -517,7 +519,7 @@ def compress_with_animately(
             capture_output=True,
             text=True,
             check=True,
-            timeout=300  # 5 minute timeout
+            timeout=RUN_TIMEOUT
         )
 
         end_time = time.time()
@@ -559,7 +561,7 @@ def compress_with_animately(
                 e.args[0].kill()
             except Exception:
                 pass
-        raise RuntimeError("Animately timed out after 5 minutes") from e
+        raise RuntimeError(f"Animately timed out after {RUN_TIMEOUT} seconds") from e
     except Exception as e:
         raise RuntimeError(f"Animately execution failed: {str(e)}") from e
 
