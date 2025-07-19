@@ -6,7 +6,7 @@
 import json
 import multiprocessing
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -758,7 +758,7 @@ class ExperimentalPipeline:
         
         self.logger.info(f"Executing {len(jobs)} jobs with {self.workers} workers...")
         
-        with ProcessPoolExecutor(max_workers=self.workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.workers) as executor:
             # Submit all jobs
             future_to_job = {executor.submit(self.execute_job, job): job for job in jobs}
             

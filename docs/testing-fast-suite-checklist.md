@@ -44,7 +44,7 @@
 ## 7. Next-Stage Roadmap
 
 ### 7.1 Parallel execution stability
-- [ ] Refactor: move `execute_job()` to a *top-level* helper (or switch to
+- [x] Refactor: move `execute_job()` to a *top-level* helper (or switch to
       `ThreadPoolExecutor`) so the fast suite doesn’t hit pickle errors on
       macOS / Windows.
 
