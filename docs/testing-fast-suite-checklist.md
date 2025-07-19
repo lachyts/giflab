@@ -49,13 +49,13 @@
       macOS / Windows.
 
 ### 7.2 Type-safety
-- [ ] Update `compress_with_gifsicle_extended` and callers to accept `color_keep_count: int | None` and mark accordingly.
-- [ ] Run mypy to confirm wrappers (`_BaseGifsicleLossyOptim` etc.) are clean.
+- [x] Update `compress_with_gifsicle_extended` and callers to accept `color_keep_count: int | None` and mark accordingly.
+- [x] Run mypy to confirm wrappers (`_BaseGifsicleLossyOptim` etc.) are clean.
 
 ### 7.3 Pipeline combinatorics guard-rails
-- [ ] Skip `NoOp*` wrappers in `generate_all_pipelines()` **or** rely on the
+- [x] Skip `NoOp*` wrappers in `generate_all_pipelines()` **or** rely on the
       `GIFLAB_MAX_PIPES` cap (see §1) to keep CI fast.
-- [ ] Update `test_dynamic_pipeline.py` to assert the cap via
+- [x] Update `test_dynamic_pipeline.py` to assert the cap via
       `len(pipelines) <= 50` instead of hard-coded slice.
 
 ### 7.4 Placeholder combiners

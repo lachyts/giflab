@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 
@@ -74,8 +75,9 @@ def test_pipeline_identifiers_unique():
 
 
 def test_collapsed_steps_order_and_length():
-    # Check first 50 pipelines for quick coverage
-    pipelines = generate_all_pipelines()[:50]
+    pipelines = generate_all_pipelines()
+    max_pipes = int(os.getenv("GIFLAB_MAX_PIPES", "50"))
+    assert len(pipelines) <= max_pipes, "Generated pipelines exceed GIFLAB_MAX_PIPES cap"
     for p in pipelines:
         # Steps must be in non-decreasing variable order according to spec
         order_map = {
