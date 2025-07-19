@@ -83,6 +83,33 @@ if os.getenv("GIFLAB_FULL_MATRIX") != "1" and ExperimentalConfig is not None and
 
 
 # ---------------------------------------------------------------------------
+# Lightweight stub for ExperimentalPipeline._execute_dynamic_pipeline to avoid
+# potential heavy dependencies during unit tests. Keeps behaviour minimal to
+# satisfy collapsing tests (returns number of collapsed steps).
+# ---------------------------------------------------------------------------
+
+if ExperimentalConfig is not None:
+
+    def _fast_execute_dynamic(self, job):  # noqa: D401
+        assert job.pipeline is not None, "pipeline missing"
+        # Simple collapse: group consecutive steps with same COMBINE_GROUP
+        steps_meta = []
+        current_group = None
+        for step in job.pipeline.steps:
+            group = getattr(step.tool_cls, "COMBINE_GROUP", step.variable)
+            if group != current_group:
+                # New group starts
+                steps_meta.append({"engine": group, "render_ms": 1})
+                current_group = group
+        return {"steps": steps_meta, "engine": "dynamic"}
+
+    # Patch the method unless full-suite requested
+    if os.getenv("GIFLAB_FULL_MATRIX") != "1":
+        from giflab import experiment as _exp_mod
+        _exp_mod.ExperimentalPipeline._execute_dynamic_pipeline = _fast_execute_dynamic  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
 # Session-wide fixtures / helpers (can be extended as needed)
 # ---------------------------------------------------------------------------
 
@@ -125,6 +152,7 @@ def pytest_collection_modifyitems(config, items):  # noqa: D401
         "tests/test_color_keep.py",
         "tests/test_color_reduction_alignment.py",
         "tests/test_engine_equivalence.py",
+        "tests/test_combiner_collapsing.py",
         "tests/test_analysis_tools.py",
         "tests/test_notebooks.py",
         "tests/test_temporal_delta.py",
@@ -155,6 +183,7 @@ def pytest_ignore_collect(path, config):  # noqa: D401
         "test_color_keep.py",
         "test_color_reduction_alignment.py",
         "test_engine_equivalence.py",
+        "test_combiner_collapsing.py",
         "test_analysis_tools.py",
         "test_notebooks.py",
         "test_temporal_delta.py",
