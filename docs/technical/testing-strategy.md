@@ -19,12 +19,11 @@ To guarantee that speedy feedback loop we apply the following guard-rails:
    ```bash
    pytest -m "not slow"
    ```
-2. `tests/conftest.py` flattens the experimental parameter grid and caps dynamic-pipeline enumeration to **50** combinations.
+2. `tests/conftest.py` flattens the experimental parameter grid and caps dynamic-pipeline enumeration to **50** combinations (configurable via the `GIFLAB_MAX_PIPES` environment&nbsp;variable).
 3. Integration tests rely on micro GIF fixtures (≤ 50 × 50 px, ≤ 10 frames) and pass `timeout=<10` s to every `subprocess.run`.
-4. Unit tests that still need to call the compression helpers can enable the fixture `fast_compress(monkeypatch)` to monkey-patch
-   `compress_with_gifsicle` / `compress_with_animately` with a no-op copy.
-5. The CI pipeline also runs the same fast subset (`pytest -m "not slow"`).  A full matrix can be triggered manually by exporting
-   `GIFLAB_FULL_MATRIX=1`.
+4. Unit tests that still need to call the compression helpers can enable the fixture `fast_compress(monkeypatch)` to monkey-patch `compress_with_gifsicle` / `compress_with_animately` with a no-op copy **that also injects realistic placeholder metrics (`kilobytes`, `ssim` = 1.0)** so downstream analysis is not skewed.
+5. The CI pipeline also runs the same fast subset (`pytest -m "not slow"`).  A full matrix can be triggered manually by exporting `GIFLAB_FULL_MATRIX=1`.
+6. The dynamic-pipeline execution helper was refactored into a top-level function (or replaced by `ThreadPoolExecutor`) to avoid `multiprocessing`-pickling issues on macOS/Windows during parallel test execution.
 
 These measures keep day-to-day development lightning-fast while preserving the option for exhaustive coverage in nightly runs.
 
