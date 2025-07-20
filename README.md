@@ -114,7 +114,7 @@ data/raw/
 | Platform | Directory Name | Type | Notes |
 |----------|----------------|------|-------|
 | Tenor | `tenor/` | Live Platform | Google's GIF search platform |
-| Anamely | `animately/` | Live Platform | Your compression platform |
+| Animately | `animately/` | Live Platform | Your compression platform |
 | TGIF Dataset | `tgif_dataset/` | Research Dataset | Academic research dataset |
 | Unknown | `unknown/` | Fallback | Unclassified or mixed sources |
 
@@ -201,7 +201,7 @@ research_config = MetricsConfig(
 
 ## Expanded Quality Metrics (S10)
 
-In addition to SSIM-based measures, GifLab now computes **eight complementary frame-level metrics** that capture colour, texture, edge and gradient fidelity:
+In addition to SSIM-based measures, GifLab now computes **eight complementary frame-level metrics** that capture color, texture, edge and gradient fidelity:
 
 | Metric | Abbrev. | Higher-is-better? | Notes |
 |--------|---------|-------------------|-------|
@@ -209,7 +209,7 @@ In addition to SSIM-based measures, GifLab now computes **eight complementary fr
 | Root Mean Squared Error | RMSE | ❌ (lower) | Square-root of MSE |
 | Feature Similarity Index | FSIM | ✅ | Gradient & phase features |
 | Gradient Magnitude Similarity Deviation | GMSD | ❌ (lower) | Gradient-map deviation |
-| Colour-Histogram Correlation | CHIST | ✅ | Channel-wise histogram correlation |
+| Color-Histogram Correlation | CHIST | ✅ | Channel-wise histogram correlation |
 | Edge-Map Jaccard Similarity | EDGE | ✅ | Edge overlap similarity |
 | Texture-Histogram Correlation | TEXTURE | ✅ | LBP histogram correlation |
 | Sharpness Similarity | SHARP | ✅ | Laplacian variance ratio |
@@ -320,4 +320,6 @@ For implementation details, see `giflab/data_prep.py` (to be added) and the ML c
 - **[Compression Research](docs/analysis/compression-research.md)** - Engine comparison and optimization strategies
 - **[Implementation Lessons](docs/analysis/implementation-lessons.md)** - Development insights and best practices
 
-## LicenseMIT License - see LICENSE file for details.
+## License
+
+MIT License – see LICENSE file for details.

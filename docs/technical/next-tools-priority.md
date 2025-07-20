@@ -141,7 +141,7 @@ The full set of experimental pipelines is the product of these lists, creating a
 **Concept**:
 Pipelines have three ordered slots (default execution order):
 1. **Frame Reduction** – remove/sample frames first so later stages analyse the exact set of frames that will remain.
-2. **Color Reduction** – build / optimise the palette from the already-reduced frame set for better colour accuracy.
+2. **Color Reduction** – build / optimise the palette from the already-reduced frame set for better color accuracy.
 3. **Lossy Compression** – final size/quality trade-off once spatial & temporal content are fixed.
 
 Each tool advertises which slot(s) it can fill in a central capability registry (YAML/JSON/Python dict).

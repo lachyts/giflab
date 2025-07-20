@@ -4,50 +4,55 @@ _Rev 1 – generated 2025-07-19_
 
 The goal of this work stream is to replace the **stub** wrappers for ImageMagick, FFmpeg and gifski with fully-functional implementations, align the configuration / discovery layer, and add lightweight yet meaningful test coverage similar to the existing gifsicle / animately integration tests.
 
+The project standardizes on American English spelling (e.g., "color") across all documentation.
+
 ---
 ## 1  Scope & success criteria
 
 | Engine | Actions to support | Success criteria |
 |--------|-------------------|------------------|
-| ImageMagick (`convert`, `magick`) | • colour reduction  
+| ImageMagick (`convert`, `magick`) | • color reduction  
 • frame reduction  
 • lossy compression (quality / sampling) | • CLI executes without error  
 • Output GIF exists  
 • Palette / frame-count / size reflect requested change  
-• Metadata dict includes `render_ms`, `engine`, optional command string |
-| FFmpeg | • colour reduction (palettegen / paletteuse)  
+• Metadata dict includes `render_ms`, `engine`, `command`, `kilobytes` |
+| FFmpeg | • color reduction (palettegen / paletteuse)  
 • frame reduction (`fps=` filter)  
 • lossy compression (`qscale`, sampling) | *Same as above* |
 | gifski | • lossy compression (quality slider) | *Same as above* |
 
-*Note – ImageMagick & FFmpeg colour/frame reduction can be indirect (re-encode via PNG sequence) as long as the wrapper returns a valid GIF and meets the functional checks.*
+*Note – ImageMagick & FFmpeg color/frame reduction can be indirect (re-encode via PNG sequence) as long as the wrapper returns a valid GIF and meets the functional checks.*
 
 ---
-## 2  Implementation tasks (mirrors TODO list)
+## 2  Implementation tasks
 
-| ID | Task | Owner | Notes |
-|----|------|-------|-------|
-| engines-cli-design | Define exact command lines for each action / engine |  | Put examples in `docs/cli_recipes.md` |
-| helpers-impl | Implement helpers under `giflab.external_engines.*` |  | Each returns metadata dict with `render_ms`, `command`, possibly `stderr` |
-| wrappers-update | Replace placeholder `apply()` in wrappers |  | Use helper funcs; ensure `COMBINE_GROUP` consistent |
-| config-update | Extend `DEFAULT_ENGINE_CONFIG` + `discover_tool` |  | Auto-detect binary path; allow `$IMAGEMAGICK_PATH` override etc. |
-| fixtures | Add 1-2 tiny GIFs for palette / frame checks |  | Put under `tests/fixtures/` |
-| tests-integration | New module `tests/test_engine_integration_extended.py` |  | One test per (engine, action) with functional asserts |
-| smoke-extend | Remove skips in `test_engine_smoke.py`; add asserts |  | After wrappers are live |
-| ci-update | Update CI workflow to install the binaries |  | Use brew/apt or docker image |
-| docs-update | Refresh README + tech docs |  | Document new capabilities & env vars |
+Below is the ordered work-breakdown we will track in the project TODO list.
+
+| # | Task ID | Description | Notes |
+|---|---------|-------------|-------|
+| 1 | **engines-cli-design** | Document exact CLI invocations for each engine / action. | Examples saved to `docs/cli_recipes.md`. |
+| 2 | **helpers-impl** | Add helper functions under `giflab.external_engines.*` that wrap each CLI and return the standard metadata dict. | Must populate `render_ms`, `engine`, `command`, `kilobytes`. |
+| 3 | **wrappers-update** | Replace placeholder `apply()` methods in ImageMagick/FFmpeg/gifski wrappers with real calls to the helpers. | Ensure `COMBINE_GROUP` values stay consistent. |
+| 4 | **config-update** | Extend `DEFAULT_ENGINE_CONFIG` and `system_tools.discover_tool` to auto-detect executables; allow `$GIFLAB_IMAGEMAGICK_PATH`, `$GIFLAB_FFMPEG_PATH`, `$GIFLAB_GIFSKI_PATH`, `$GIFLAB_GIFSICLE_PATH`, `$GIFLAB_FFPROBE_PATH` overrides. | |
+| 5 | **fixtures** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Store under `tests/fixtures/`. |
+| 6 | **tests-integration** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Validate functional change + metadata. |
+| 7 | **smoke-extend** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Ensure existing gifsicle / Animately smoke tests remain green and runs in fast suite. |
+| 8 | **ci-update** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | |
+| 9 | **docs-update** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | |
+| 10 | **cleanup-stubs** | Remove obsolete stub wrappers once real implementations are merged. | |
 
 ---
 ## 3  CLI recipes (draft)
 
 ### 3.1  ImageMagick
 ```bash
-# colour reduction to N colours
+# color reduction to N colors
 magick input.gif +dither -colors 32 output.gif
 
-# frame reduction – keep 50 % frames (coalesce -> select -> optimize)
-magick input.gif -coalesce "-set delay %%[fx:t>1?2*delay:delay]" -layers optimize output.gif
-# (exact recipe TBD – frame dropping is less direct in IM)
+# frame reduction – keep 50 % frames (delete every 2nd frame)
+magick input.gif -coalesce -delete '1--2' -layers optimize output.gif
+# (wrapper deletes every second frame; adjust ratio dynamically)
 
 # lossy – sample + strip metadata
 magick input.gif -sampling-factor 4:2:0 -strip -quality 85 output.gif
@@ -55,7 +60,7 @@ magick input.gif -sampling-factor 4:2:0 -strip -quality 85 output.gif
 
 ### 3.2  FFmpeg
 ```bash
-# colour reduction via palette
+# color reduction via palette
 ffmpeg -i input.gif -filter_complex "fps=15,palettegen" palette.png
 ffmpeg -i input.gif -i palette.png -filter_complex "fps=15,paletteuse" output.gif
 # (wrapper can run two-pass transparently)

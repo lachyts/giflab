@@ -156,7 +156,7 @@ composite_quality = (0.30 * ssim +
 | 2 | Root MSE                    | RMSE    | `sqrt(MSE)`             | 0 → ∞ (lower) | Error in original units |
 | 3 | Feature SIMilarity          | FSIM    | Gradients + phase cong. | 0 → 1 (higher)| Structure / phase awareness |
 | 4 | Gradient Mag. Sim. Deviation| GMSD    | Prewitt gradients        | 0 → ∞ (lower) | Deviation of gradient maps |
-| 5 | Colour-Histogram Correlation| CHIST   | `cv2.compareHist`        | –1 → 1 (higher)| Global colour similarity |
+| 5 | Color-Histogram Correlation| CHIST   | `cv2.compareHist`        | –1 → 1 (higher)| Global color similarity |
 | 6 | Edge-Map Jaccard Similarity | EDGE    | Canny + set overlap      | 0 → 1 (higher)| Edge structure overlap |
 | 7 | Texture-Hist. Correlation   | TEXTURE | LBP histogram correlation| –1 → 1 (higher)| Local texture match |
 | 8 | Sharpness Similarity        | SHARP   | Laplacian variance ratio | 0 → 1 (higher)| Relative acutance match |
@@ -307,9 +307,9 @@ config = MetricsConfig(
 **Bottom Line**: This approach provides bulletproof quality assessment for critical downstream analysis, solving the fundamental frame alignment problem that invalidated previous quality measurements. 
 ---
 
-## 4. Implementation Details
+## 10. Implementation Details
 
-### 4.1 New Metrics Implementation
+### 10.1 New Metrics Implementation
 
 The following eight metrics were added to complement the original SSIM-based measures:
 
@@ -324,7 +324,7 @@ The following eight metrics were added to complement the original SSIM-based mea
 | **TEXTURE** | `texture_similarity(frame1, frame2)` | 0 → 1 (higher better) | LBP histogram correlation |
 | **SHARP** | `sharpness_similarity(frame1, frame2)` | 0 → 1 (higher better) | Laplacian variance ratio |
 
-### 4.2 Aggregation Strategy
+### 10.2 Aggregation Strategy
 
 Each metric generates four descriptive statistics per GIF:
 - **Mean**: Primary metric value
@@ -342,14 +342,14 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
     }
 ```
 
-### 4.3 Raw Metrics Flag
+### 10.3 Raw Metrics Flag
 
 The `raw_metrics` flag exposes unscaled values alongside normalized ones:
 - **Default**: Scaled/normalized values for consistency
 - **Raw mode**: Append `_raw` suffix for original values
 - **Usage**: `MetricsConfig(RAW_METRICS=True)`
 
-### 4.4 Temporal Consistency Enhancement
+### 10.4 Temporal Consistency Enhancement
 
 Temporal consistency now includes pre/post compression analysis:
 - `temporal_consistency_pre`: Original GIF smoothness
@@ -358,9 +358,9 @@ Temporal consistency now includes pre/post compression analysis:
 
 ---
 
-## 5. ML Data Quality Considerations
+## 11. ML Data Quality Considerations
 
-### 5.1 Common ML Pitfalls and Mitigations
+### 11.1 Common ML Pitfalls and Mitigations
 
 | Issue | Impact | Solution |
 |-------|---------|----------|
@@ -371,7 +371,7 @@ Temporal consistency now includes pre/post compression analysis:
 | **Data leakage** | Inflated performance | GIF-level train/test splits |
 | **Version drift** | Reproducibility issues | Embed version metadata |
 
-### 5.2 Best Practices Checklist
+### 11.2 Best Practices Checklist
 
 ✅ **Production Implementation Status**:
 - Deterministic extraction (pure functions, fixed seeds)
@@ -382,7 +382,7 @@ Temporal consistency now includes pre/post compression analysis:
 - Correlation analysis (automated EDA)
 - Comprehensive test coverage (356 tests)
 
-### 5.3 Data Preparation Helpers
+### 11.3 Data Preparation Helpers
 
 Available in `giflab.data_prep`:
 ```python
@@ -398,9 +398,9 @@ clip_outliers(values, method="iqr", factor=1.5)
 
 ---
 
-## 6. Production Deployment
+## 12. Production Deployment
 
-### 6.1 Current Status ✅
+### 12.1 Current Status ✅
 
 **All implementation stages completed** (December 2024):
 - 8 new metrics + aggregation descriptors
@@ -409,14 +409,14 @@ clip_outliers(values, method="iqr", factor=1.5)
 - Automated EDA generation
 - 356 passing unit tests
 
-### 6.2 Performance Characteristics
+### 12.2 Performance Characteristics
 
 - **Metric computation**: 70+ values per GIF comparison
 - **Processing overhead**: ~7% increase from baseline
 - **Memory efficiency**: Optimized frame alignment
 - **Error handling**: Comprehensive try-catch coverage
 
-### 6.3 Integration Points
+### 12.3 Integration Points
 
 ```python
 # Main API
