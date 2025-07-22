@@ -266,19 +266,42 @@ This project is being developed in stages:
 
 ## Cross-Platform Setup
 
-Engine paths are configurable in `src/giflab/config.py` under the `EngineConfig` class.
+Engine paths are configurable via environment variables or `src/giflab/config.py` under the `EngineConfig` class.
+
+### Environment Variables (Recommended)
+Set these environment variables to override default engine paths:
+```bash
+export GIFLAB_GIFSICLE_PATH=/usr/local/bin/gifsicle
+export GIFLAB_ANIMATELY_PATH=/usr/local/bin/animately
+export GIFLAB_IMAGEMAGICK_PATH=/usr/local/bin/magick
+export GIFLAB_FFMPEG_PATH=/usr/local/bin/ffmpeg
+export GIFLAB_FFPROBE_PATH=/usr/local/bin/ffprobe
+export GIFLAB_GIFSKI_PATH=/usr/local/bin/gifski
+```
 
 ### macOS
 ```bash
-brew install python@3.11 ffmpeg gifsicle
-# Install animately-cli binary and update its path in EngineConfig
+# Install tools via Homebrew
+brew install python@3.11 ffmpeg gifsicle imagemagick
+
+# Install gifski (optional, for high-quality lossy compression)
+brew install gifski
+
+# Install animately-cli binary from releases
+# Set GIFLAB_ANIMATELY_PATH if not in system PATH
 ```
 
 ### Windows/WSL
 ```bash
-choco install python ffmpeg gifsicle
-# Or use WSL2 with Linux setup
-# Update engine paths in src/giflab/config.py as needed
+# Using Chocolatey
+choco install python ffmpeg gifsicle imagemagick
+
+# Or use WSL2 with Linux package manager
+sudo apt update
+sudo apt install python3.11 ffmpeg gifsicle imagemagick
+
+# Set environment variables in your shell profile (.bashrc, .zshrc, etc.)
+# or update engine paths in src/giflab/config.py directly
 ```
 
 ## 📈 Machine-Learning Dataset Best Practices  

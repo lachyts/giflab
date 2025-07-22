@@ -150,17 +150,60 @@ class PathConfig:
 
 @dataclass
 class EngineConfig:
-    """Configuration for compression engine paths."""
+    """Configuration for compression engine paths with environment variable overrides."""
 
     # Path to the gifsicle executable.
     # On macOS/Linux, "gifsicle" should work if installed via package manager
     # On Windows, you might need to provide the full path to the .exe
     # e.g., "C:/Program Files/gifsicle/gifsicle.exe"
+    # Override with: GIFLAB_GIFSICLE_PATH
     GIFSICLE_PATH: str = "gifsicle"
 
     # Path to the animately executable.
     # Set this to the location of your animately binary.
+    # Override with: GIFLAB_ANIMATELY_PATH
     ANIMATELY_PATH: str = "animately"
+
+    # Path to ImageMagick executable (magick or convert).
+    # On most systems, "magick" should work (ImageMagick 7.x)
+    # On older systems or specific setups, may need "convert"
+    # Override with: GIFLAB_IMAGEMAGICK_PATH
+    IMAGEMAGICK_PATH: str = "magick"
+
+    # Path to FFmpeg executable.
+    # Usually "ffmpeg" works if installed via package manager
+    # Override with: GIFLAB_FFMPEG_PATH
+    FFMPEG_PATH: str = "ffmpeg"
+
+    # Path to FFprobe executable (companion to FFmpeg).
+    # Usually "ffprobe" works if FFmpeg is properly installed
+    # Override with: GIFLAB_FFPROBE_PATH
+    FFPROBE_PATH: str = "ffprobe"
+
+    # Path to gifski executable.
+    # Install from: https://gif.ski/
+    # Override with: GIFLAB_GIFSKI_PATH
+    GIFSKI_PATH: str = "gifski"
+
+    def __post_init__(self) -> None:
+        """Apply environment variable overrides after initialization."""
+        import os
+        
+        # Environment variable mapping
+        env_overrides = {
+            'GIFSICLE_PATH': 'GIFLAB_GIFSICLE_PATH',
+            'ANIMATELY_PATH': 'GIFLAB_ANIMATELY_PATH',
+            'IMAGEMAGICK_PATH': 'GIFLAB_IMAGEMAGICK_PATH',
+            'FFMPEG_PATH': 'GIFLAB_FFMPEG_PATH',
+            'FFPROBE_PATH': 'GIFLAB_FFPROBE_PATH',
+            'GIFSKI_PATH': 'GIFLAB_GIFSKI_PATH',
+        }
+        
+        # Apply overrides from environment variables
+        for attr_name, env_var_name in env_overrides.items():
+            env_value = os.getenv(env_var_name)
+            if env_value:
+                setattr(self, attr_name, env_value)
 
 
 # Default configuration instances

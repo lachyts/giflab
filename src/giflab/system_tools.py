@@ -64,45 +64,116 @@ def _run_version_cmd(cmd: list[str], regex: str) -> str | None:
 # Public API
 # ---------------------------------------------------------------------------
 
-_REQUIRED_TOOLS: dict[str, list[str]] = {
+# Legacy tool discovery (fallback to PATH search)
+_FALLBACK_TOOLS: dict[str, list[str]] = {
     "imagemagick": ["magick", "convert"],  # try "magick" first (newer) then fallback
     "ffmpeg": ["ffmpeg"],
+    "ffprobe": ["ffprobe"],
     "gifski": ["gifski"],
+    "gifsicle": ["gifsicle"],
+    "animately": ["animately"],
 }
-
 
 _VERSION_PATTERNS: dict[str, str] = {
     "imagemagick": r"ImageMagick (\S+)",
     "ffmpeg": r"ffmpeg version (\S+)",
+    "ffprobe": r"ffprobe version (\S+)",
     "gifski": r"gifski (\S+)",
+    "gifsicle": r"LCDF Gifsicle (\S+)",
+    "animately": r"animately (\S+)",
+}
+
+# Map tool keys to configuration attributes
+_CONFIG_MAPPING: dict[str, str] = {
+    "imagemagick": "IMAGEMAGICK_PATH",
+    "ffmpeg": "FFMPEG_PATH",
+    "ffprobe": "FFPROBE_PATH",
+    "gifski": "GIFSKI_PATH",
+    "gifsicle": "GIFSICLE_PATH",
+    "animately": "ANIMATELY_PATH",
 }
 
 
-def discover_tool(tool_key: str) -> ToolInfo:
-    """Return *ToolInfo* for *tool_key* (imagemagick / ffmpeg / gifski)."""
-    if tool_key not in _REQUIRED_TOOLS:
+def discover_tool(tool_key: str, engine_config = None) -> ToolInfo:
+    """Return *ToolInfo* for *tool_key* using configuration and fallback discovery.
+    
+    Args:
+        tool_key: Tool identifier (imagemagick, ffmpeg, gifski, gifsicle, animately)
+        engine_config: EngineConfig instance (uses DEFAULT_ENGINE_CONFIG if None)
+        
+    Returns:
+        ToolInfo with availability and version information
+    """
+    if tool_key not in _FALLBACK_TOOLS and tool_key not in _CONFIG_MAPPING:
         raise ValueError(f"Unknown tool: {tool_key}")
 
-    candidates = _REQUIRED_TOOLS[tool_key]
-    version_regex = _VERSION_PATTERNS.get(tool_key, r"(\d+\.\d+\.\d+)")
+    # Use provided config or import default
+    if engine_config is None:
+        from .config import DEFAULT_ENGINE_CONFIG
+        engine_config = DEFAULT_ENGINE_CONFIG
 
-    for candidate in candidates:
-        path = _which(candidate)
-        if path:
-            version = _run_version_cmd([candidate, "-version" if candidate != "ffmpeg" else "-version"], version_regex)
-            return ToolInfo(name=candidate, available=True, version=version)
+    # Try configured path first if tool has config mapping
+    if tool_key in _CONFIG_MAPPING:
+        config_attr = _CONFIG_MAPPING[tool_key]
+        configured_path = getattr(engine_config, config_attr, None)
+        
+        if configured_path:
+            # Test the configured path directly
+            if _which(configured_path):
+                version_regex = _VERSION_PATTERNS.get(tool_key, r"(\d+\.\d+\.\d+)")
+                version_cmd = [configured_path, "-version"]
+                version = _run_version_cmd(version_cmd, version_regex)
+                return ToolInfo(name=configured_path, available=True, version=version)
+    
+    # Fallback to PATH discovery for backward compatibility
+    if tool_key in _FALLBACK_TOOLS:
+        candidates = _FALLBACK_TOOLS[tool_key]
+        version_regex = _VERSION_PATTERNS.get(tool_key, r"(\d+\.\d+\.\d+)")
 
-    return ToolInfo(name=candidates[0], available=False, version=None)
+        for candidate in candidates:
+            path = _which(candidate)
+            if path:
+                version_cmd = [candidate, "-version"]
+                version = _run_version_cmd(version_cmd, version_regex)
+                return ToolInfo(name=candidate, available=True, version=version)
+
+    # Not found via config or PATH
+    fallback_name = (_FALLBACK_TOOLS.get(tool_key, [tool_key]))[0]
+    return ToolInfo(name=fallback_name, available=False, version=None)
 
 
-def verify_required_tools() -> dict[str, ToolInfo]:
-    """Ensure all *Step 1* binaries are available – raise on failure.
+def verify_required_tools(engine_config = None) -> dict[str, ToolInfo]:
+    """Ensure all configured binaries are available – raise on failure.
 
-    Returns a mapping so callers can log versions.
+    Args:
+        engine_config: EngineConfig instance (uses DEFAULT_ENGINE_CONFIG if None)
+
+    Returns:
+        Mapping of tool keys to ToolInfo instances
     """
     results: dict[str, ToolInfo] = {}
-    for key in _REQUIRED_TOOLS:
-        info = discover_tool(key)
+    
+    # Verify all tools that have configuration mappings
+    for key in _CONFIG_MAPPING:
+        info = discover_tool(key, engine_config)
         info.require()  # Will raise if missing
+        results[key] = info
+    return results
+
+
+def get_available_tools(engine_config = None) -> dict[str, ToolInfo]:
+    """Get availability status for all supported tools without requiring them.
+    
+    Args:
+        engine_config: EngineConfig instance (uses DEFAULT_ENGINE_CONFIG if None)
+        
+    Returns:
+        Mapping of tool keys to ToolInfo instances (available=False if not found)
+    """
+    results: dict[str, ToolInfo] = {}
+    
+    # Check all tools that have configuration mappings
+    for key in _CONFIG_MAPPING:
+        info = discover_tool(key, engine_config)
         results[key] = info
     return results

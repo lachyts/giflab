@@ -34,7 +34,7 @@ Below is the ordered work-breakdown with completion status tracked.
 | 1 | **engines-cli-design** | ✅ **DONE** | Document exact CLI invocations for each engine / action. | Examples saved to `docs/cli_recipes.md`. |
 | 2 | **helpers-impl** | ✅ **DONE** | Add helper functions under `giflab.external_engines.*` that wrap each CLI and return the standard metadata dict. | Must populate `render_ms`, `engine`, `command`, `kilobytes`. |
 | 3 | **wrappers-update** | ✅ **DONE** | Replace placeholder `apply()` methods in ImageMagick/FFmpeg/gifski wrappers with real calls to the helpers. | Ensure `COMBINE_GROUP` values stay consistent. |
-| 4 | **config-update** | ⏳ **TODO** | Extend `DEFAULT_ENGINE_CONFIG` and `system_tools.discover_tool` to auto-detect executables; allow `$GIFLAB_IMAGEMAGICK_PATH`, `$GIFLAB_FFMPEG_PATH`, `$GIFLAB_GIFSKI_PATH`, `$GIFLAB_GIFSICLE_PATH`, `$GIFLAB_FFPROBE_PATH` overrides. | |
+| 4 | **config-update** | ✅ **DONE** | Extend `DEFAULT_ENGINE_CONFIG` and `system_tools.discover_tool` to auto-detect executables; allow `$GIFLAB_IMAGEMAGICK_PATH`, `$GIFLAB_FFMPEG_PATH`, `$GIFLAB_GIFSKI_PATH`, `$GIFLAB_GIFSICLE_PATH`, `$GIFLAB_FFPROBE_PATH` overrides. | Added full EngineConfig with env var support and updated system_tools.discover_tool |
 | 5 | **fixtures** | ⏳ **TODO** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Store under `tests/fixtures/`. |
 | 6 | **tests-integration** | ⏳ **TODO** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Validate functional change + metadata. |
 | 7 | **smoke-extend** | ⏳ **TODO** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Ensure existing gifsicle / Animately smoke tests remain green and runs in fast suite. |
@@ -136,15 +136,13 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 3/10 tasks (30%)  
+**Completed:** 4/10 tasks (40%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 7/10 tasks (70%)  
+**Remaining:** 6/10 tasks (60%)  
 
 ### Milestone Status
-- ✅ **Stage 1-3:** CLI recipes documented + helper functions implemented + wrappers updated
-- ⏳ **Stage 4:** Configuration & environment variables (next)
-- ⏳ **Stage 4:** Configuration & environment variables
-- ⏳ **Stage 5:** Test fixtures & integration tests
+- ✅ **Stage 1-4:** CLI recipes documented + helper functions implemented + wrappers updated + configuration & environment variables
+- ⏳ **Stage 5:** Test fixtures & integration tests (next)
 - ⏳ **Stage 6:** CI pipeline updates
 - ⏳ **Stage 7:** Documentation refresh
 
