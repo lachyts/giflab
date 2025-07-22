@@ -12,15 +12,15 @@ interactive dependencies (sets matplotlib Agg backend).
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import matplotlib
 
 matplotlib.use("Agg")  # Headless backend for CI / servers
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.decomposition import PCA
 
 __all__ = ["generate_eda"]
@@ -121,6 +121,6 @@ def generate_eda(
         artefacts["pca_scree_plot"] = scree_path
     except Exception as exc:
         # Do not fail the whole pipeline if PCA fails (e.g., singular matrix)
-        warnings.warn(f"PCA scree plot generation failed: {exc}")
+        warnings.warn(f"PCA scree plot generation failed: {exc}", stacklevel=2)
 
-    return artefacts 
+    return artefacts

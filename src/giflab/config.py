@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any
 
 
 @dataclass
@@ -124,12 +123,12 @@ class PathConfig:
     TMP_DIR: Path = Path("data/tmp")
     SEED_DIR: Path = Path("seed")
     LOGS_DIR: Path = Path("logs")
-    
+
     def __post_init__(self) -> None:
         """Validate path configuration after initialization."""
         # Import here to avoid circular imports
-        from .validation import validate_config_paths, ValidationError
-        
+        from .validation import ValidationError, validate_config_paths
+
         try:
             # Convert dataclass to dict for validation
             config_dict = {
@@ -141,10 +140,10 @@ class PathConfig:
                 'SEED_DIR': self.SEED_DIR,
                 'LOGS_DIR': self.LOGS_DIR,
             }
-            
+
             # Validate paths for security
             validate_config_paths(config_dict)
-            
+
         except ValidationError as e:
             raise ValueError(f"Invalid path configuration: {e}") from e
 

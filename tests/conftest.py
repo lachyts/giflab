@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 import pytest
 
@@ -14,8 +13,10 @@ import pytest
 # ---------------------------------------------------------------------------
 
 try:
-    from giflab.experiment import ExperimentalConfig  # noqa: WPS433 – runtime patching is intentional
     import giflab.dynamic_pipeline as _dp  # noqa: WPS433
+    from giflab.experiment import (
+        ExperimentalConfig,  # noqa: WPS433 – runtime patching is intentional
+    )
 except ModuleNotFoundError:
     # The package might not be install-able in some linting contexts; skip.
     ExperimentalConfig = None  # type: ignore  # pragma: no cover
@@ -27,7 +28,7 @@ except ModuleNotFoundError:
 if os.getenv("GIFLAB_FULL_MATRIX") != "1" and ExperimentalConfig is not None and _dp is not None:
 
     # 1. Flatten the parameter grid --------------------------------------------------
-    _single_value_lists: dict[str, List[object]] = {
+    _single_value_lists: dict[str, list[object]] = {
         "FRAME_KEEP_RATIOS": [1.0],   # keep original frame-rate
         "COLOR_KEEP_COUNTS": [256],   # keep full palette
         "LOSSY_LEVELS": [0],          # lossless

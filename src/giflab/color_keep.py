@@ -62,13 +62,13 @@ def build_gifsicle_color_args(color_count: int, original_colors: int, dithering:
     """Build gifsicle command arguments for color reduction.
 
     Reference: https://www.lcdf.org/gifsicle/
-    
+
     Gifsicle color reduction options:
     - --colors N: Reduce palette to N colors
     - --color-method METHOD: Choose color reduction algorithm
     - --dither: Enable dithering for smoother gradients
     - --no-dither: Disable dithering for sharp edges
-    
+
     Example: gifsicle --colors 64 --dither input.gif --output output.gif
 
     Args:
@@ -78,7 +78,7 @@ def build_gifsicle_color_args(color_count: int, original_colors: int, dithering:
 
     Returns:
         List of command line arguments for gifsicle color reduction
-        
+
     Note:
         Returns empty list if no reduction needed (color_count >= original_colors)
         Dithering is disabled by default to match animately's behavior more closely.
@@ -89,13 +89,13 @@ def build_gifsicle_color_args(color_count: int, original_colors: int, dithering:
 
     # Gifsicle uses --colors argument for palette reduction
     args = ["--colors", str(color_count)]
-    
+
     # Add dithering control for consistency
     if dithering:
         args.append("--dither")
     else:
         args.append("--no-dither")
-    
+
     return args
 
 
@@ -105,7 +105,7 @@ def build_animately_color_args(color_count: int, original_colors: int) -> list[s
     Animately color reduction is simpler than gifsicle:
     - --colors N: Reduce palette to N colors
     - Automatic optimization without manual dithering controls
-    
+
     Example: animately --input input.gif --colors 64 --output output.gif
 
     Args:
@@ -114,7 +114,7 @@ def build_animately_color_args(color_count: int, original_colors: int) -> list[s
 
     Returns:
         List of command line arguments for animately color reduction
-        
+
     Note:
         Returns empty list if no reduction needed (color_count >= original_colors)
     """

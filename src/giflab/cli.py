@@ -6,17 +6,19 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+import pandas as pd
 
 from .config import (
     DEFAULT_COMPRESSION_CONFIG,
     PathConfig,
 )
-from .experiment import ExperimentalConfig, ExperimentalPipeline, create_experimental_pipeline
+from .experiment import (
+    ExperimentalConfig,
+    ExperimentalPipeline,
+)
 from .pipeline import CompressionPipeline
-from .validation import validate_raw_dir, validate_worker_count, ValidationError
 from .utils_pipeline_yaml import read_pipelines_yaml, write_pipelines_yaml
-from .analysis_tools import performance_matrix
-import pandas as pd
+from .validation import ValidationError, validate_raw_dir, validate_worker_count
 
 
 @click.group()
@@ -93,14 +95,14 @@ def run(
             click.echo(f"❌ Invalid RAW_DIR: {e}", err=True)
             click.echo("💡 Please provide a valid directory containing GIF files", err=True)
             sys.exit(1)
-        
+
         # Validate worker count
         try:
             validated_workers = validate_worker_count(workers)
         except ValidationError as e:
             click.echo(f"❌ Invalid worker count: {e}", err=True)
             sys.exit(1)
-        
+
         # Create path configuration
         path_config = PathConfig()
 
@@ -323,7 +325,7 @@ def tag(
             click.echo(f"❌ Invalid RAW_DIR: {e}", err=True)
             click.echo("💡 Please provide a valid directory containing GIF files", err=True)
             sys.exit(1)
-        
+
         # Validate worker count
         try:
             validated_workers = validate_worker_count(workers)
@@ -423,25 +425,28 @@ def tag(
 )
 def organize_directories(raw_dir: Path):
     """Create organized directory structure for source-based GIF collection.
-    
+
     Creates subdirectories in RAW_DIR for different GIF sources:
     - tenor/      - GIFs from Tenor
     - animately/  - GIFs from Animately platform
     - tgif_dataset/ - GIFs from TGIF dataset
     - unknown/    - Ungrouped GIFs
-    
+
     Each directory includes a README with organization guidelines.
     """
-    from .directory_source_detection import create_directory_structure, get_directory_organization_help
-    
+    from .directory_source_detection import (
+        create_directory_structure,
+        get_directory_organization_help,
+    )
+
     try:
         click.echo("🗂️  Creating directory structure for source organization...")
         create_directory_structure(raw_dir)
-        
+
         click.echo("✅ Directory structure created successfully!")
         click.echo(f"📁 Organized directories in: {raw_dir}")
         click.echo("\n" + get_directory_organization_help())
-        
+
     except Exception as e:
         click.echo(f"❌ Failed to create directory structure: {e}", err=True)
         sys.exit(1)
@@ -506,7 +511,7 @@ def experiment(
     matrix: bool,
 ):
     """Run experimental compression testing with diverse sample GIFs.
-    
+
     This command tests different compression strategies on a small set of
     diverse GIFs to validate workflows and identify optimal parameters
     before running on large datasets.
@@ -518,7 +523,7 @@ def experiment(
         except ValidationError as e:
             click.echo(f"❌ Invalid worker count: {e}", err=True)
             sys.exit(1)
-        
+
         # Expand strategy selection
         all_strategies = [
             "pure_gifsicle",
@@ -527,12 +532,12 @@ def experiment(
             "gifsicle_dithered",
             "gifsicle_optimized"
         ]
-        
+
         if "all" in strategies:
             selected_strategies = all_strategies
         else:
             selected_strategies = list(strategies)
-        
+
         # Create experimental configuration
         cfg = ExperimentalConfig(
             TEST_GIFS_COUNT=gifs,
@@ -540,16 +545,16 @@ def experiment(
             ENABLE_DETAILED_ANALYSIS=not no_analysis,
             ENABLE_MATRIX_MODE=matrix,
         )
-        
+
         # Override paths if provided
         if sample_gifs_dir:
             cfg.SAMPLE_GIFS_PATH = sample_gifs_dir
         if output_dir:
             cfg.RESULTS_PATH = output_dir
-        
+
         # Create experimental pipeline
         pipeline = ExperimentalPipeline(cfg, validated_workers)
-        
+
         click.echo("🧪 GifLab Experimental Testing")
         click.echo(f"📊 Test GIFs: {gifs}")
         click.echo(f"🛠️ Strategies: {', '.join(selected_strategies)}")
@@ -557,7 +562,7 @@ def experiment(
         click.echo(f"📈 Results: {cfg.RESULTS_PATH}")
         click.echo(f"👥 Workers: {validated_workers}")
         click.echo(f"📊 Analysis: {'Enabled' if not no_analysis else 'Disabled'}")
-        
+
         # Load sample GIFs
         sample_gifs = None
         if sample_gifs_dir and sample_gifs_dir.exists():
@@ -568,25 +573,25 @@ def experiment(
                 sample_gifs = None
             else:
                 click.echo(f"📂 Found {len(sample_gifs)} sample GIFs")
-        
+
         # Run experiment
         click.echo("\n🚀 Starting experimental pipeline...")
         results_path = pipeline.run_experiment(sample_gifs)
-        
+
         if results_path.exists():
-            click.echo(f"\n✅ Experiment completed successfully!")
+            click.echo("\n✅ Experiment completed successfully!")
             click.echo(f"📊 Results saved to: {results_path}")
-            
+
             # Show quick summary
             if not no_analysis:
                 analysis_path = results_path.parent / "analysis_report.json"
                 if analysis_path.exists():
                     click.echo(f"📈 Analysis report: {analysis_path}")
-                    
+
         else:
-            click.echo(f"\n❌ Experiment failed - no results generated")
+            click.echo("\n❌ Experiment failed - no results generated")
             sys.exit(1)
-            
+
     except Exception as e:
         click.echo(f"❌ Experiment failed: {e}", err=True)
         sys.exit(1)

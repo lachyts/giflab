@@ -1,7 +1,11 @@
-from pathlib import Path
 
 import pandas as pd
-from giflab.analysis_tools import performance_matrix, recommend_tools, pipeline_to_mermaid
+
+from giflab.analysis_tools import (
+    performance_matrix,
+    pipeline_to_mermaid,
+    recommend_tools,
+)
 from giflab.dynamic_pipeline import generate_all_pipelines
 
 
@@ -37,4 +41,4 @@ def test_pipeline_to_mermaid_format():
     assert "flowchart LR" in dsl
     # Ensure all steps appear in DSL
     for step in pipeline.steps:
-        assert step.tool_cls.NAME in dsl 
+        assert step.tool_cls.NAME in dsl

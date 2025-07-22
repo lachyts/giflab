@@ -29,30 +29,30 @@ Key design choices
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-from .tool_interfaces import (
-    ColorReductionTool,
-    FrameReductionTool,
-    LossyCompressionTool,
-    ExternalTool,
-)
+from .config import DEFAULT_ENGINE_CONFIG
 from .lossy import (
-    compress_with_gifsicle,
-    compress_with_animately,
-    get_gifsicle_version,
-    get_animately_version,
     _is_executable,  # pyright: ignore [private-use]
+    compress_with_animately,
+    compress_with_gifsicle,
+    get_animately_version,
+    get_gifsicle_version,
 )
 
 # Extended gifsicle helper for optimisation variants
 from .lossy_extended import (
-    compress_with_gifsicle_extended,
-    GifsicleOptimizationLevel,
     GifsicleDitheringMode,
+    GifsicleOptimizationLevel,
+    compress_with_gifsicle_extended,
 )
-from .config import DEFAULT_ENGINE_CONFIG
-from .system_tools import discover_tool, ToolInfo
+from .system_tools import discover_tool
+from .tool_interfaces import (
+    ColorReductionTool,
+    ExternalTool,
+    FrameReductionTool,
+    LossyCompressionTool,
+)
 
 # ---------------------------------------------------------------------------
 # GIFSICLE
@@ -73,7 +73,7 @@ class GifsicleColorReducer(ColorReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
@@ -85,7 +85,7 @@ class GifsicleColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -104,7 +104,7 @@ class GifsicleFrameReducer(FrameReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
@@ -116,7 +116,7 @@ class GifsicleFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -135,7 +135,7 @@ class GifsicleLossyCompressor(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
@@ -147,7 +147,7 @@ class GifsicleLossyCompressor(LossyCompressionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ class _BaseGifsicleLossyOptim(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         # lossy_level required even though optimisation level is fixed per class
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
@@ -194,7 +194,7 @@ class _BaseGifsicleLossyOptim(LossyCompressionTool):
             dithering_mode=GifsicleDitheringMode.NONE,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -236,7 +236,7 @@ class AnimatelyColorReducer(ColorReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
@@ -248,7 +248,7 @@ class AnimatelyColorReducer(ColorReductionTool):
             color_keep_count=colors,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -267,7 +267,7 @@ class AnimatelyFrameReducer(FrameReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
@@ -279,7 +279,7 @@ class AnimatelyFrameReducer(FrameReductionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 
@@ -298,7 +298,7 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
@@ -310,7 +310,7 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
             color_keep_count=None,
         )
 
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
 # ---------------------------------------------------------------------------
@@ -329,9 +329,10 @@ class ImageMagickColorReducer(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         # Placeholder: just copy file
-        import shutil, time
+        import shutil
+        import time
         start = time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -350,8 +351,9 @@ class ImageMagickFrameReducer(FrameReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start = time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -370,8 +372,9 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start = time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -393,8 +396,9 @@ class FFmpegColorReducer(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start=time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -413,8 +417,9 @@ class FFmpegFrameReducer(FrameReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start=time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -433,8 +438,9 @@ class FFmpegLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start=time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -456,8 +462,9 @@ class GifskiLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("gifski").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        import shutil, time
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import shutil
+        import time
         start=time.time()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
@@ -484,7 +491,7 @@ class _BaseNoOpTool:
     def version(cls) -> str:  # noqa: D401
         return "none"
 
-    def _copy_file(self, src: Path, dst: Path) -> Dict[str, Any]:
+    def _copy_file(self, src: Path, dst: Path) -> dict[str, Any]:
         start = time.time()
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(src, dst)
@@ -496,7 +503,7 @@ class NoOpColorReducer(_BaseNoOpTool, ColorReductionTool):
 
     NAME = "none-color"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._copy_file(input_path, output_path)
 
 
@@ -505,7 +512,7 @@ class NoOpFrameReducer(_BaseNoOpTool, FrameReductionTool):
 
     NAME = "none-frame"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._copy_file(input_path, output_path)
 
 
@@ -514,5 +521,5 @@ class NoOpLossyCompressor(_BaseNoOpTool, LossyCompressionTool):
 
     NAME = "none-lossy"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        return self._copy_file(input_path, output_path) 
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._copy_file(input_path, output_path)

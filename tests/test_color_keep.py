@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from giflab.color_keep import (
     analyze_gif_palette,
     build_animately_color_args,

@@ -8,11 +8,10 @@ or used in CLI utilities later.
 """
 
 from pathlib import Path
-from typing import Dict, List, Sequence
 
 import pandas as pd
 
-from .dynamic_pipeline import Pipeline, PipelineStep
+from .dynamic_pipeline import Pipeline
 
 # ---------------------------------------------------------------------------
 # CSV loading
@@ -41,7 +40,7 @@ def _detect_variable(step_name: str) -> str:
     return "unknown"
 
 
-def performance_matrix(df: pd.DataFrame, metric: str = "ssim") -> Dict[str, pd.Series]:
+def performance_matrix(df: pd.DataFrame, metric: str = "ssim") -> dict[str, pd.Series]:
     """Return performance *Series* (indexed by tool NAME) for each variable.
 
     Example output keys: ``frame_reduction``, ``color_reduction``.
@@ -53,7 +52,7 @@ def performance_matrix(df: pd.DataFrame, metric: str = "ssim") -> Dict[str, pd.S
     # Expect engine/tool names encoded in the 'engine' column OR fallback to wrapper names in 'strategy'
     name_col = "engine" if "engine" in df.columns else "strategy"
 
-    out: Dict[str, pd.Series] = {}
+    out: dict[str, pd.Series] = {}
     for variable in ["frame_reduction", "color_reduction", "lossy_compression"]:
         mask = df["variable"] == variable if "variable" in df.columns else pd.Series(True, index=df.index)
         if mask.any():
@@ -65,7 +64,7 @@ def performance_matrix(df: pd.DataFrame, metric: str = "ssim") -> Dict[str, pd.S
 # Recommendations
 # ---------------------------------------------------------------------------
 
-def recommend_tools(df: pd.DataFrame, metric: str = "ssim", top_n: int = 1) -> Dict[str, List[str]]:
+def recommend_tools(df: pd.DataFrame, metric: str = "ssim", top_n: int = 1) -> dict[str, list[str]]:
     """Return *top_n* tool names per variable based on *metric* (higher is better)."""
     matrices = performance_matrix(df, metric)
     return {
@@ -94,4 +93,4 @@ def pipeline_to_mermaid(pipeline: Pipeline) -> str:
 
 def save_pipeline_diagram(pipeline: Pipeline, out_path: Path) -> None:
     """Save a pipeline diagram as a `.mmd` Mermaid file for later rendering."""
-    out_path.write_text(pipeline_to_mermaid(pipeline)) 
+    out_path.write_text(pipeline_to_mermaid(pipeline))

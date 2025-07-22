@@ -101,10 +101,10 @@ def build_gifsicle_frame_args(keep_ratio: float, total_frames: int) -> list[str]
 
     Uses gifsicle's frame selection syntax to specify which frames to keep.
     This approach is compatible with --optimize and follows gifsicle best practices.
-    
+
     Reference: https://www.lcdf.org/gifsicle/
     Frame selection syntax: #num, #num1-num2, #num1-, #name
-    
+
     Example:
         For 12 frames with 0.5 ratio: ['#0', '#2', '#4', '#6', '#8', '#10']
         Command: gifsicle --optimize input.gif #0 #2 #4 #6 #8 #10 --output output.gif
@@ -115,7 +115,7 @@ def build_gifsicle_frame_args(keep_ratio: float, total_frames: int) -> list[str]
 
     Returns:
         List of command line arguments for gifsicle frame selection
-        
+
     Note:
         - Input file must be specified BEFORE frame selection arguments
         - Frame selection is compatible with --optimize (unlike --delete)
@@ -141,7 +141,7 @@ def build_animately_frame_args(keep_ratio: float, total_frames: int) -> list[str
 
     Uses animately's --reduce flag to specify the ratio of frames to keep.
     This is simpler than gifsicle's frame selection approach.
-    
+
     Animately CLI Reference:
     Usage: animately.exe [OPTION...]
       -f, --reduce arg       Reduce frames
@@ -152,7 +152,7 @@ def build_animately_frame_args(keep_ratio: float, total_frames: int) -> list[str
       -d, --delay arg        Delay between frames
       -t, --trim-frames arg  Trim frames
       -m, --trim-ms arg      Trim in milliseconds
-      
+
     Example:
         For 0.5 ratio: ['--reduce', '0.50']
         Command: animately --input input.gif --reduce 0.50 --output output.gif
@@ -163,7 +163,7 @@ def build_animately_frame_args(keep_ratio: float, total_frames: int) -> list[str
 
     Returns:
         List of command line arguments for animately frame reduction
-        
+
     Note:
         - Uses decimal ratio format (0.50 for 50%)
         - More straightforward than gifsicle's frame selection

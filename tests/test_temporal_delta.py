@@ -48,6 +48,6 @@ def test_temporal_delta_raw(tmp_path):
         "temporal_consistency_delta_raw",
     ]:
         assert key in metrics
-    
+
     # Raw delta should equal delta
-    assert metrics["temporal_consistency_delta_raw"] == metrics["temporal_consistency_delta"] 
+    assert metrics["temporal_consistency_delta_raw"] == metrics["temporal_consistency_delta"]

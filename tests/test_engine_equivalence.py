@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 pytestmark = pytest.mark.slow
 from PIL import Image, ImageDraw
 
@@ -10,12 +11,10 @@ from giflab.color_keep import count_gif_colors
 from giflab.config import DEFAULT_ENGINE_CONFIG
 from giflab.lossy import (
     LossyEngine,
-    apply_lossy_compression,
-    compress_with_gifsicle,
     compress_with_animately,
+    compress_with_gifsicle,
 )
 from giflab.metrics import extract_gif_frames
-
 
 # -------------------------
 # Helper utilities & fixtures
@@ -76,7 +75,7 @@ def _compress_with(engine: LossyEngine, src: Path, lossy_level: int, frame_ratio
     """Wrapper around compression functions with sensible defaults."""
     tmpdir = tempfile.TemporaryDirectory()
     out_path = Path(tmpdir.name) / f"output_{engine.value}.gif"
-    
+
     # Use the direct compression functions to avoid validation issues
     if engine == LossyEngine.GIFSICLE:
         result = compress_with_gifsicle(
@@ -86,7 +85,7 @@ def _compress_with(engine: LossyEngine, src: Path, lossy_level: int, frame_ratio
         result = compress_with_animately(
             src, out_path, lossy_level, frame_ratio, colour_count
         )
-    
+
     return out_path, result, tmpdir
 
 
@@ -117,7 +116,7 @@ def test_gifsicle_vs_animately_equivalence(test_gif_tmp, lossy_level, frame_rati
         gif_out, meta_gif, tmpdir_gif = _compress_with(LossyEngine.GIFSICLE, test_gif_tmp, lossy_level, frame_ratio, colours)
     except RuntimeError as e:
         pytest.skip(f"Gifsicle failed: {e}")
-    
+
     try:
         ani_out, meta_ani, tmpdir_ani = _compress_with(LossyEngine.ANIMATELY, test_gif_tmp, lossy_level, frame_ratio, colours)
     except RuntimeError as e:
@@ -128,27 +127,27 @@ def test_gifsicle_vs_animately_equivalence(test_gif_tmp, lossy_level, frame_rati
         # ----------------- Assertions on frames -----------------
         frames_gif = extract_gif_frames(gif_out).frame_count
         frames_ani = extract_gif_frames(ani_out).frame_count
-        
+
         print(f"Frame counts: gifsicle={frames_gif}, animately={frames_ani}")
-        
+
         # When we requested a reduction ensure it was honoured
         original_frames = extract_gif_frames(test_gif_tmp).frame_count
         expected_frames = max(1, int(original_frames * frame_ratio))
-        
+
         print(f"Original frames: {original_frames}, expected: {expected_frames}")
-        
+
         # Both engines should produce the same number of frames
         assert frames_gif == frames_ani, (
             f"Frame count mismatch – gifsicle={frames_gif}, animately={frames_ani}"
         )
-        
+
         # And it should match our expectation
         assert frames_gif == expected_frames, f"Frame reduction did not meet expectation: got {frames_gif}, expected {expected_frames}"
 
         # ----------------- Assertions on colours ----------------
         colours_gif = count_gif_colors(gif_out)
         colours_ani = count_gif_colors(ani_out)
-        
+
         print(f"Color counts: gifsicle={colours_gif}, animately={colours_ani}")
 
         if colours is not None:
@@ -159,15 +158,15 @@ def test_gifsicle_vs_animately_equivalence(test_gif_tmp, lossy_level, frame_rati
         # For now, just ensure both engines produce reasonable color counts
         # (allow significant differences as engines may optimize differently)
         assert colours_gif > 0 and colours_ani > 0, "Both engines should produce GIFs with colors"
-        
+
         # The color counts should be in a reasonable range for a simple test GIF
         assert colours_gif <= 256 and colours_ani <= 256, "Color counts should not exceed GIF maximum"
-        
+
         # Print summary for manual verification
         print(f"✅ Test passed: {lossy_level=}, {frame_ratio=}, {colours=}")
         print(f"   Frames: {frames_gif} (both engines)")
         print(f"   Colors: gifsicle={colours_gif}, animately={colours_ani}")
-        
+
     finally:
         # Clean up temporary directories
         tmpdir_gif.cleanup()
@@ -178,12 +177,12 @@ def test_engine_basic_functionality():
     """Basic smoke test to ensure both engines can process a simple GIF."""
     if not (_engine_available(LossyEngine.GIFSICLE) and _engine_available(LossyEngine.ANIMATELY)):
         pytest.skip("Both gifsicle and animately must be available for basic functionality test")
-    
+
     # Create a simple test GIF
     with tempfile.TemporaryDirectory() as tmpdir:
         test_gif = Path(tmpdir) / "simple.gif"
         _create_test_gif(test_gif, frames=3, size=(30, 30))
-        
+
         # Test both engines can process it
         try:
             gif_out, _, tmpdir_gif = _compress_with(LossyEngine.GIFSICLE, test_gif, 0, 1.0, None)
@@ -192,11 +191,11 @@ def test_engine_basic_functionality():
             print("✅ Gifsicle basic functionality: PASS")
         except Exception as e:
             print(f"❌ Gifsicle basic functionality: FAIL - {e}")
-            
+
         try:
             ani_out, _, tmpdir_ani = _compress_with(LossyEngine.ANIMATELY, test_gif, 0, 1.0, None)
             assert ani_out.exists(), "Animately should create output file"
             tmpdir_ani.cleanup()
             print("✅ Animately basic functionality: PASS")
         except Exception as e:
-            print(f"❌ Animately basic functionality: FAIL - {e}") 
+            print(f"❌ Animately basic functionality: FAIL - {e}")

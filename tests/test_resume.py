@@ -1,17 +1,13 @@
 """Tests for compression pipeline resume functionality."""
 
 import csv
-import shutil
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from src.giflab.config import CompressionConfig, PathConfig
 from src.giflab.meta import GifMetadata
 from src.giflab.pipeline import CompressionJob, CompressionPipeline
-
 
 # Fixtures now defined in conftest.py for better performance
 

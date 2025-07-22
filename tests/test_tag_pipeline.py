@@ -4,6 +4,7 @@ import csv
 from unittest.mock import Mock, patch
 
 import pytest
+
 from src.giflab.tag_pipeline import (
     TaggingPipeline,
     create_tagging_pipeline,
@@ -373,7 +374,7 @@ class TestTaggingPipeline:
 
         mock_tagging_result = TaggingResult(
             gif_sha='sha123',
-            scores={col: 0.5 for col in TaggingPipeline.TAGGING_COLUMNS},
+            scores=dict.fromkeys(TaggingPipeline.TAGGING_COLUMNS, 0.5),
             model_version='test',
             processing_time_ms=100
         )
@@ -447,7 +448,7 @@ class TestTaggingPipeline:
         """Test automatic output path generation."""
         mock_tagging_result = TaggingResult(
             gif_sha='sha123',
-            scores={col: 0.5 for col in TaggingPipeline.TAGGING_COLUMNS},
+            scores=dict.fromkeys(TaggingPipeline.TAGGING_COLUMNS, 0.5),
             model_version='test',
             processing_time_ms=100
         )
@@ -490,7 +491,7 @@ class TestValidateTaggedCsv:
         with open(csv_path, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerow({col: '0.5' for col in fieldnames})
+            writer.writerow(dict.fromkeys(fieldnames, '0.5'))
 
         with patch('giflab.tag_pipeline.pd.read_csv') as mock_read:
             mock_df = Mock()

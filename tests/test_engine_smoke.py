@@ -1,23 +1,22 @@
-import tempfile
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from giflab.tool_wrappers import (
-    GifsicleColorReducer,
-    GifsicleFrameReducer,
-    GifsicleLossyCompressor,
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     AnimatelyLossyCompressor,
-    ImageMagickColorReducer,
-    ImageMagickFrameReducer,
-    ImageMagickLossyCompressor,
     FFmpegColorReducer,
     FFmpegFrameReducer,
     FFmpegLossyCompressor,
+    GifsicleColorReducer,
+    GifsicleFrameReducer,
+    GifsicleLossyCompressor,
     GifskiLossyCompressor,
+    ImageMagickColorReducer,
+    ImageMagickFrameReducer,
+    ImageMagickLossyCompressor,
 )
 
 # ---------------------------------------------------------------------------
@@ -119,4 +118,4 @@ def test_lossy_wrapper_smoke(wrapper_cls, params, tmp_path):
 
     # Only real engines expected to compress
     if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately"}:
-        assert out.stat().st_size < src.stat().st_size 
+        assert out.stat().st_size < src.stat().st_size

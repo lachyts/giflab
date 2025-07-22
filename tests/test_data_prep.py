@@ -2,11 +2,11 @@ import numpy as np
 import pytest
 
 from giflab.data_prep import (
-    minmax_scale,
-    zscore_scale,
-    normalise_metrics,
     apply_confidence_weights,
     clip_outliers,
+    minmax_scale,
+    normalise_metrics,
+    zscore_scale,
 )
 
 
@@ -70,4 +70,4 @@ class TestOutlierClipping:
     def test_clip_outliers_sigma(self):
         data = [0, 0, 0, 0, 50]
         clipped = clip_outliers(data, method="sigma", factor=1.5)
-        assert max(clipped) < 50 
+        assert max(clipped) < 50

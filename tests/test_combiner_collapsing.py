@@ -3,12 +3,16 @@ from unittest.mock import patch
 
 import pytest
 
-from src.giflab.experiment import ExperimentalPipeline, ExperimentalConfig, ExperimentJob
-from src.giflab.meta import GifMetadata
 from src.giflab.dynamic_pipeline import Pipeline, PipelineStep
+from src.giflab.experiment import (
+    ExperimentalConfig,
+    ExperimentalPipeline,
+    ExperimentJob,
+)
+from src.giflab.meta import GifMetadata
 from src.giflab.tool_wrappers import (
-    AnimatelyFrameReducer,
     AnimatelyColorReducer,
+    AnimatelyFrameReducer,
     GifsicleLossyBasic,
 )
 
@@ -113,4 +117,4 @@ def test_placeholder_combiner_groups(tmp_path: Path, dummy_gif: Path, group, col
     with patch.dict(_cr._COMBINERS, {group: lambda *a, **k: {"render_ms": 1}}):
         res = runner._execute_dynamic_pipeline(job)
 
-    assert len(res["steps"]) == 1  # collapsed into single call 
+    assert len(res["steps"]) == 1  # collapsed into single call

@@ -1,5 +1,4 @@
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -7,10 +6,8 @@ from PIL import Image
 
 from giflab import (
     tools_for_variable,
-    all_single_variable_strategies,
 )
 from giflab.dynamic_pipeline import generate_all_pipelines
-
 
 # ---------------------------------------------------------------------------
 # Helper to create a tiny 2-frame GIF for quick tests
@@ -87,4 +84,4 @@ def test_collapsed_steps_order_and_length():
         }
         indices = [order_map[s.variable] for s in p.steps]
         assert indices == sorted(indices), "Steps out of order"
-        assert 1 <= len(p.steps) <= 3, "Collapsed step count invalid" 
+        assert 1 <= len(p.steps) <= 3, "Collapsed step count invalid"

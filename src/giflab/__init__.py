@@ -9,7 +9,11 @@ try:  # pragma: no cover – safe guard
     import skimage  # type: ignore
     import sklearn  # type: ignore
 except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
-    import sys, types, numpy as _np, math as _math
+    import math as _math
+    import sys
+    import types
+
+    import numpy as _np
 
     skimage_stub = types.ModuleType("skimage")
     metrics_stub = types.ModuleType("skimage.metrics")
@@ -116,34 +120,32 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
 # NOTE: keep imports lightweight to avoid slow import-time side-effects.  Only import
 # small, dependency-free symbols.
 
+from .analysis_tools import performance_matrix, pipeline_to_mermaid, recommend_tools
+from .capability_registry import all_single_variable_strategies
+
+# Capability registry --------------------------------------------------------
+from .capability_registry import tools_for as tools_for_variable
+from .system_tools import ToolInfo, verify_required_tools
 from .tool_interfaces import (
-    ExternalTool,
     ColorReductionTool,
+    ExternalTool,
     FrameReductionTool,
     LossyCompressionTool,
 )
 
-from .system_tools import verify_required_tools, ToolInfo
-
 # Stage-2: capability wrappers ------------------------------------------------
-
 from .tool_wrappers import (
-    GifsicleColorReducer,
-    GifsicleFrameReducer,
-    GifsicleLossyCompressor,
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     AnimatelyLossyCompressor,
-    ImageMagickColorReducer,
-    ImageMagickFrameReducer,
-    ImageMagickLossyCompressor,
     FFmpegColorReducer,
     FFmpegFrameReducer,
     FFmpegLossyCompressor,
+    GifsicleColorReducer,
+    GifsicleFrameReducer,
+    GifsicleLossyCompressor,
     GifskiLossyCompressor,
+    ImageMagickColorReducer,
+    ImageMagickFrameReducer,
+    ImageMagickLossyCompressor,
 )
-
-# Capability registry --------------------------------------------------------
-
-from .capability_registry import tools_for as tools_for_variable, all_single_variable_strategies
-from .analysis_tools import performance_matrix, recommend_tools, pipeline_to_mermaid

@@ -4,13 +4,14 @@ import hashlib
 
 import numpy as np
 import pytest
+from PIL import Image
+
 from giflab.meta import (
     GifMetadata,
     calculate_entropy,
     compute_file_sha256,
     extract_gif_metadata,
 )
-from PIL import Image
 
 
 class TestComputeFileSha256:

@@ -3,23 +3,23 @@
 import json
 import multiprocessing
 import signal
+import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any
+
+from . import __version__ as GIFLAB_VERSION
+from .config import CompressionConfig, PathConfig
+from .directory_source_detection import detect_source_from_directory
 
 # dynamic pipeline support
-from .dynamic_pipeline import generate_all_pipelines, Pipeline
-from .tool_interfaces import ExternalTool
-
-from .config import CompressionConfig, PathConfig
+from .dynamic_pipeline import Pipeline, generate_all_pipelines
 from .io import append_csv_row, move_bad_gif, read_csv_as_dicts, setup_logging
 from .lossy import LossyEngine, apply_compression_with_all_params
 from .meta import GifMetadata, extract_gif_metadata
-from .directory_source_detection import detect_source_from_directory
 from .metrics import calculate_comprehensive_metrics
-from . import __version__ as GIFLAB_VERSION
 
 
 def _get_git_commit_hash() -> str:
@@ -79,7 +79,7 @@ class CompressionResult:
     orig_fps: float
     orig_n_colors: int
     entropy: float | None
-    
+
     # Source tracking
     source_platform: str
     source_metadata: str | None  # JSON string for CSV compatibility
@@ -103,7 +103,7 @@ class CompressionPipeline:
         workers: int = 0,
         resume: bool = True,
         detect_source_from_directory: bool = True,
-        selected_pipelines: List[str] | None = None,
+        selected_pipelines: list[str] | None = None,
     ):
         """Initialize the compression pipeline.
 
@@ -127,7 +127,7 @@ class CompressionPipeline:
             "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
             "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
             "render_ms", "orig_kilobytes", "orig_width", "orig_height",
-            "orig_frames", "orig_fps", "orig_n_colors", "entropy", 
+            "orig_frames", "orig_fps", "orig_n_colors", "entropy",
             "source_platform", "source_metadata", "timestamp",
             "giflab_version", "code_commit", "dataset_version"
         ]
@@ -186,7 +186,7 @@ class CompressionPipeline:
                     source_platform, source_metadata = detect_source_from_directory(gif_path, raw_dir)
                 else:
                     source_platform, source_metadata = "unknown", None
-                
+
                 # Extract metadata with source information
                 metadata = extract_gif_metadata(
                     gif_path,
@@ -199,7 +199,7 @@ class CompressionPipeline:
                 gif_folder = self.path_config.RENDERS_DIR / folder_name
 
                 if self.selected_pipelines is not None:
-                    pipeline_map: Dict[str, Pipeline] = {p.identifier(): p for p in generate_all_pipelines()}
+                    pipeline_map: dict[str, Pipeline] = {p.identifier(): p for p in generate_all_pipelines()}
                     missing = [pid for pid in self.selected_pipelines if pid not in pipeline_map]
                     if missing:
                         self.logger.warning(f"Unknown pipeline identifiers: {missing}")

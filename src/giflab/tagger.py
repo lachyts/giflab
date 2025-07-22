@@ -9,6 +9,10 @@ Total: 25 continuous scores (0.0-1.0) for ML-ready compression parameter predict
 """
 
 import logging
+
+# Conditional imports for CLIP dependencies
+# Check if CLIP is disabled for testing
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +21,6 @@ import cv2
 import numpy as np
 from PIL import Image
 
-# Conditional imports for CLIP dependencies
-# Check if CLIP is disabled for testing
-import os
 if os.environ.get('GIFLAB_DISABLE_CLIP'):
     CLIP_AVAILABLE = False
     torch = None
@@ -265,13 +266,7 @@ class HybridCompressionTagger:
         """Comprehensive analysis including static technical metrics and temporal motion analysis."""
         if not frames:
             # Return default scores if no frames available
-            return {col: 0.0 for col in [
-                'blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality',
-                'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness',
-                'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio',
-                'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness',
-                'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'
-            ]}
+            return dict.fromkeys(['blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality', 'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness', 'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio', 'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness', 'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'], 0.0)
 
         representative_frame = frames[0]  # Use first frame for static analysis
 

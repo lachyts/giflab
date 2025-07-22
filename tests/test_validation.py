@@ -1,7 +1,5 @@
 """Tests for input validation functionality."""
 
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,13 +7,13 @@ import pytest
 
 from src.giflab.validation import (
     ValidationError,
-    validate_raw_dir,
-    validate_path_security,
-    validate_output_path,
-    validate_worker_count,
-    validate_file_extension,
-    validate_config_paths,
     sanitize_filename,
+    validate_config_paths,
+    validate_file_extension,
+    validate_output_path,
+    validate_path_security,
+    validate_raw_dir,
+    validate_worker_count,
 )
 
 
@@ -28,7 +26,7 @@ class TestValidateRawDir:
         test_dir = tmp_path / "test_raw"
         test_dir.mkdir()
         (test_dir / "test.gif").write_text("fake gif content")
-        
+
         result = validate_raw_dir(test_dir)
         assert result == test_dir
         assert result.exists()
@@ -38,7 +36,7 @@ class TestValidateRawDir:
         """Test RAW_DIR validation without requiring GIF files."""
         test_dir = tmp_path / "empty_dir"
         test_dir.mkdir()
-        
+
         result = validate_raw_dir(test_dir, require_gifs=False)
         assert result == test_dir
 
@@ -50,7 +48,7 @@ class TestValidateRawDir:
     def test_validate_raw_dir_nonexistent(self, tmp_path):
         """Test validation with non-existent directory."""
         nonexistent = tmp_path / "nonexistent"
-        
+
         with pytest.raises(ValidationError, match="RAW_DIR does not exist"):
             validate_raw_dir(nonexistent)
 
@@ -58,7 +56,7 @@ class TestValidateRawDir:
         """Test validation with file instead of directory."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("not a directory")
-        
+
         with pytest.raises(ValidationError, match="RAW_DIR is not a directory"):
             validate_raw_dir(test_file)
 
@@ -67,7 +65,7 @@ class TestValidateRawDir:
         test_dir = tmp_path / "no_gifs"
         test_dir.mkdir()
         (test_dir / "test.txt").write_text("not a gif")
-        
+
         with pytest.raises(ValidationError, match="RAW_DIR contains no GIF files"):
             validate_raw_dir(test_dir, require_gifs=True)
 
@@ -75,7 +73,7 @@ class TestValidateRawDir:
         """Test validation with unreadable directory."""
         test_dir = tmp_path / "unreadable"
         test_dir.mkdir()
-        
+
         # Mock os.access to return False for read permission
         with patch('os.access', return_value=False):
             with pytest.raises(ValidationError, match="RAW_DIR is not readable"):
@@ -108,7 +106,7 @@ class TestValidatePathSecurity:
             "/path/with\nnewline",
             "/path/with\rcarriage",
         ]
-        
+
         for dangerous_path in dangerous_paths:
             with pytest.raises(ValidationError, match="potentially dangerous characters"):
                 validate_path_security(dangerous_path)
@@ -120,7 +118,7 @@ class TestValidatePathSecurity:
             "safe/../../../etc/passwd",
             "/path/../../../etc/passwd",
         ]
-        
+
         for traversal_path in traversal_paths:
             with pytest.raises(ValidationError, match="directory traversal"):
                 validate_path_security(traversal_path)
@@ -163,7 +161,7 @@ class TestValidateOutputPath:
     def test_validate_output_path_unwritable_parent(self, tmp_path):
         """Test output path validation with unwritable parent."""
         output_path = tmp_path / "output.csv"
-        
+
         # Mock os.access to return False for write permission
         with patch('os.access', return_value=False):
             with pytest.raises(ValidationError, match="not writable"):
@@ -173,13 +171,13 @@ class TestValidateOutputPath:
         """Test output path validation with existing unwritable file."""
         output_path = tmp_path / "output.csv"
         output_path.write_text("existing content")
-        
+
         # Mock os.access to return True for parent but False for file
         def mock_access(path, mode):
             if str(path).endswith("output.csv"):
                 return False  # File is not writable
             return True  # Parent is writable
-        
+
         with patch('os.access', side_effect=mock_access):
             with pytest.raises(ValidationError, match="Output file is not writable"):
                 validate_output_path(output_path)
@@ -249,7 +247,7 @@ class TestValidateConfigPaths:
             "SOME_PATH": tmp_path / "path",
             "OTHER_VALUE": "not_a_path",
         }
-        
+
         result = validate_config_paths(config)
         assert "RAW_DIR" in result
         assert "OUTPUT_DIR" in result
@@ -261,7 +259,7 @@ class TestValidateConfigPaths:
         config = {
             "RAW_DIR": "/path/with;semicolon",
         }
-        
+
         with pytest.raises(ValidationError, match="Invalid RAW_DIR"):
             validate_config_paths(config)
 
@@ -271,7 +269,7 @@ class TestValidateConfigPaths:
             "RAW_DIR": None,
             "OUTPUT_DIR": Path("valid/path"),
         }
-        
+
         result = validate_config_paths(config)
         assert "RAW_DIR" not in result
         assert "OUTPUT_DIR" in result
@@ -352,11 +350,11 @@ class TestIntegration:
         raw_dir = tmp_path / "raw"
         raw_dir.mkdir()
         (raw_dir / "test.gif").write_text("fake gif")
-        
+
         # This should not raise any exceptions
         validated_dir = validate_raw_dir(raw_dir)
         assert validated_dir == raw_dir
-        
+
         # Test worker validation
         validated_workers = validate_worker_count(2)
         assert validated_workers == 2
@@ -364,13 +362,13 @@ class TestIntegration:
     def test_config_validation_integration(self, tmp_path):
         """Test that config validation works with PathConfig."""
         from src.giflab.config import PathConfig
-        
+
         # Create a config with valid paths
         config = PathConfig(
             RAW_DIR=tmp_path / "raw",
             CSV_DIR=tmp_path / "csv",
         )
-        
+
         # This should not raise any exceptions during __post_init__
         assert config.RAW_DIR == tmp_path / "raw"
-        assert config.CSV_DIR == tmp_path / "csv" 
+        assert config.CSV_DIR == tmp_path / "csv"

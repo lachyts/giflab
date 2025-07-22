@@ -22,7 +22,7 @@ class GifMetadata:
     orig_fps: float
     orig_n_colors: int
     entropy: float | None = None
-    
+
     # Source tracking fields
     source_platform: str = "unknown"
     source_metadata: dict[str, Any] | None = None

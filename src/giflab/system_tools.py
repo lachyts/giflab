@@ -12,7 +12,6 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,19 +35,19 @@ class ToolInfo:
 # Low-level helpers
 # ---------------------------------------------------------------------------
 
-def _which(cmd: str) -> Optional[str]:
+def _which(cmd: str) -> str | None:
     """Return full path if *cmd* is executable in $PATH, else *None*."""
     return shutil.which(cmd)
 
 
-def _extract_version(output: str, pattern: str) -> Optional[str]:
+def _extract_version(output: str, pattern: str) -> str | None:
     match = re.search(pattern, output)
     if match:
         return match.group(1)
     return None
 
 
-def _run_version_cmd(cmd: list[str], regex: str) -> Optional[str]:
+def _run_version_cmd(cmd: list[str], regex: str) -> str | None:
     try:
         completed = subprocess.run(
             cmd, capture_output=True, text=True, check=True, timeout=5
@@ -65,14 +64,14 @@ def _run_version_cmd(cmd: list[str], regex: str) -> Optional[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
-_REQUIRED_TOOLS: Dict[str, list[str]] = {
+_REQUIRED_TOOLS: dict[str, list[str]] = {
     "imagemagick": ["magick", "convert"],  # try "magick" first (newer) then fallback
     "ffmpeg": ["ffmpeg"],
     "gifski": ["gifski"],
 }
 
 
-_VERSION_PATTERNS: Dict[str, str] = {
+_VERSION_PATTERNS: dict[str, str] = {
     "imagemagick": r"ImageMagick (\S+)",
     "ffmpeg": r"ffmpeg version (\S+)",
     "gifski": r"gifski (\S+)",
@@ -96,14 +95,14 @@ def discover_tool(tool_key: str) -> ToolInfo:
     return ToolInfo(name=candidates[0], available=False, version=None)
 
 
-def verify_required_tools() -> Dict[str, ToolInfo]:
+def verify_required_tools() -> dict[str, ToolInfo]:
     """Ensure all *Step 1* binaries are available – raise on failure.
 
     Returns a mapping so callers can log versions.
     """
-    results: Dict[str, ToolInfo] = {}
+    results: dict[str, ToolInfo] = {}
     for key in _REQUIRED_TOOLS:
         info = discover_tool(key)
         info.require()  # Will raise if missing
         results[key] = info
-    return results 
+    return results

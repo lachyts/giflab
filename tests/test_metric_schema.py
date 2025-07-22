@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import pytest
-from giflab.metrics import calculate_comprehensive_metrics
-from giflab.schema import MetricRecordV1, validate_metric_record, is_valid_record
 from PIL import Image
+
+from giflab.metrics import calculate_comprehensive_metrics
+from giflab.schema import MetricRecordV1, is_valid_record, validate_metric_record
 
 
 class TestMetricRecordSchema:
@@ -46,4 +47,4 @@ class TestMetricRecordSchema:
         assert is_valid_record(bad_record) is False
 
         with pytest.raises(Exception):
-            validate_metric_record(bad_record) 
+            validate_metric_record(bad_record)

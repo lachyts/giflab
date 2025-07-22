@@ -1,6 +1,7 @@
 """Quality metrics and comparison functionality for GIF analysis."""
 
 import logging
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,10 +10,9 @@ from typing import Any
 import cv2
 import numpy as np
 from PIL import Image
+from skimage.feature import local_binary_pattern
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
-import math
-from skimage.feature import local_binary_pattern
 
 from .config import DEFAULT_METRICS_CONFIG, MetricsConfig
 
@@ -174,26 +174,26 @@ def calculate_frame_mse(frame1: np.ndarray, frame2: np.ndarray) -> float:
 
 def calculate_safe_psnr(frame1: np.ndarray, frame2: np.ndarray, data_range: float = 255.0) -> float:
     """Calculate PSNR with proper handling of perfect matches (MSE = 0).
-    
+
     Args:
         frame1: First frame
-        frame2: Second frame  
+        frame2: Second frame
         data_range: Maximum possible pixel value (default 255.0)
-        
+
     Returns:
         PSNR value, with 100.0 dB returned for perfect matches
     """
     try:
         # Check for perfect match first to avoid divide by zero
         mse = calculate_frame_mse(frame1, frame2)
-        
+
         if mse == 0.0:
             # Perfect match - return maximum PSNR (100 dB is a reasonable upper bound)
             return 100.0
-        
+
         # Use scikit-image PSNR for non-perfect matches
         return psnr(frame1, frame2, data_range=data_range)
-        
+
     except Exception as e:
         logger.warning(f"PSNR calculation failed: {e}")
         return 0.0
@@ -220,13 +220,13 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
 
             try:
                 mse = calculate_frame_mse(orig_frame, comp_frame)
-                
+
                 # Handle perfect matches (MSE = 0) - these are ideal matches
                 if mse == 0.0:
                     best_mse = 0.0
                     best_match_idx = comp_idx
                     break  # Perfect match found, no need to check further
-                
+
                 # Validate MSE is finite and reasonable
                 if not np.isfinite(mse) or mse < 0:
                     logger.warning(f"Invalid MSE calculated for frame pair {comp_idx}: {mse}")
@@ -674,11 +674,11 @@ def sharpness_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
 
 def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]:
     """Aggregate frame-level metric values into descriptive statistics.
-    
+
     Args:
         values: List of frame-level metric values
         metric_name: Name of the metric for key generation
-        
+
     Returns:
         Dictionary with mean, std, min, max for the metric
     """
@@ -689,9 +689,9 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
             f"{metric_name}_min": 0.0,
             f"{metric_name}_max": 0.0,
         }
-    
+
     values_array = np.array(values)
-    
+
     # Handle edge case of single frame
     if len(values) == 1:
         return {
@@ -700,7 +700,7 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
             f"{metric_name}_min": float(values[0]),
             f"{metric_name}_max": float(values[0]),
         }
-    
+
     return {
         metric_name: float(np.mean(values_array)),
         f"{metric_name}_std": float(np.std(values_array)),
@@ -711,20 +711,20 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
 
 def _calculate_positional_samples(aligned_pairs: list, metric_func, metric_name: str) -> dict[str, float]:
     """Calculate metrics for first, middle, and last frames to understand positional effects.
-    
+
     This function provides insights into how frame position affects quality metrics,
     which is crucial for determining optimal sampling strategies in production.
-    
+
     Args:
         aligned_pairs: List of (original_frame, compressed_frame) tuples
         metric_func: Function to calculate the metric (e.g., ssim, mse, fsim)
         metric_name: Name of the metric for key generation
-        
+
     Returns:
         Dictionary with positional samples and variance:
         {
             "metric_first": float,      # Metric value for first frame
-            "metric_middle": float,     # Metric value for middle frame  
+            "metric_middle": float,     # Metric value for middle frame
             "metric_last": float,       # Metric value for last frame
             "metric_positional_variance": float  # Variance across positions
         }
@@ -736,26 +736,26 @@ def _calculate_positional_samples(aligned_pairs: list, metric_func, metric_name:
             f"{metric_name}_last": 0.0,
             f"{metric_name}_positional_variance": 0.0,
         }
-    
+
     n_frames = len(aligned_pairs)
-    
+
     try:
         # Calculate for 3 key positions
         first_val = float(metric_func(*aligned_pairs[0]))
         middle_val = float(metric_func(*aligned_pairs[n_frames // 2]))
         last_val = float(metric_func(*aligned_pairs[-1]))
-        
+
         # Calculate positional variance (how much does position matter?)
         pos_values = [first_val, middle_val, last_val]
         positional_variance = float(np.var(pos_values))
-        
+
         return {
             f"{metric_name}_first": first_val,
             f"{metric_name}_middle": middle_val,
             f"{metric_name}_last": last_val,
             f"{metric_name}_positional_variance": positional_variance,
         }
-        
+
     except Exception as e:
         logger.warning(f"Positional sampling failed for {metric_name}: {e}")
         return {
@@ -873,7 +873,7 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
             try:
                 frame_mse = mse(orig_frame, comp_frame)
                 metric_values['mse'].append(frame_mse)
-                
+
                 frame_rmse = rmse(orig_frame, comp_frame)
                 metric_values['rmse'].append(frame_rmse)
             except Exception as e:
@@ -943,11 +943,11 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
         # Aggregate all metrics with descriptive statistics
         result = {}
-        
+
         # Add aggregated metrics
         for metric_name, values in metric_values.items():
             result.update(_aggregate_metric(values, metric_name))
-        
+
         # Add temporal consistency (single value, not frame-level)
         # Keep legacy key pointing to *post*-compression value for backward compatibility
         result['temporal_consistency'] = float(temporal_post)
@@ -971,7 +971,7 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
         # Add system metrics
         result['kilobytes'] = float(calculate_file_size_kb(compressed_path))
-        
+
         # Calculate processing time
         end_time = time.perf_counter()
         elapsed_seconds = end_time - start_time
@@ -998,14 +998,14 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 'texture_similarity': texture_similarity,
                 'sharpness_similarity': sharpness_similarity,
             }
-            
+
             # Calculate positional samples for configured metrics
             for metric_name in config.POSITIONAL_METRICS:
                 if metric_name in metric_functions:
                     try:
                         positional_data = _calculate_positional_samples(
-                            aligned_pairs, 
-                            metric_functions[metric_name], 
+                            aligned_pairs,
+                            metric_functions[metric_name],
                             metric_name
                         )
                         result.update(positional_data)

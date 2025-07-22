@@ -75,7 +75,7 @@ def test_default_configurations():
     assert DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS is not None
     assert DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS is not None
     assert DEFAULT_COMPRESSION_CONFIG.ENGINES is not None
-    
+
     assert len(DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS) == 5
     assert len(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS) == 6  # Updated from 3 to 6
     assert len(DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS) == 3

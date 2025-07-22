@@ -16,13 +16,13 @@ import subprocess
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+from .color_keep import validate_color_keep_count
 from .config import DEFAULT_ENGINE_CONFIG
+from .frame_keep import build_gifsicle_frame_args, validate_frame_keep_ratio
 from .meta import extract_gif_metadata
 from .validation import validate_path_security
-from .color_keep import validate_color_keep_count
-from .frame_keep import validate_frame_keep_ratio, build_gifsicle_frame_args
 
 
 class GifsicleOptimizationLevel(Enum):
@@ -42,10 +42,10 @@ class GifsicleDitheringMode(Enum):
 
 def build_gifsicle_optimization_args(opt_level: GifsicleOptimizationLevel) -> list[str]:
     """Build gifsicle optimization arguments.
-    
+
     Args:
         opt_level: Optimization level to use
-        
+
     Returns:
         List of command line arguments for optimization
     """
@@ -63,10 +63,10 @@ def build_gifsicle_optimization_args(opt_level: GifsicleOptimizationLevel) -> li
 
 def build_gifsicle_dithering_args(dither_mode: GifsicleDitheringMode) -> list[str]:
     """Build gifsicle dithering arguments.
-    
+
     Args:
         dither_mode: Dithering mode to use
-        
+
     Returns:
         List of command line arguments for dithering
     """
@@ -84,32 +84,32 @@ def build_gifsicle_color_args_extended(
     color_count: int,
     original_colors: int,
     dither_mode: GifsicleDitheringMode = GifsicleDitheringMode.NONE,
-    color_method: Optional[str] = None
+    color_method: str | None = None
 ) -> list[str]:
     """Build extended gifsicle color reduction arguments.
-    
+
     Args:
         color_count: Target number of colors
         original_colors: Original number of colors
         dither_mode: Dithering mode to use
         color_method: Color reduction method (diversity, blend-diversity, etc.)
-        
+
     Returns:
         List of command line arguments for color reduction
     """
     args = []
-    
+
     # Add color reduction if needed
     if color_count < original_colors and color_count < 256:
         args.extend(["--colors", str(color_count)])
-        
+
         # Add color method if specified
         if color_method:
             args.extend(["--color-method", color_method])
-        
+
         # Add dithering options
         args.extend(build_gifsicle_dithering_args(dither_mode))
-    
+
     return args
 
 
@@ -121,17 +121,17 @@ def compress_with_gifsicle_extended(
     color_keep_count: int | None = 256,
     optimization_level: GifsicleOptimizationLevel = GifsicleOptimizationLevel.BASIC,
     dithering_mode: GifsicleDitheringMode = GifsicleDitheringMode.NONE,
-    color_method: Optional[str] = None,
-    extra_args: Optional[list[str]] = None
-) -> Dict[str, Any]:
+    color_method: str | None = None,
+    extra_args: list[str] | None = None
+) -> dict[str, Any]:
     """Compress GIF using gifsicle with extended options.
-    
+
     This function provides access to advanced gifsicle options including:
     - Different optimization levels (-O1, -O2, -O3)
     - Dithering modes (none, floyd-steinberg, ordered)
     - Color reduction methods
     - Custom arguments
-    
+
     Args:
         input_path: Path to input GIF file
         output_path: Path to save compressed GIF
@@ -142,10 +142,10 @@ def compress_with_gifsicle_extended(
         dithering_mode: Dithering mode for color reduction
         color_method: Color reduction method
         extra_args: Additional command line arguments
-        
+
     Returns:
         Dictionary with compression metadata
-        
+
     Raises:
         RuntimeError: If gifsicle command fails
         ValueError: If parameters are invalid
@@ -153,18 +153,18 @@ def compress_with_gifsicle_extended(
     # Validate parameters
     if lossy_level < 0 or lossy_level > 200:
         raise ValueError(f"lossy_level must be between 0 and 200, got {lossy_level}")
-    
+
     validate_frame_keep_ratio(frame_keep_ratio)
     # Allow *None* to preserve existing palette (no validation or color args)
     if color_keep_count is not None:
         validate_color_keep_count(color_keep_count)
-    
+
     if not input_path.exists():
         raise OSError(f"Input file not found: {input_path}")
-    
+
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Get GIF metadata
     try:
         metadata = extract_gif_metadata(input_path)
@@ -172,54 +172,54 @@ def compress_with_gifsicle_extended(
         original_colors = metadata.orig_n_colors
     except Exception as e:
         raise RuntimeError(f"Failed to extract metadata from {input_path}: {e}") from e
-    
+
     # Build gifsicle command
     gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
     if not gifsicle_path:
         raise RuntimeError("gifsicle path not configured")
-    
+
     # Validate paths
     validated_input = validate_path_security(input_path)
     validated_output = validate_path_security(output_path)
-    
+
     input_str = str(validated_input.resolve())
     output_str = str(validated_output.resolve())
-    
+
     # Build command
     cmd = [gifsicle_path]
-    
+
     # Add optimization arguments
     cmd.extend(build_gifsicle_optimization_args(optimization_level))
-    
+
     # Add lossy compression if level > 0
     if lossy_level > 0:
         cmd.extend([f"--lossy={lossy_level}"])
-    
+
     # Add extended color reduction arguments
     if color_keep_count is not None:
         color_args = build_gifsicle_color_args_extended(
             color_keep_count, original_colors, dithering_mode, color_method
         )
         cmd.extend(color_args)
-    
+
     # Add input file
     cmd.append(input_str)
-    
+
     # Add frame reduction arguments (after input file)
     if frame_keep_ratio < 1.0:
         frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
         cmd.extend(frame_args)
-    
+
     # Add extra arguments if provided
     if extra_args:
         cmd.extend(extra_args)
-    
+
     # Add output
     cmd.extend(["--output", output_str])
-    
+
     # Execute command
     start_time = time.time()
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -228,14 +228,14 @@ def compress_with_gifsicle_extended(
             check=True,
             timeout=300
         )
-        
+
         end_time = time.time()
         render_ms = min(int((end_time - start_time) * 1000), 86400000)
-        
+
         # Verify output
         if not output_path.exists():
             raise RuntimeError(f"Gifsicle failed to create output file: {output_path}")
-        
+
         # Get version info
         try:
             version_result = subprocess.run(
@@ -248,7 +248,7 @@ def compress_with_gifsicle_extended(
             engine_version = version_result.stdout.strip().split('\n')[0]
         except Exception:
             engine_version = "unknown"
-        
+
         return {
             "render_ms": render_ms,
             "engine": "gifsicle",
@@ -264,7 +264,7 @@ def compress_with_gifsicle_extended(
             "command": " ".join(cmd),
             "stderr": result.stderr if result.stderr else None
         }
-        
+
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Gifsicle failed: {e.stderr}") from e
     except subprocess.TimeoutExpired as e:
@@ -281,16 +281,16 @@ def apply_compression_strategy(
     frame_keep_ratio: float = 1.0,
     color_keep_count: int | None = 256,
     **kwargs: Any
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply compression using a named strategy.
-    
+
     Supported strategies:
     - "pure_gifsicle": Basic gifsicle with --optimize
     - "gifsicle_dithered": Gifsicle with Floyd-Steinberg dithering
     - "gifsicle_optimized": Gifsicle with -O3 optimization
     - "gifsicle_ordered_dither": Gifsicle with ordered dithering
     - "gifsicle_custom": Custom gifsicle options via kwargs
-    
+
     Args:
         input_path: Path to input GIF
         output_path: Path to output GIF
@@ -299,10 +299,10 @@ def apply_compression_strategy(
         frame_keep_ratio: Frame keep ratio
         color_keep_count: Number of colors to keep (``None`` preserves original palette)
         **kwargs: Additional strategy-specific arguments
-        
+
     Returns:
         Dictionary with compression metadata
-        
+
     Raises:
         ValueError: If strategy is not supported
     """
@@ -312,34 +312,34 @@ def apply_compression_strategy(
             optimization_level=GifsicleOptimizationLevel.BASIC,
             dithering_mode=GifsicleDitheringMode.NONE
         )
-    
+
     elif strategy == "gifsicle_dithered":
         return compress_with_gifsicle_extended(
             input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
             optimization_level=GifsicleOptimizationLevel.BASIC,
             dithering_mode=GifsicleDitheringMode.FLOYD
         )
-    
+
     elif strategy == "gifsicle_optimized":
         return compress_with_gifsicle_extended(
             input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
             optimization_level=GifsicleOptimizationLevel.LEVEL3,
             dithering_mode=GifsicleDitheringMode.NONE
         )
-    
+
     elif strategy == "gifsicle_ordered_dither":
         return compress_with_gifsicle_extended(
             input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
             optimization_level=GifsicleOptimizationLevel.BASIC,
             dithering_mode=GifsicleDitheringMode.ORDERED
         )
-    
+
     elif strategy == "gifsicle_custom":
         opt_level = kwargs.get('optimization_level', GifsicleOptimizationLevel.BASIC)
         dither_mode = kwargs.get('dithering_mode', GifsicleDitheringMode.NONE)
         color_method = kwargs.get('color_method', None)
         extra_args = kwargs.get('extra_args', None)
-        
+
         return compress_with_gifsicle_extended(
             input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
             optimization_level=opt_level,
@@ -347,7 +347,7 @@ def apply_compression_strategy(
             color_method=color_method,
             extra_args=extra_args
         )
-    
+
     else:
         raise ValueError(f"Unknown compression strategy: {strategy}")
 
@@ -359,9 +359,9 @@ def compare_compression_strategies(
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
     color_keep_count: int | None = 256
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Compare multiple compression strategies on the same input.
-    
+
     Args:
         input_path: Path to input GIF
         output_dir: Directory to save results
@@ -369,12 +369,12 @@ def compare_compression_strategies(
         lossy_level: Lossy compression level
         frame_keep_ratio: Frame keep ratio
         color_keep_count: Color keep count
-        
+
     Returns:
         Dictionary mapping strategy names to compression results
     """
     results = {}
-    
+
     for strategy in strategies:
         try:
             output_path = output_dir / f"{strategy}_output.gif"
@@ -385,19 +385,19 @@ def compare_compression_strategies(
             results[strategy] = result
         except Exception as e:
             results[strategy] = {"error": str(e)}
-    
+
     return results
 
 
 def get_available_strategies() -> list[str]:
     """Get list of available compression strategies.
-    
+
     Returns:
         List of strategy names
     """
     return [
         "pure_gifsicle",
-        "gifsicle_dithered", 
+        "gifsicle_dithered",
         "gifsicle_optimized",
         "gifsicle_ordered_dither",
         "gifsicle_custom"
@@ -406,10 +406,10 @@ def get_available_strategies() -> list[str]:
 
 def get_strategy_description(strategy: str) -> str:
     """Get description of a compression strategy.
-    
+
     Args:
         strategy: Strategy name
-        
+
     Returns:
         Description string
     """
@@ -420,4 +420,4 @@ def get_strategy_description(strategy: str) -> str:
         "gifsicle_ordered_dither": "Gifsicle with ordered dithering",
         "gifsicle_custom": "Custom gifsicle options"
     }
-    return descriptions.get(strategy, "Unknown strategy") 
+    return descriptions.get(strategy, "Unknown strategy")

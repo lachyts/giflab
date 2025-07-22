@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from giflab.lossy import (
     LossyEngine,
     apply_compression_with_all_params,

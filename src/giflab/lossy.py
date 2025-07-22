@@ -323,7 +323,7 @@ def compress_with_gifsicle(
     # Add input and output with path validation
     validated_input = validate_path_security(input_path)
     validated_output = validate_path_security(output_path)
-    
+
     input_str = str(validated_input.resolve())  # Resolve to absolute path
     output_str = str(validated_output.resolve())  # Resolve to absolute path
 
@@ -488,7 +488,7 @@ def compress_with_animately(
     # Add input and output with path validation
     validated_input = validate_path_security(input_path)
     validated_output = validate_path_security(output_path)
-    
+
     input_str = str(validated_input.resolve())  # Resolve to absolute path
     output_str = str(validated_output.resolve())  # Resolve to absolute path
 
@@ -578,7 +578,7 @@ def _is_executable(path: str) -> bool:
     # First check if it's an absolute path
     if Path(path).is_absolute():
         return Path(path).is_file() and os.access(path, os.X_OK)
-    
+
     # Otherwise, check if it's available in PATH
     import shutil
     return shutil.which(path) is not None

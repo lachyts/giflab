@@ -17,12 +17,13 @@ Adding support for a new tool family only requires registering one function
 with the ``@register(group)`` decorator.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, Protocol
+from typing import Any
 
-CombinerFn = Callable[[Path, Path, Dict[str, Any]], Dict[str, Any]]
+CombinerFn = Callable[[Path, Path, dict[str, Any]], dict[str, Any]]
 
-_COMBINERS: Dict[str, CombinerFn] = {}
+_COMBINERS: dict[str, CombinerFn] = {}
 
 
 def register(group: str) -> Callable[[CombinerFn], CombinerFn]:
@@ -48,14 +49,14 @@ def combiner_for(group: str | None) -> CombinerFn | None:  # noqa: D401
 # GIFSICLE -------------------------------------------------------------------
 
 from .lossy_extended import (
-    compress_with_gifsicle_extended,
     GifsicleDitheringMode,
     GifsicleOptimizationLevel,
+    compress_with_gifsicle_extended,
 )
 
 
 @register("gifsicle")
-def _combine_gifsicle(input_path: Path, output_path: Path, params: Dict[str, Any]) -> Dict[str, Any]:
+def _combine_gifsicle(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
     lossy = int(params.get("lossy_level", 0) or 0)
     ratio = float(params.get("ratio", 1.0) or 1.0)
     colors = params.get("colors")  # may be None
@@ -74,11 +75,11 @@ def _combine_gifsicle(input_path: Path, output_path: Path, params: Dict[str, Any
 
 # ANIMATELY ------------------------------------------------------------------
 
-from .lossy import apply_compression_with_all_params, LossyEngine
+from .lossy import LossyEngine, apply_compression_with_all_params
 
 
 @register("animately")
-def _combine_animately(input_path: Path, output_path: Path, params: Dict[str, Any]) -> Dict[str, Any]:
+def _combine_animately(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
     lossy = int(params.get("lossy_level", 0) or 0)
     ratio = float(params.get("ratio", 1.0) or 1.0)
     colors = params.get("colors")
@@ -96,10 +97,11 @@ def _combine_animately(input_path: Path, output_path: Path, params: Dict[str, An
 # Generic placeholder combiners for other tool families (copy pass-through)
 # ---------------------------------------------------------------------------
 
-import shutil, time
+import shutil
+import time
 
 
-def _noop_copy(input_path: Path, output_path: Path, engine: str) -> Dict[str, Any]:
+def _noop_copy(input_path: Path, output_path: Path, engine: str) -> dict[str, Any]:
     start = time.time()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(input_path, output_path)
@@ -107,15 +109,15 @@ def _noop_copy(input_path: Path, output_path: Path, engine: str) -> Dict[str, An
 
 
 @register("imagemagick")
-def _combine_imagemagick(input_path: Path, output_path: Path, params: Dict[str, Any]) -> Dict[str, Any]:
+def _combine_imagemagick(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
     return _noop_copy(input_path, output_path, "imagemagick")
 
 
 @register("ffmpeg")
-def _combine_ffmpeg(input_path: Path, output_path: Path, params: Dict[str, Any]) -> Dict[str, Any]:
+def _combine_ffmpeg(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
     return _noop_copy(input_path, output_path, "ffmpeg")
 
 
 @register("gifski")
-def _combine_gifski(input_path: Path, output_path: Path, params: Dict[str, Any]) -> Dict[str, Any]:
-    return _noop_copy(input_path, output_path, "gifski") 
+def _combine_gifski(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+    return _noop_copy(input_path, output_path, "gifski")

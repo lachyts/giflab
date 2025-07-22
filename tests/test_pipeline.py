@@ -1,15 +1,10 @@
 """Tests for compression pipeline functionality."""
 
-import shutil
-import tempfile
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.giflab.config import CompressionConfig, PathConfig
-from src.giflab.meta import GifMetadata
 from src.giflab.pipeline import (
     CompressionJob,
     CompressionPipeline,
@@ -17,7 +12,6 @@ from src.giflab.pipeline import (
     create_pipeline,
     execute_single_job,
 )
-
 
 # Fixtures now defined in conftest.py for better performance
 

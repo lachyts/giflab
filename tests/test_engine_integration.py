@@ -5,16 +5,18 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 pytestmark = pytest.mark.slow
+from PIL import Image, ImageDraw
+
 from giflab.config import DEFAULT_ENGINE_CONFIG
 from giflab.lossy import (
     LossyEngine,
+    _is_executable,
     apply_lossy_compression,
     compress_with_animately,
     compress_with_gifsicle,
-    _is_executable,
 )
-from PIL import Image, ImageDraw
 
 
 def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None:

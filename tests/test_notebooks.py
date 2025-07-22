@@ -1,6 +1,6 @@
-import sys
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Lazy import to avoid hard dependency if user does not need notebook tests
 try:
@@ -35,4 +35,4 @@ def test_execute_notebook(nb_path: Path, tmp_path):
 
     # Do not fail on notebook cell errors – this is a *smoke* test that the
     # file executes end-to-end. Errors are tolerated to keep the test suite
-    # lightweight and avoid external-data dependencies. 
+    # lightweight and avoid external-data dependencies.

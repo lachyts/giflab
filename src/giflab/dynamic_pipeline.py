@@ -7,11 +7,11 @@ registry.
 """
 
 import itertools
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence, Type
 
-from .tool_interfaces import ExternalTool
 from .capability_registry import tools_for
+from .tool_interfaces import ExternalTool
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -20,7 +20,7 @@ from .capability_registry import tools_for
 @dataclass(frozen=True, slots=True)
 class PipelineStep:
     variable: str  # "frame_reduction" | "color_reduction" | "lossy_compression"
-    tool_cls: Type[ExternalTool]
+    tool_cls: type[ExternalTool]
 
     def name(self) -> str:
         suffix = {
@@ -48,14 +48,14 @@ class Pipeline:
 _VARIABLE_ORDER = ["frame_reduction", "color_reduction", "lossy_compression"]
 
 
-def generate_all_pipelines() -> List[Pipeline]:
+def generate_all_pipelines() -> list[Pipeline]:
     """Return *every* valid 3-slot pipeline (may be hundreds)."""
 
     frame_tools = tools_for("frame_reduction")
     color_tools = tools_for("color_reduction")
     lossy_tools = tools_for("lossy_compression")
 
-    pipelines: List[Pipeline] = []
+    pipelines: list[Pipeline] = []
     for trio in itertools.product(frame_tools, color_tools, lossy_tools):
         raw_steps = [
             PipelineStep("frame_reduction", trio[0]),
@@ -64,4 +64,4 @@ def generate_all_pipelines() -> List[Pipeline]:
         ]
         pipelines.append(Pipeline(raw_steps))
 
-    return pipelines 
+    return pipelines

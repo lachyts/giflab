@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from src.giflab.experiment import ExperimentalPipeline, ExperimentalConfig
+from src.giflab.experiment import ExperimentalConfig, ExperimentalPipeline
 
 
 def test_run_experiment_uses_thread_pool(tmp_path):
@@ -30,4 +30,4 @@ def test_run_experiment_uses_thread_pool(tmp_path):
             runner.run_experiment(sample_gifs=[])
 
         # Assert that ThreadPoolExecutor was used
-        mock_executor.assert_called_once() 
+        mock_executor.assert_called_once()

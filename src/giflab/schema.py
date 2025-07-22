@@ -2,10 +2,8 @@ from __future__ import annotations
 
 """Schemas for GifLab data exports."""
 
-from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict, ValidationError, field_validator, model_validator
-import math
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # --------------------------------------------------------------------------- #
 # Helper constants
@@ -67,4 +65,4 @@ def is_valid_record(data: dict) -> bool:
         validate_metric_record(data)
         return True
     except ValidationError:
-        return False 
+        return False

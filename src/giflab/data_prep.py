@@ -11,7 +11,7 @@ input shapes or parameters so callers receive immediate feedback.
 """
 from __future__ import annotations
 
-from typing import Iterable, Mapping
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 
@@ -91,7 +91,7 @@ def normalise_metrics(
 
     out: dict[str, float] = metrics if inplace else dict(metrics)
 
-    numeric_keys = [k for k, v in metrics.items() if isinstance(v, (int, float))]
+    numeric_keys = [k for k, v in metrics.items() if isinstance(v, int | float)]
     values = np.array([metrics[k] for k in numeric_keys], dtype=np.float64)
 
     if method == "zscore":
@@ -99,7 +99,7 @@ def normalise_metrics(
     else:
         scaled = minmax_scale(values)
 
-    for key, val in zip(numeric_keys, scaled):
+    for key, val in zip(numeric_keys, scaled, strict=False):
         out[key] = float(val)
 
     return out
@@ -124,7 +124,7 @@ def apply_confidence_weights(
         conf = float(confidences.get(key, 1.0))
         if conf < 0:
             raise ValueError(f"confidence for {key} must be non-negative")
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             out[key] = float(value) * conf
     return out
 
@@ -160,4 +160,4 @@ def clip_outliers(
     else:
         raise ValueError("method must be 'iqr' or 'sigma'")
 
-    return np.clip(arr, lower, upper) 
+    return np.clip(arr, lower, upper)

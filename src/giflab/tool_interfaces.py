@@ -15,7 +15,7 @@ implemented in later stages and registered with the experiment runner.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 
 class ExternalTool(ABC):
@@ -47,8 +47,8 @@ class ExternalTool(ABC):
         input_path: Path,
         output_path: Path,
         *,
-        params: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:  # pragma: no cover – concrete impl later
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:  # pragma: no cover – concrete impl later
         """Run the tool on *input_path* and write results to *output_path*.
 
         ``params`` is a free-form dictionary interpreted by the concrete
@@ -60,7 +60,7 @@ class ExternalTool(ABC):
     # ------------------------------------------------------------------
     # Optional helper for multi-step pipelines
     # ------------------------------------------------------------------
-    def combines_with(self, other: "ExternalTool") -> bool:
+    def combines_with(self, other: ExternalTool) -> bool:
         """Return ``True`` if *self* can be merged with *other* into one step.
 
         The default implementation is conservative and returns ``False``.  Tool
@@ -88,4 +88,4 @@ class FrameReductionTool(ExternalTool):
 class LossyCompressionTool(ExternalTool):
     """Spatial quality degradation tools (lossy re-encoding)."""
 
-    VARIABLE = "lossy_compression" 
+    VARIABLE = "lossy_compression"
