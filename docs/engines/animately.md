@@ -55,6 +55,7 @@ After building you have a binary called **`animately-gif`** (or simply `animatel
 | `--loops N` | int | Set animation loop count (`0` = infinite). |
 | `--tone r1 g1 b1 r2 g2 b2` | ints | Apply duotone mapping. |
 | `--threads` | (flag) | Enable multithreading (must build with threads). |
+| `--advanced-lossy FILE` | JSON file | Advanced lossy compression with frame configuration. |
 
 **Wrapper mapping** in GifLab:
 * `AnimatelyColorReducer` → `--colors {count}`
@@ -62,6 +63,41 @@ After building you have a binary called **`animately-gif`** (or simply `animatel
 * `AnimatelyLossyCompressor` → `--lossy {level}`
 
 The helper function constructs exactly these flags, measures runtime, and returns the metadata dict.
+
+### 3.1 Advanced Lossy Compression
+
+The `--advanced-lossy` (or `-a`) flag allows for more sophisticated compression by accepting a JSON configuration file that specifies individual frame properties and global settings.
+
+**Usage:**
+```bash
+animately -a config.json -o output.gif
+```
+
+**JSON Configuration Format:**
+```json
+{
+  "lossy": 60,
+  "colors": 64,
+  "frames": [
+    {"png": "path/to/frame1.png", "delay": 150},
+    {"png": "path/to/frame2.png", "delay": 200},
+    {"png": "path/to/frame3.png", "delay": 150}
+  ]
+}
+```
+
+**Configuration Properties:**
+- `lossy` (0-100): Global lossy compression level
+- `colors` (1-256): Color palette size for the output GIF
+- `frames`: Array of frame objects, each containing:
+  - `png`: Path to the PNG file for this frame
+  - `delay`: Frame delay in milliseconds
+
+**Use Cases:**
+- Creating GIFs from multiple PNG files
+- Converting single PNG files to single-frame GIFs
+- Fine-grained control over per-frame timing
+- Batch processing with consistent compression settings
 
 ---
 ## 4 JavaScript / WASM API

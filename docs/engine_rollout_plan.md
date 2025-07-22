@@ -37,7 +37,7 @@ Below is the ordered work-breakdown with completion status tracked.
 | 4 | **config-update** | ✅ **DONE** | Extend `DEFAULT_ENGINE_CONFIG` and `system_tools.discover_tool` to auto-detect executables; allow `$GIFLAB_IMAGEMAGICK_PATH`, `$GIFLAB_FFMPEG_PATH`, `$GIFLAB_GIFSKI_PATH`, `$GIFLAB_GIFSICLE_PATH`, `$GIFLAB_FFPROBE_PATH` overrides. | Added full EngineConfig with env var support and updated system_tools.discover_tool |
 | 5 | **fixtures** | ✅ **DONE** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Created 3 fixtures: simple_4frame.gif, single_frame.gif, many_colors.gif with full documentation. |
 | 6 | **tests-integration** | ✅ **DONE** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Comprehensive integration tests covering all 14 engine×action combinations with functional validation and metadata verification. |
-| 7 | **smoke-extend** | ⏳ **TODO** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Ensure existing gifsicle / Animately smoke tests remain green and runs in fast suite. |
+| 7 | **smoke-extend** | ✅ **DONE** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Enhanced smoke tests with @pytest.mark.fast markers, improved functional assertions for all engines, 30s performance thresholds, and comprehensive validation. All 13 smoke tests pass. |
 | 8 | **ci-update** | ⏳ **TODO** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | |
 | 9 | **docs-update** | ⏳ **TODO** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | |
 | 10 | **cleanup-stubs** | ⏳ **TODO** | Remove obsolete stub wrappers once real implementations are merged. | |
@@ -136,15 +136,15 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 6/10 tasks (60%)  
+**Completed:** 7/10 tasks (70%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 4/10 tasks (40%)  
+**Remaining:** 3/10 tasks (30%)  
 
 ### Milestone Status
-- ✅ **Stage 1-6:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests
-- ⏳ **Stage 7:** Smoke test enhancements (next)
-- ⏳ **Stage 8:** CI pipeline updates  
-- ⏳ **Stage 9:** Documentation refresh
+- ✅ **Stage 1-7:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements
+- ⏳ **Stage 8:** CI pipeline updates (next)
+- ⏳ **Stage 9:** Documentation refresh  
+- ⏳ **Stage 10:** Cleanup obsolete stubs
 
 ### Original Sequencing Plan
 1. ✅ ImageMagick helpers & wrapper swap-in → merge.  
