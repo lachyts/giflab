@@ -1,6 +1,6 @@
 # Engine CLI Recipes
 
-_Rev 1 – 2025-07-22_
+_Rev 2 – 2025-07-22 with parameter mapping and error handling_
 
 This document lists the canonical command-line invocations used by GifLab’s external engine wrappers.  Each recipe consumes an input GIF and produces an output GIF that applies the requested transformation.  At runtime the wrappers substitute the placeholders below and may adjust numeric parameters dynamically.
 
@@ -22,17 +22,40 @@ magick "$IN_GIF" +dither -colors 32 "$OUT_GIF"
 # replace 32 with the desired palette size (e.g. 16, 64)
 ```
 
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Notes |
+|---------------|-------------|--------|
+| `colors: int` | `-colors {colors}` | Direct 1:1 mapping, range 1-256 |
+| `dither: bool` | `+dither` (if False) | Default is no dithering; omit flag to enable |
+
 ### 1.2  Frame reduction (drop every 2-nd frame)
 ```bash
 magick "$IN_GIF" -coalesce -delete '1--2' -layers optimize "$OUT_GIF"
 # wrap-side: delete pattern adjusted to achieve the requested ratio
 ```
 
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Algorithm |
+|---------------|-------------|-----------|
+| `keep_ratio: float` | `-delete '1--{step}'` | `step = max(2, round(1/keep_ratio))` |
+
+**Examples:**
+- `keep_ratio=0.5` → `step=2` → `-delete '1--2'` (keep every 2nd frame)
+- `keep_ratio=0.33` → `step=3` → `-delete '1--3'` (keep every 3rd frame)
+- `keep_ratio=1.0` → no deletion, direct copy
+
 ### 1.3  Lossy compression
 ```bash
 magick "$IN_GIF" -sampling-factor 4:2:0 -strip -quality 85 "$OUT_GIF"
 # -quality ∈ [1-100]; wrapper selects value
 ```
+
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Notes |
+|---------------|-------------|--------|
+| `quality: int` | `-quality {quality}` | Range 1-100, higher = better quality |
+| N/A | `-sampling-factor 4:2:0` | Fixed chroma subsampling |
+| N/A | `-strip` | Remove metadata for smaller files |
 
 ---
 ## 2  FFmpeg (`ffmpeg`)
@@ -44,17 +67,37 @@ ffmpeg -y -v error -i "$IN_GIF" -i "$PALETTE_PNG" -filter_complex "fps=15,palett
 # fps value tweaked by wrapper; -y overwrites existing files silently
 ```
 
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Notes |
+|---------------|-------------|--------|
+| `fps: float` | `fps={fps}` in filter | Controls temporal sampling during palette generation |
+| N/A | `-y` | Auto-overwrite existing files |
+| N/A | `-v error` | Suppress verbose output |
+
 ### 2.2  Frame reduction (single-pass)
 ```bash
 ffmpeg -y -v error -i "$IN_GIF" -filter_complex "fps=7.5" "$OUT_GIF"
 # target FPS selected to meet reduction target
 ```
 
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Algorithm |
+|---------------|-------------|-----------|
+| `fps: float` | `fps={fps}` | Direct mapping to target frame rate |
+
 ### 2.3  Lossy compression (quantiser)
 ```bash
 ffmpeg -y -v error -i "$IN_GIF" -lavfi "fps=15" -q:v 30 "$OUT_GIF"
 # lower q:v ⇒ higher quality; wrapper maps quality ∈ [0-100] to q:v
 ```
+
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Algorithm |
+|---------------|-------------|-----------|
+| `qv: int` | `-q:v {qv}` | Direct mapping, lower = higher quality |
+| `fps: float` | `fps={fps}` in lavfi | Frame rate filter |
+
+**Quality Scale:** FFmpeg's `-q:v` is inverse (lower = better), range typically 1-31 for reasonable quality.
 
 ---
 ## 3  gifski (`gifski`)
@@ -69,7 +112,26 @@ gifski --quality 60 -o "$OUT_GIF" "$PNG_DIR"/frame_*.png
 # quality ∈ [0-100]; wrapper chooses value
 ```
 
+**Parameter Mapping:**
+| Wrapper Param | CLI Argument | Notes |
+|---------------|-------------|--------|
+| `quality: int` | `--quality {quality}` | Range 0-100, higher = better quality |
+| N/A | `-o {output}` | Output file specification |
+
 ⚠️  For small smoke-test fixtures (≲ 10 frames) the PNG split overhead is negligible.  For production use the wrapper will stream frames to minimise disk writes.
+
+**⚠️ Frame Reduction Algorithm Notes:**
+The current ImageMagick approach uses simple "delete every Nth frame" logic. While this can create jerky animations, it offers several advantages:
+- **Predictable:** `keep_ratio=0.5` always removes exactly 50% of frames
+- **Fast:** No frame analysis required, minimal CPU overhead  
+- **Deterministic:** Same input always produces same output
+
+**Alternative approaches considered:**
+- **Temporal sampling:** Keep frames at regular time intervals (more complex frame math)
+- **Content-aware:** Analyze frame differences, keep keyframes (requires additional processing)
+- **FFmpeg-based:** Use `fps` filter for smoother temporal resampling (already implemented in FFmpeg helper)
+
+For applications requiring smooth frame reduction, prefer the FFmpeg `frame_reduce()` helper over ImageMagick.
 
 ---
 ### 4  Notes & conventions
@@ -81,7 +143,68 @@ gifski --quality 60 -o "$OUT_GIF" "$PNG_DIR"/frame_*.png
    * `GIFLAB_FFMPEG_PATH`
    * `GIFLAB_GIFSKI_PATH`
    * `GIFLAB_GIFSICLE_PATH` (existing)
-   * `GIFLAB_FFPROBE_PATH`
 4. All recipes assume the executables are on `$PATH` if the env vars are unset.
+
+---
+## 5  Error handling & edge cases
+
+### 5.1  Command failures
+All helpers use `subprocess.run(..., check=True)` which raises `CalledProcessError` on non-zero exit codes. The `run_command()` utility converts these to `RuntimeError` with structured error messages:
+
+```python
+# Example error output
+RuntimeError: ffmpeg command failed (exit 1).
+
+STDERR:
+[ffmpeg] Error opening input file 'missing.gif': No such file or directory
+```
+
+### 5.2  Missing executables
+Each engine helper calls `discover_tool().require()` which raises `RuntimeError` if the binary is not found:
+
+```python
+RuntimeError: Required tool 'imagemagick' not found in PATH.
+📖 See docs/technical/next-tools-priority.md → Step 1 for setup instructions.
+```
+
+### 5.3  Timeout handling
+The `run_command()` utility applies a 60-second default timeout to prevent hanging on corrupted inputs or infinite loops. This can be overridden per-call:
+
+```python
+# Custom timeout for large files
+run_command(cmd, engine="ffmpeg", output_path=output, timeout=300)
+```
+
+### 5.4  Edge cases & limitations
+
+**Single-frame GIFs:**
+- ImageMagick frame reduction with `keep_ratio < 1.0` may fail on 1-frame inputs
+- FFmpeg fps filters handle single frames gracefully
+- gifski requires at least 1 frame after PNG splitting
+
+**Large palettes:**
+- ImageMagick `-colors` accepts 1-256; values outside this range raise `ValueError`
+- FFmpeg palette generation adapts automatically to input complexity
+
+**Corrupted inputs:**
+- All engines will fail with descriptive stderr output
+- The helpers propagate the original error messages without modification
+
+**Disk space:**
+- gifski's PNG splitting can require 10-50x the input GIF size in temporary storage
+- FFmpeg palette generation creates small (~10KB) intermediate files
+- ImageMagick operations are generally memory-bound, not disk-bound
+
+### 5.5  Performance considerations
+
+**Timeouts by operation:**
+- Color reduction: ~1-5 seconds for typical GIFs
+- Frame reduction: ~2-10 seconds (depends on frame count)
+- Lossy compression: ~3-15 seconds (gifski slower due to PNG workflow)
+
+**Memory usage:**
+- ImageMagick: Loads entire GIF into memory during `-coalesce`
+- FFmpeg: Streams frames, lower memory footprint
+- gifski: Moderate memory usage, but high temporary disk usage
 
 *End of file* 

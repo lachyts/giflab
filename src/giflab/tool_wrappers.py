@@ -330,13 +330,20 @@ class ImageMagickColorReducer(ColorReductionTool):
         return discover_tool("imagemagick").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        # Placeholder: just copy file
-        import shutil
-        import time
-        start = time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time() - start)*1000), "engine": "imagemagick"}
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.imagemagick import color_reduce
+        
+        colors = int(params["colors"])
+        dither = params.get("dither", False)
+        
+        return color_reduce(
+            input_path,
+            output_path,
+            colors=colors,
+            dither=dither,
+        )
 
 
 class ImageMagickFrameReducer(FrameReductionTool):
@@ -352,12 +359,18 @@ class ImageMagickFrameReducer(FrameReductionTool):
         return discover_tool("imagemagick").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start = time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time() - start)*1000), "engine": "imagemagick"}
+        if params is None or "ratio" not in params:
+            raise ValueError("params must include 'ratio' for frame reduction")
+        
+        from .external_engines.imagemagick import frame_reduce
+        
+        keep_ratio = float(params["ratio"])
+        
+        return frame_reduce(
+            input_path,
+            output_path,
+            keep_ratio=keep_ratio,
+        )
 
 
 class ImageMagickLossyCompressor(LossyCompressionTool):
@@ -373,12 +386,17 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
         return discover_tool("imagemagick").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start = time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time() - start)*1000), "engine": "imagemagick"}
+        from .external_engines.imagemagick import lossy_compress
+        
+        quality = 85  # default quality
+        if params and "quality" in params:
+            quality = int(params["quality"])
+        
+        return lossy_compress(
+            input_path,
+            output_path,
+            quality=quality,
+        )
 
 # ---------------------------------------------------------------------------
 # FFmpeg (stub)
@@ -397,12 +415,17 @@ class FFmpegColorReducer(ColorReductionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start=time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time()-start)*1000), "engine": "ffmpeg"}
+        from .external_engines.ffmpeg import color_reduce
+        
+        fps = 15.0  # default fps for palette generation
+        if params and "fps" in params:
+            fps = float(params["fps"])
+        
+        return color_reduce(
+            input_path,
+            output_path,
+            fps=fps,
+        )
 
 
 class FFmpegFrameReducer(FrameReductionTool):
@@ -418,12 +441,18 @@ class FFmpegFrameReducer(FrameReductionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start=time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time()-start)*1000), "engine": "ffmpeg"}
+        if params is None or "fps" not in params:
+            raise ValueError("params must include 'fps' for frame reduction")
+        
+        from .external_engines.ffmpeg import frame_reduce
+        
+        fps = float(params["fps"])
+        
+        return frame_reduce(
+            input_path,
+            output_path,
+            fps=fps,
+        )
 
 
 class FFmpegLossyCompressor(LossyCompressionTool):
@@ -439,12 +468,23 @@ class FFmpegLossyCompressor(LossyCompressionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start=time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time()-start)*1000), "engine": "ffmpeg"}
+        from .external_engines.ffmpeg import lossy_compress
+        
+        qv = 30  # default quantiser value
+        fps = 15.0  # default fps
+        
+        if params:
+            if "qv" in params:
+                qv = int(params["qv"])
+            if "fps" in params:
+                fps = float(params["fps"])
+        
+        return lossy_compress(
+            input_path,
+            output_path,
+            qv=qv,
+            fps=fps,
+        )
 
 # ---------------------------------------------------------------------------
 # gifski (stub)
@@ -463,12 +503,17 @@ class GifskiLossyCompressor(LossyCompressionTool):
         return discover_tool("gifski").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import shutil
-        import time
-        start=time.time()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
-        return {"render_ms": int((time.time()-start)*1000), "engine": "gifski"}
+        from .external_engines.gifski import lossy_compress
+        
+        quality = 60  # default quality
+        if params and "quality" in params:
+            quality = int(params["quality"])
+        
+        return lossy_compress(
+            input_path,
+            output_path,
+            quality=quality,
+        )
 
 # ---------------------------------------------------------------------------
 # No-Operation fallbacks (always available)

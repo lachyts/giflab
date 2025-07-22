@@ -41,22 +41,22 @@ _COLOR_WRAPPERS = [
     (GifsicleColorReducer, {"colors": 32}),
     (AnimatelyColorReducer, {"colors": 32}),
     (ImageMagickColorReducer, {"colors": 32}),
-    (FFmpegColorReducer, {"colors": 32}),
+    (FFmpegColorReducer, {"fps": 15.0}),  # FFmpeg uses fps for palette generation
 ]
 
 _FRAME_WRAPPERS = [
     (GifsicleFrameReducer, {"ratio": 0.5}),
     (AnimatelyFrameReducer, {"ratio": 0.5}),
     (ImageMagickFrameReducer, {"ratio": 0.5}),
-    (FFmpegFrameReducer, {"ratio": 0.5}),
+    (FFmpegFrameReducer, {"fps": 5.0}),  # FFmpeg uses target fps
 ]
 
 _LOSSY_WRAPPERS = [
     (GifsicleLossyCompressor, {"lossy_level": 40}),
     (AnimatelyLossyCompressor, {"lossy_level": 40}),
-    (ImageMagickLossyCompressor, {"lossy_level": 40}),
-    (FFmpegLossyCompressor, {"lossy_level": 40}),
-    (GifskiLossyCompressor, {"lossy_level": 40}),
+    (ImageMagickLossyCompressor, {"quality": 75}),  # ImageMagick uses quality 1-100
+    (FFmpegLossyCompressor, {"qv": 25, "fps": 15.0}),  # FFmpeg uses qv + fps
+    (GifskiLossyCompressor, {"quality": 70}),  # gifski uses quality 0-100
 ]
 
 
@@ -78,12 +78,17 @@ def test_color_wrapper_smoke(wrapper_cls, params, tmp_path):
     assert out.exists(), "output GIF missing"
     assert "render_ms" in meta and meta["render_ms"] >= 0
 
-    # Functional check for the two real engines – palette size should drop.
-    if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately"}:
-        after_colors = len(Image.open(out).getpalette()) // 3
-        assert after_colors <= params["colors"], (
-            f"Palette has {after_colors} colors, expected ≤ {params['colors']}"
-        )
+    # Functional check for real engines – validate actual changes
+    if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately", "imagemagick"}:
+        # For gifsicle/animately/imagemagick: check palette size reduction
+        if "colors" in params:
+            after_colors = len(Image.open(out).getpalette()) // 3
+            assert after_colors <= params["colors"], (
+                f"Palette has {after_colors} colors, expected ≤ {params['colors']}"
+            )
+    elif wrapper_cls.COMBINE_GROUP == "ffmpeg":
+        # For FFmpeg: just validate output exists and has reasonable size
+        assert out.stat().st_size > 0, "FFmpeg output is empty"
 
 
 @pytest.mark.parametrize("wrapper_cls,params", _FRAME_WRAPPERS)
@@ -99,8 +104,14 @@ def test_frame_wrapper_smoke(wrapper_cls, params, tmp_path):
     assert out.exists()
     assert "render_ms" in meta
 
-    if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately"}:
-        assert Image.open(out).n_frames < Image.open(src).n_frames
+    # Functional check for frame reduction
+    if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately", "imagemagick"}:
+        # These engines should actually reduce frame count
+        if "ratio" in params and params["ratio"] < 1.0:
+            assert Image.open(out).n_frames < Image.open(src).n_frames
+    elif wrapper_cls.COMBINE_GROUP == "ffmpeg":
+        # FFmpeg should produce valid output
+        assert out.stat().st_size > 0, "FFmpeg frame reduction output is empty"
 
 
 @pytest.mark.parametrize("wrapper_cls,params", _LOSSY_WRAPPERS)
@@ -116,6 +127,13 @@ def test_lossy_wrapper_smoke(wrapper_cls, params, tmp_path):
     assert out.exists()
     assert "render_ms" in meta
 
-    # Only real engines expected to compress
+    # Functional check for lossy compression
     if wrapper_cls.COMBINE_GROUP in {"gifsicle", "animately"}:
+        # These should definitely compress
         assert out.stat().st_size < src.stat().st_size
+    elif wrapper_cls.COMBINE_GROUP in {"imagemagick", "ffmpeg", "gifski"}:
+        # New engines should produce valid output, compression depends on settings
+        assert out.stat().st_size > 0, f"{wrapper_cls.NAME} output is empty"
+        # Some engines may increase file size depending on parameters, just validate it's reasonable
+        size_ratio = out.stat().st_size / src.stat().st_size
+        assert size_ratio <= 10.0, f"{wrapper_cls.NAME} produced unreasonably large output (ratio: {size_ratio:.1f})"

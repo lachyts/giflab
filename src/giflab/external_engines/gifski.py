@@ -36,6 +36,8 @@ def lossy_compress(
     quality: int = 60,
 ) -> dict[str, Any]:
     """Lossy compression via gifski (requires PNG frames)."""
+    if quality < 0 or quality > 100:
+        raise ValueError("quality must be in 0–100 range")
 
     magick = _magick_binary()
     gifski = _gifski_binary()
@@ -45,7 +47,9 @@ def lossy_compress(
 
         # 1️⃣ split GIF into PNG frames
         split_cmd = [magick, str(input_path), frame_pattern]
-        subprocess.run(split_cmd, check=True)
+        # Use a dummy output path since ImageMagick creates multiple files
+        dummy_output = Path(tmpdir) / "dummy"
+        run_command(split_cmd, engine="imagemagick", output_path=dummy_output)
 
         # 2️⃣ find the frames that were just created
         frame_files = sorted(glob.glob(f"{tmpdir}/frame_*.png"))
