@@ -35,8 +35,8 @@ Below is the ordered work-breakdown with completion status tracked.
 | 2 | **helpers-impl** | ✅ **DONE** | Add helper functions under `giflab.external_engines.*` that wrap each CLI and return the standard metadata dict. | Must populate `render_ms`, `engine`, `command`, `kilobytes`. |
 | 3 | **wrappers-update** | ✅ **DONE** | Replace placeholder `apply()` methods in ImageMagick/FFmpeg/gifski wrappers with real calls to the helpers. | Ensure `COMBINE_GROUP` values stay consistent. |
 | 4 | **config-update** | ✅ **DONE** | Extend `DEFAULT_ENGINE_CONFIG` and `system_tools.discover_tool` to auto-detect executables; allow `$GIFLAB_IMAGEMAGICK_PATH`, `$GIFLAB_FFMPEG_PATH`, `$GIFLAB_GIFSKI_PATH`, `$GIFLAB_GIFSICLE_PATH`, `$GIFLAB_FFPROBE_PATH` overrides. | Added full EngineConfig with env var support and updated system_tools.discover_tool |
-| 5 | **fixtures** | ⏳ **TODO** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Store under `tests/fixtures/`. |
-| 6 | **tests-integration** | ⏳ **TODO** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Validate functional change + metadata. |
+| 5 | **fixtures** | ✅ **DONE** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Created 3 fixtures: simple_4frame.gif, single_frame.gif, many_colors.gif with full documentation. |
+| 6 | **tests-integration** | ✅ **DONE** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Comprehensive integration tests covering all 14 engine×action combinations with functional validation and metadata verification. |
 | 7 | **smoke-extend** | ⏳ **TODO** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Ensure existing gifsicle / Animately smoke tests remain green and runs in fast suite. |
 | 8 | **ci-update** | ⏳ **TODO** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | |
 | 9 | **docs-update** | ⏳ **TODO** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | |
@@ -136,15 +136,15 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 4/10 tasks (40%)  
+**Completed:** 6/10 tasks (60%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 6/10 tasks (60%)  
+**Remaining:** 4/10 tasks (40%)  
 
 ### Milestone Status
-- ✅ **Stage 1-4:** CLI recipes documented + helper functions implemented + wrappers updated + configuration & environment variables
-- ⏳ **Stage 5:** Test fixtures & integration tests (next)
-- ⏳ **Stage 6:** CI pipeline updates
-- ⏳ **Stage 7:** Documentation refresh
+- ✅ **Stage 1-6:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests
+- ⏳ **Stage 7:** Smoke test enhancements (next)
+- ⏳ **Stage 8:** CI pipeline updates  
+- ⏳ **Stage 9:** Documentation refresh
 
 ### Original Sequencing Plan
 1. ✅ ImageMagick helpers & wrapper swap-in → merge.  
