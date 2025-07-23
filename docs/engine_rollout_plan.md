@@ -39,7 +39,7 @@ Below is the ordered work-breakdown with completion status tracked.
 | 6 | **tests-integration** | ✅ **DONE** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Comprehensive integration tests covering all 14 engine×action combinations with functional validation and metadata verification. |
 | 7 | **smoke-extend** | ✅ **DONE** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Enhanced smoke tests with @pytest.mark.fast markers, improved functional assertions for all engines, 30s performance thresholds, and comprehensive validation. All 13 smoke tests pass. |
 | 8 | **ci-update** | ✅ **DONE** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | Created comprehensive GitHub Actions workflows: main CI with 5 jobs (fast/core/external-tools/lint/macos), Docker-based workflow for isolated testing, complete tool installation for all engines including Animately (via repository binaries), multi-platform support, and CI documentation. |
-| 9 | **docs-update** | ⏳ **TODO** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | |
+| 9 | **docs-update** | ✅ **DONE** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | Updated all documentation to reflect dual-pipeline architecture: Production pipeline (run command, gifsicle+Animately, proven reliability) vs Experimental pipeline (experiment command, all 5 engines, testing/comparison). Fixed all incorrect CLI examples, added proper experimental pipeline usage, clarified engine access methods. |
 | 10 | **cleanup-stubs** | ⏳ **TODO** | Remove obsolete stub wrappers once real implementations are merged. | |
 
 ---
@@ -136,14 +136,37 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 8/10 tasks (80%)  
+**Completed:** 9/10 tasks (90%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 2/10 tasks (20%)  
+**Remaining:** 1/10 tasks (10%)  
 
 ### Milestone Status
-- ✅ **Stage 1-8:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements + CI pipeline
-- ⏳ **Stage 9:** Documentation refresh (next)
-- ⏳ **Stage 10:** Cleanup obsolete stubs
+- ✅ **Stage 1-9:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements + CI pipeline + comprehensive documentation
+- ⏳ **Stage 10:** Cleanup obsolete stubs (final)
+
+### Dual-Pipeline Architecture Rationale
+
+**Architecture Decision:** GifLab implements a **dual-pipeline approach** to balance stability and innovation:
+
+#### 🏭 Production Pipeline (`run` command)
+- **Engines**: gifsicle + Animately (2 engines)
+- **Philosophy**: Battle-tested, proven reliability for production workflows
+- **Use Case**: Large-scale processing, consistent results, stable performance
+- **Approach**: Minimal dependencies, well-tested, predictable behavior
+
+#### 🧪 Experimental Pipeline (`experiment` command) 
+- **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
+- **Philosophy**: Test all available engines to identify the best performers
+- **Use Case**: Engine comparison, optimization research, content-specific tuning
+- **Approach**: Comprehensive testing, innovation, performance measurement
+
+**Workflow Integration:**
+1. Use experimental pipeline (`experiment --matrix`) to identify optimal engines for your content
+2. Analyze results to understand which engines perform best for your use case  
+3. Use production pipeline (`run`) for large-scale processing with proven engines
+4. Promote experimental engines to production based on performance data
+
+This architecture ensures production stability while enabling continuous improvement through systematic experimentation. The experimental pipeline serves as a testing ground for evaluating new engines before integrating them into production workflows.
 
 ### Original Sequencing Plan
 1. ✅ ImageMagick helpers & wrapper swap-in → merge.  

@@ -34,13 +34,27 @@ git clone <your-repo-url>
 cd giflab
 poetry install
 
-# Install required tools
+# Install compression engines (dual-pipeline architecture)
+# Required: Production engines (gifsicle + Animately)
 # On macOS:
-brew install python@3.11 ffmpeg gifsicle
+brew install python@3.11 gifsicle
+# Animately included in repository (bin/darwin/arm64/animately)
 
-# On Windows/WSL:
-choco install python ffmpeg gifsicle
+# Optional: Additional engines for experimental pipeline
+brew install ffmpeg imagemagick gifski
+
+# On Linux/Ubuntu:
+sudo apt install python3.11 gifsicle
+# Animately: Download from releases (see bin/linux/x86_64/PLACEHOLDER.md)
+# Optional: sudo apt install ffmpeg imagemagick-6.q16; cargo install gifski
+
+# On Windows:
+choco install python gifsicle
+# Animately: Download from releases (see bin/windows/x86_64/PLACEHOLDER.md)
+# Optional: choco install ffmpeg imagemagick; winget install gifski
 ```
+
+📖 **For detailed setup instructions, see:** [Setup Guide](setup.md)
 
 #### Step 2: Organize Your GIFs
 
@@ -290,6 +304,7 @@ python -m giflab tag data/csv/results_20240115.csv data/raw
 - Defaults to auto-generated filename with date
 - Each row represents one compressed variant
 
+
 **`--dry-run`**
 - Shows what would be processed without actually doing it
 - Great for estimating time and checking setup
@@ -319,6 +334,38 @@ python -m giflab run data/raw data/ --workers 8 --resume --use-seed-data
 python -m giflab run data/raw data/ --dry-run
 ```
 
+#### 🎯 Pipeline-Specific Usage:
+
+**🏭 Production Processing (gifsicle + Animately):**
+```bash
+# Standard production pipeline
+python -m giflab run data/raw
+
+# Production with custom settings
+python -m giflab run data/raw --workers 8 --resume
+```
+
+**🧪 Experimental Testing (All 5 Engines):**
+```bash
+# Test all engines with comprehensive matrix
+python -m giflab experiment --matrix
+
+# Quick experimental test
+python -m giflab experiment --matrix --gifs 5
+
+# Experimental with custom sample GIFs
+python -m giflab experiment --matrix --sample-gifs-dir my_test_gifs/
+```
+
+**📊 Workflow Recommendations:**
+```bash
+# 1. Find best engines for your content
+python -m giflab experiment --matrix --gifs 10
+
+# 2. Use production pipeline for large-scale processing
+python -m giflab run data/raw --workers 8 --resume
+```
+
 ---
 
 ## 📊 Understanding Your Results
@@ -331,7 +378,7 @@ Each row in your results CSV represents one compressed variant of one GIF:
 |--------|-------------|---------|
 | `gif_sha` | Unique ID for the original GIF | `6c54c899e2b0baf7...` |
 | `orig_filename` | Original file name | `my_animation.gif` |
-| `engine` | Compression tool used | `gifsicle` |
+| `engine` | Compression tool used | `imagemagick`, `ffmpeg`, `gifski`, `gifsicle`, `animately` |
 | `lossy` | Compression level (0-120) | `40` |
 | `frame_keep_ratio` | Fraction of frames kept | `0.80` |
 | `color_keep_count` | Number of colors in palette | `128` |
@@ -350,6 +397,25 @@ Each row in your results CSV represents one compressed variant of one GIF:
 - Calculate as: `orig_kilobytes / kilobytes`
 - Higher = more compression
 - Example: 1000KB → 250KB = 4x compression
+
+### Engine Selection Guide
+
+**Which engine should you use?**
+
+| Engine | Best For | Speed | Quality | When to Use |
+|--------|----------|-------|---------|-------------|
+| **gifsicle** | Simple graphics, text | ⚡⚡⚡ Fastest | ⭐⭐ Good | Quick processing, broad compatibility |
+| **Animately** | Photos, gradients | ⚡⚡ Fast | ⭐⭐⭐ Excellent | Complex images, photo-realistic content |
+| **ImageMagick** | General purpose | ⚡⚡ Fast | ⭐⭐ Good | Versatile, when other engines aren't available |
+| **FFmpeg** | Video-like content | ⚡ Moderate | ⭐⭐⭐ Excellent | High quality, frame rate changes |
+| **gifski** | Maximum quality | ⚡ Slow | ⭐⭐⭐⭐ Best | When quality is paramount, small files needed |
+
+**Quick recommendations:**
+- **Production work**: Use `python -m giflab run` (gifsicle + Animately, proven reliability)
+- **Engine comparison**: Use `python -m giflab experiment --matrix` (tests all 5 engines)
+- **Photo-like GIFs**: Experimental pipeline will test gifski and Animately automatically
+- **Best quality**: Experimental pipeline includes gifski (highest quality compression)
+- **Large datasets**: Production pipeline optimized for scale and stability
 
 ### Finding the Best Settings
 
@@ -370,8 +436,17 @@ LIMIT 10
 **For fastest processing:**
 ```sql
 SELECT * FROM results 
+WHERE engine = 'gifsicle'
 ORDER BY render_ms ASC 
 LIMIT 10
+```
+
+**Compare engines for your content:**
+```sql
+SELECT engine, AVG(ssim) as avg_quality, AVG(kilobytes) as avg_size, AVG(render_ms) as avg_time
+FROM results 
+GROUP BY engine
+ORDER BY avg_quality DESC
 ```
 
 ---

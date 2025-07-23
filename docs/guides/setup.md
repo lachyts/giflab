@@ -1,224 +1,348 @@
-# 🎞️ GifLab Setup Guide for Windows
+# 🎞️ GifLab Setup Guide
 
-**Complete step-by-step installation guide for Windows users**
+**Complete installation guide for all platforms**
 
 ## 📋 Prerequisites Checklist
 
 Before starting, ensure you have:
-- Windows 10/11 (version 1709 or later for winget)
+- Python 3.11+ 
 - Internet connection
 - At least 2GB free disk space
+- Administrative privileges for package installations
 
-## 🚀 Step-by-Step Installation (Modern Best Practice)
+## 🚀 Cross-Platform Installation
 
-### Step 1: Install Python 3.11+ (Recommended Method)
+### Step 1: Install Python 3.11+
 
-**Using winget (Modern Windows Best Practice):**
+#### macOS
+```bash
+# Using Homebrew (recommended)
+brew install python@3.11
+
+# Verify installation
+python3.11 --version
+```
+
+#### Linux/Ubuntu
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3.11 python3.11-pip python3.11-venv
+
+# Verify installation
+python3.11 --version
+```
+
+#### Windows
 ```powershell
-# Install Python 3.11 (recommended for stability)
+# Using winget (recommended)
 winget install Python.Python.3.11
 
-# Or install Python 3.12 (latest)
-winget install Python.Python.3.12
-```
-
-**Alternative Methods:**
-- **Microsoft Store**: Search "Python 3.11" and install
-- **Official Installer**: https://www.python.org/downloads/ (if winget fails)
-
-**Verify Installation:**
-```powershell
+# Alternative: Microsoft Store or python.org
+# Verify installation
 python --version
-# Should show: Python 3.11.x or higher
 ```
 
-### Step 2: Install System Dependencies
+### Step 2: Install Poetry
 
-**Using winget (Recommended):**
-```powershell
-# Install FFmpeg (video processing)
-winget install Gyan.FFmpeg
+All platforms:
+```bash
+# Official installer (recommended)
+curl -sSL https://install.python-poetry.org | python3 -
 
-# Install Git (if not already installed)
-winget install Git.Git
-```
-
-**Note**: Gifsicle is not available via winget, so we'll install it via Chocolatey or manually.
-
-### Step 3: Install Gifsicle
-
-**Option A: Using Chocolatey (if you prefer package managers)**
-```powershell
-# Install Chocolatey first (run as Administrator)
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-
-# Then install Gifsicle
-choco install gifsicle
-```
-
-**Option B: Manual Installation**
-1. Download from: https://eternallybored.org/misc/gifsicle/
-2. Extract to a folder (e.g., `C:\Program Files\gifsicle\`)
-3. Add to PATH: `C:\Program Files\gifsicle\`
-
-### Step 4: Install Poetry
-
-**Using official installer (Poetry is not available in winget):**
-```powershell
-(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
-```
-
-**Alternative method using pip:**
-```powershell
+# Alternative: pip install
 pip install poetry
-```
 
-**Verify Poetry:**
-```powershell
+# Verify installation
 poetry --version
-# Should show: Poetry (version x.x.x)
 ```
 
-### Step 5: Install GifLab Dependencies
+### Step 3: Install Compression Engines
 
-1. Navigate to your GifLab directory:
+GifLab uses a **dual-pipeline architecture** to balance stability and innovation:
+
+#### 🏭 **Production Pipeline** (`run` command)
+- **Engines**: gifsicle + Animately (proven, reliable)
+- **Purpose**: Large-scale processing, production workflows
+- **Philosophy**: Use battle-tested engines for consistent results
+
+#### 🧪 **Experimental Pipeline** (`experiment` command)
+- **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
+- **Purpose**: Testing, comparison, finding optimal engines for your content
+- **Philosophy**: Experiment with all available engines to identify the best performers, then promote winners to production
+
+**Installation Strategy**: Install core engines first, then add experimental engines as needed.
+
+#### macOS Installation
+```bash
+# Required: Production engines
+brew install gifsicle
+# Animately: Pre-installed in repository (bin/darwin/arm64/animately)
+
+# Optional: Additional engines for experimental pipeline
+brew install ffmpeg imagemagick gifski
+
+# Verify core installations
+gifsicle --version
+./bin/darwin/arm64/animately --version
+
+# Verify experimental engines (optional)
+ffmpeg -version      # if installed
+magick --version     # if installed  
+gifski --version     # if installed
+```
+
+#### Linux/Ubuntu Installation
+```bash
+# Required: Production engines
+sudo apt update
+sudo apt install gifsicle
+# Animately: Download and place in bin/linux/x86_64/
+# See bin/linux/x86_64/PLACEHOLDER.md for download instructions
+
+# Optional: Additional engines for experimental pipeline
+sudo apt install ffmpeg imagemagick-6.q16
+
+# Optional: gifski via cargo (Rust)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+cargo install gifski
+
+# Verify core installations
+gifsicle --version
+./bin/linux/x86_64/animately --version  # if downloaded
+
+# Verify experimental engines (optional)
+ffmpeg -version      # if installed
+magick --version     # if installed
+gifski --version     # if installed
+```
+
+#### Windows Installation
 ```powershell
-cd C:\Users\lachl\repos\Animately\giflab
+# Install Chocolatey first (if needed)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Required: Production engines
+choco install gifsicle
+# Animately: Download and place in bin/windows/x86_64/
+# See bin/windows/x86_64/PLACEHOLDER.md for download instructions
+
+# Optional: Additional engines for experimental pipeline
+choco install ffmpeg imagemagick
+winget install gifski  # or via cargo
+
+# Verify core installations
+gifsicle --version
+bin\windows\x86_64\animately.exe --version  # if downloaded
+
+# Verify experimental engines (optional)
+ffmpeg -version      # if installed
+magick --version     # if installed
+gifski --version     # if installed
+```
+
+### Step 4: Install GifLab Dependencies
+
+1. Clone or navigate to the GifLab directory:
+```bash
+git clone <repository-url>
+cd giflab
 ```
 
 2. Install Python dependencies:
-```powershell
+```bash
 poetry install
 ```
 
-This will install all required packages:
-- Pillow (image processing)
-- NumPy (numerical computing)
-- Pandas (data analysis)
-- OpenCV (computer vision)
-- scikit-image (image analysis)
-- PyTorch (machine learning)
-- CLIP (AI tagging)
-- And many more...
+This installs all required packages:
+- **Image Processing**: Pillow, OpenCV, scikit-image
+- **Data Analysis**: NumPy, Pandas, matplotlib, seaborn  
+- **Machine Learning**: PyTorch, transformers, CLIP
+- **Quality Metrics**: scipy, scikit-learn
+- **Testing**: pytest, pytest-cov
 
-### Step 6: Enable PowerShell Scripts
+### Step 5: Environment Variables (Optional)
 
-```powershell
-# Allow local scripts to run
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+Configure custom engine paths if needed:
+
+#### macOS/Linux
+```bash
+# Add to ~/.bashrc, ~/.zshrc, or ~/.profile
+export GIFLAB_GIFSICLE_PATH=/usr/local/bin/gifsicle
+export GIFLAB_ANIMATELY_PATH=/custom/path/animately
+export GIFLAB_IMAGEMAGICK_PATH=/usr/local/bin/magick
+export GIFLAB_FFMPEG_PATH=/usr/local/bin/ffmpeg
+export GIFLAB_FFPROBE_PATH=/usr/local/bin/ffprobe
+export GIFLAB_GIFSKI_PATH=/usr/local/bin/gifski
 ```
 
-### Step 7: Verify Installation
-
-Run the verification script:
+#### Windows
 ```powershell
-.\setup_check.ps1
+# Add to PowerShell profile or set permanently
+$env:GIFLAB_GIFSICLE_PATH = "C:\Program Files\gifsicle\gifsicle.exe"
+$env:GIFLAB_ANIMATELY_PATH = "C:\custom\path\animately.exe"
+$env:GIFLAB_IMAGEMAGICK_PATH = "C:\Program Files\ImageMagick\magick.exe"
+$env:GIFLAB_FFMPEG_PATH = "C:\Program Files\ffmpeg\bin\ffmpeg.exe"
+$env:GIFLAB_FFPROBE_PATH = "C:\Program Files\ffmpeg\bin\ffprobe.exe"
+$env:GIFLAB_GIFSKI_PATH = "C:\Program Files\gifski\gifski.exe"
 ```
 
-This will check:
-- ✅ Python 3.11+ installation
-- ✅ pip availability
-- ✅ Poetry installation
-- ✅ FFmpeg installation
-- ✅ Gifsicle installation
-- ✅ Directory structure
-- ✅ Project configuration
+### Step 6: Verify Complete Installation
 
-## 🎯 Quick Start
+Run the comprehensive verification:
 
-### 1. Add Sample GIFs
-```powershell
-# Copy some GIF files to the raw data directory
-Copy-Item "C:\path\to\your\gifs\*.gif" "data\raw\"
+```bash
+# Test engine detection and availability
+poetry run python -c "
+from giflab.system_tools import get_available_tools
+tools = get_available_tools()
+for name, info in tools.items():
+    status = '✅' if info.available else '❌'
+    version = f' v{info.version}' if info.version else ''
+    print(f'{status} {name}: {info.name}{version}')
+"
+
+# Run smoke tests to verify functionality
+poetry run python -m pytest tests/test_engine_smoke.py -v
+
+# Test with sample processing
+mkdir -p data/raw
+# Add a sample GIF to data/raw/
+poetry run python -m giflab experiment --matrix
 ```
 
-### 2. Start Analysis
-```powershell
-# Launch Jupyter Notebook
-poetry run jupyter notebook
+Expected output:
 ```
-
-### 3. Open Analysis Notebook
-- In Jupyter, navigate to `notebooks/`
-- Open `01_explore_dataset.ipynb`
-- Follow the step-by-step instructions
+✅ imagemagick: magick v7.1.2-0
+✅ ffmpeg: ffmpeg v7.1.1
+✅ ffprobe: ffprobe v7.1.1
+✅ gifski: gifski v[OPTIONS]
+✅ gifsicle: gifsicle v1.95
+✅ animately: animately v1.1.20.0
+```
 
 ## 🔧 Troubleshooting
 
-### "Python not found"
-- Ensure Python is added to PATH during installation
-- Restart PowerShell after installation
-- Try: `refreshenv` (if using Chocolatey)
+### Engine Not Found
+```bash
+# Check which engines are detected
+poetry run python -c "from giflab.system_tools import get_available_tools; print(get_available_tools())"
 
-### "Poetry not found"
-- Reinstall Poetry: `(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -`
-- Add to PATH manually if needed
+# Verify PATH contains engine directories
+echo $PATH  # macOS/Linux
+echo $env:PATH  # Windows
 
-### "FFmpeg/Gifsicle not found"
-- Install via winget: `winget install Gyan.FFmpeg`
-- For Gifsicle: Use Chocolatey or manual installation
-- Restart PowerShell after installation
-- Check PATH environment variable
-
-### "Import errors in notebooks"
-- Ensure you're in the project root directory
-- Run: `poetry install` to install dependencies
-- Use: `poetry run jupyter notebook` to launch Jupyter
-
-### "Permission denied"
-- Run PowerShell as Administrator for system-wide installations
-- Check file permissions on the project directory
-
-## 📊 Performance Tips
-
-### For Small Collections (<100 GIFs)
-```powershell
-poetry run python -m giflab run data/raw data/ --workers 4
+# Test individual engine
+ffmpeg -version
+gifsicle --version
+magick --version
+gifski --version
 ```
 
-### For Medium Collections (100-1000 GIFs)
-```powershell
-# Run analysis first
-poetry run jupyter notebook
-# Then process with optimization
-poetry run python -m giflab run data/raw data/ --workers 6 --resume
+### Repository Binary Issues (Animately)
+```bash
+# Check if repository binary exists
+ls -la bin/darwin/arm64/animately    # macOS
+ls -la bin/linux/x86_64/animately    # Linux  
+dir bin\windows\x86_64\animately.exe # Windows
+
+# Test repository binary directly
+./bin/darwin/arm64/animately --version  # macOS
 ```
 
-### For Large Collections (1000+ GIFs)
-```powershell
-# Definitely run notebooks first
-poetry run python -m giflab run data/raw data/ --workers 8 --resume --use-seed-data
+### Python/Poetry Issues
+```bash
+# Verify Python version
+python --version  # Should be 3.11+
+
+# Reinstall Poetry if needed
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Clear Poetry cache
+poetry cache clear --all pypi
+
+# Reinstall dependencies
+poetry install --no-cache
 ```
 
-## 🎉 You're Ready!
+### Permission Issues
+```bash
+# macOS/Linux: Fix file permissions
+chmod +x bin/darwin/arm64/animately    # macOS
+chmod +x bin/linux/x86_64/animately    # Linux
 
-After completing the setup:
+# Windows: Run PowerShell as Administrator
+# Right-click PowerShell → "Run as Administrator"
+```
 
-1. **Add GIFs** to `data/raw/`
-2. **Run analysis** with Jupyter notebooks
-3. **Process GIFs** with the CLI
-4. **Analyze results** in the generated CSV files
+## 🎯 Engine-Specific Notes
 
-For detailed usage instructions, see [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md)
+### ImageMagick
+- **Version**: Requires ImageMagick 7.x for `magick` command
+- **Legacy**: ImageMagick 6.x uses `convert` command (configure via environment variable)
+- **Formats**: Supports widest range of image formats
 
-## 📞 Getting Help
+### FFmpeg  
+- **Quality**: Highest quality video-based processing
+- **Dependencies**: Includes ffprobe for metadata extraction
+- **Performance**: Excellent for frame rate manipulation
 
-- **Setup issues**: Run `.\setup_check.ps1` and check the output
-- **Usage questions**: See [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md)
-- **Technical details**: See [README.md](README.md)
-- **Project scope**: See [PROJECT_SCOPE.md](PROJECT_SCOPE.md)
+### gifski
+- **Specialization**: Lossy compression only (highest quality)
+- **Installation**: Via cargo (Rust) or platform packages
+- **Performance**: Slower but produces smallest high-quality files
 
-## 🏆 Why This Approach is Best Practice
+### gifsicle
+- **Compatibility**: Most widely supported engine
+- **Speed**: Fastest processing
+- **Optimization**: Built-in GIF optimization algorithms
 
-### Winget Advantages:
-- **Official Microsoft tool** - Built into Windows 10/11
-- **Automatic PATH management** - No manual configuration needed
-- **Version management** - Easy updates and rollbacks
-- **Security** - Verified packages from trusted sources
-- **Consistency** - Same installation method across machines
+### Animately
+- **Distribution**: Repository binaries (not publicly available)
+- **Platforms**: macOS ARM64 (included), Windows/Linux (download required)
+- **Strengths**: Complex gradients, photo-realistic content
 
-### Modern Windows Development:
-- **No manual downloads** - Everything through package managers
-- **Reproducible setup** - Same commands work everywhere
-- **Easy maintenance** - Simple update commands
-- **Professional standard** - Used by Microsoft and the community 
+## 🎉 Quick Start After Setup
+
+1. **Add sample GIFs**:
+```bash
+mkdir -p data/raw
+cp /path/to/your/gifs/*.gif data/raw/
+```
+
+2. **Experimental testing** (All 5 engines):
+```bash
+# Test all engines with small dataset
+poetry run python -m giflab experiment --matrix
+
+# Analyze results
+poetry run jupyter notebook notebooks/01_explore_dataset.ipynb
+```
+
+3. **Production processing** (gifsicle + Animately):
+```bash
+# Large-scale processing with proven engines
+poetry run python -m giflab run data/raw
+
+# Production with custom settings
+poetry run python -m giflab run data/raw --workers 8 --resume
+```
+
+## 📚 Next Steps
+
+- **Beginner Guide**: [docs/guides/beginner.md](beginner.md)
+- **Engine Documentation**: [docs/engines/](../engines/)
+- **CI Setup**: [docs/ci-setup.md](../ci-setup.md)
+- **Project Overview**: [README.md](../../README.md)
+
+## 💡 Pro Tips
+
+- **Dual-pipeline workflow**: Use `experiment` to find best engines, then `run` for production
+- **Repository binaries**: Animately auto-detected from `bin/` directory  
+- **Minimal setup**: Only gifsicle + Animately needed for production pipeline
+- **Engine comparison**: `experiment --matrix` tests all 5 engines automatically
+- **Performance**: Production pipeline optimized for large-scale processing
+- **Innovation**: Experimental pipeline tests newer engines (ImageMagick, FFmpeg, gifski) 

@@ -493,8 +493,8 @@ def organize_directories(raw_dir: Path):
 )
 @click.option(
     "--matrix/--no-matrix",
-    default=False,
-    help="Enable dynamic matrix mode (ignores --strategies)",
+    default=True,
+    help="Enable dynamic matrix mode with all 5 engines (default: true)",
 )
 @click.option(
     "--no-analysis",

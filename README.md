@@ -4,7 +4,7 @@ GIF compression and analysis laboratory for systematic performance evaluation.
 
 ## 👋 New to GifLab?
 
-**🚀 Complete Beginners:** Start with our [**Beginner's Guide**](BEGINNER_GUIDE.md) for step-by-step instructions and hand-holding through your first GIF analysis.
+**🚀 Complete Beginners:** Start with our [**Beginner's Guide**](docs/guides/beginner.md) for step-by-step instructions and hand-holding through your first GIF analysis.
 
 **🔧 Developers & Advanced Users:** Continue reading for technical details and quick reference.
 
@@ -17,9 +17,32 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 - **Frame keep ratios**: 1.00, 0.90, 0.80, 0.70, 0.50
 - **Palette sizes**: 256, 128, 64 colors  
 - **Lossy levels**: 0, 40, 120
-- **Engines**: gifsicle, animately
+- **Production Engines**: **gifsicle**, **Animately** (main pipeline)
+- **Experimental Engines**: **ImageMagick**, **FFmpeg**, **gifski** (experimental pipeline)
 
 Each variant is measured for file size, SSIM quality, and render time.
+
+### Dual Pipeline Architecture
+
+GifLab uses a **two-pipeline approach** to balance stability and innovation:
+
+#### 🏭 **Production Pipeline** (`run` command)
+- **Engines**: gifsicle, Animately (proven, reliable)
+- **Purpose**: Large-scale processing, production workflows
+- **Usage**: `python -m giflab run data/raw`
+
+#### 🧪 **Experimental Pipeline** (`experiment` command)  
+- **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
+- **Purpose**: Testing, comparison, finding optimal engines
+- **Usage**: `python -m giflab experiment --matrix`
+
+| Engine | Pipeline | Color | Frame | Lossy | Best For |
+|--------|----------|-------|-------|--------|----------|
+| **gifsicle** | Both | ✅ | ✅ | ✅ | Fast, lightweight, widely compatible |
+| **Animately** | Both | ✅ | ✅ | ✅ | Complex gradients, photo-realistic content |
+| **ImageMagick** | Experimental | ✅ | ✅ | ✅ | General-purpose, wide format support |
+| **FFmpeg** | Experimental | ✅ | ✅ | ✅ | High-quality video-based processing |
+| **gifski** | Experimental | ❌ | ❌ | ✅ | Highest quality lossy compression |
 
 ### Dual-Mode Workflow
 
@@ -54,6 +77,9 @@ The **Experiment → Analyse → Run** loop keeps production runs fast and data-
 Different GIF compression tools excel at different types of content:
 - **Gifsicle**: Better for simple graphics, text, high-contrast content
 - **Animately**: Superior for complex gradients, many colors, photo-realistic content
+- **ImageMagick**: Versatile general-purpose tool with extensive format support
+- **FFmpeg**: High-quality video-based processing with advanced filters
+- **gifski**: Highest quality lossy compression using advanced algorithms
 - **Hybrid approaches**: Can combine strengths of multiple tools
 
 ### The Solution
@@ -235,6 +261,64 @@ poetry run python -m giflab run data/raw --pipelines winners.yaml
 poetry run python -m giflab tag results.csv data/raw
 ```
 
+## Pipeline Usage Examples
+
+### 🏭 Production Pipeline (Reliable, Fast)
+```bash
+# Standard production processing with gifsicle + Animately
+poetry run python -m giflab run data/raw
+
+# Production with custom settings
+poetry run python -m giflab run data/raw --workers 8 --resume
+
+# Production with pipeline YAML (advanced)
+poetry run python -m giflab run data/raw --pipelines custom_pipelines.yaml
+```
+
+### 🧪 Experimental Pipeline (All 5 Engines)
+```bash
+# Test all 5 engines with comprehensive matrix
+poetry run python -m giflab experiment --matrix
+
+# Quick experimental test with fewer variants  
+poetry run python -m giflab experiment --matrix --gifs 5
+
+# Experimental with custom sample GIFs
+poetry run python -m giflab experiment --matrix --sample-gifs-dir my_test_gifs/
+
+# Legacy strategy mode (gifsicle + Animately only)
+poetry run python -m giflab experiment --no-matrix --strategies all
+```
+
+### 🔬 Engine-Specific Testing
+To test specific engines, use the experimental pipeline which automatically includes:
+- **ImageMagick**: General-purpose processing
+- **FFmpeg**: High-quality video-based compression  
+- **gifski**: Premium lossy compression quality
+- **gifsicle**: Fast, reliable baseline
+- **Animately**: Complex gradient optimization
+
+### 📊 Workflow Recommendations
+
+**For Production Work:**
+```bash
+# Large datasets, proven reliability
+poetry run python -m giflab run data/raw --workers 8 --resume
+```
+
+**For Engine Comparison:**
+```bash  
+# Compare all engines to find the best for your content
+poetry run python -m giflab experiment --matrix --gifs 10
+poetry run python -m giflab select-pipelines experiment_results.csv --top 3
+```
+
+**For Research & Development:**
+```bash
+# Full experimental matrix with comprehensive analysis
+poetry run python -m giflab experiment --matrix --gifs 20 --workers 6
+```
+
 ## Project Structure
 
 ```
@@ -279,29 +363,59 @@ export GIFLAB_FFPROBE_PATH=/usr/local/bin/ffprobe
 export GIFLAB_GIFSKI_PATH=/usr/local/bin/gifski
 ```
 
-### macOS
+### Tool Installation by Platform
+
+#### macOS
 ```bash
 # Install tools via Homebrew
 brew install python@3.11 ffmpeg gifsicle imagemagick
 
-# Install gifski (optional, for high-quality lossy compression)
+# Install gifski for high-quality lossy compression
 brew install gifski
 
-# Install animately-cli binary from releases
-# Set GIFLAB_ANIMATELY_PATH if not in system PATH
+# Animately binary included in repository (bin/darwin/arm64/animately)
+# Automatically detected - no additional installation required
 ```
 
-### Windows/WSL
+#### Linux/Ubuntu
+```bash
+# Install via package manager
+sudo apt update
+sudo apt install python3.11 ffmpeg gifsicle imagemagick-6.q16
+
+# Install gifski via cargo
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+cargo install gifski
+
+# Animately: Download from releases and place in bin/linux/x86_64/
+# See bin/linux/x86_64/PLACEHOLDER.md for instructions
+```
+
+#### Windows
 ```bash
 # Using Chocolatey
 choco install python ffmpeg gifsicle imagemagick
 
-# Or use WSL2 with Linux package manager
-sudo apt update
-sudo apt install python3.11 ffmpeg gifsicle imagemagick
+# Install gifski via cargo or download binary
+winget install gifski
 
-# Set environment variables in your shell profile (.bashrc, .zshrc, etc.)
-# or update engine paths in src/giflab/config.py directly
+# Animately: Download from releases and place in bin/windows/x86_64/
+# See bin/windows/x86_64/PLACEHOLDER.md for instructions
+```
+
+#### Repository Binaries
+GifLab includes platform-specific binaries for tools not available via package managers:
+- **Animately**: Pre-built binaries in `bin/<platform>/<architecture>/`
+- **Automatic detection**: Tool discovery checks repository binaries before system PATH
+- **Cross-platform support**: macOS ARM64, Linux x86_64, Windows x86_64
+
+### Verification
+```bash
+# Test all engines are properly configured
+poetry run python -c "from giflab.system_tools import get_available_tools; print(get_available_tools())"
+
+# Run smoke tests to verify functionality
+poetry run python -m pytest tests/test_engine_smoke.py -v
 ```
 
 ## 📈 Machine-Learning Dataset Best Practices  
