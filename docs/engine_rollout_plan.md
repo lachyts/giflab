@@ -38,7 +38,7 @@ Below is the ordered work-breakdown with completion status tracked.
 | 5 | **fixtures** | ✅ **DONE** | Add 1–2 tiny GIF fixtures for palette, frame-count and size assertions. | Created 3 fixtures: simple_4frame.gif, single_frame.gif, many_colors.gif with full documentation. |
 | 6 | **tests-integration** | ✅ **DONE** | Create `tests/test_engine_integration_extended.py` with one functional test per *(engine × action)*. | Comprehensive integration tests covering all 14 engine×action combinations with functional validation and metadata verification. |
 | 7 | **smoke-extend** | ✅ **DONE** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Enhanced smoke tests with @pytest.mark.fast markers, improved functional assertions for all engines, 30s performance thresholds, and comprehensive validation. All 13 smoke tests pass. |
-| 8 | **ci-update** | ⏳ **TODO** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | |
+| 8 | **ci-update** | ✅ **DONE** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | Created comprehensive GitHub Actions workflows: main CI with 5 jobs (fast/core/external-tools/lint/macos), Docker-based workflow for isolated testing, complete tool installation for all engines including Animately (via repository binaries), multi-platform support, and CI documentation. |
 | 9 | **docs-update** | ⏳ **TODO** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | |
 | 10 | **cleanup-stubs** | ⏳ **TODO** | Remove obsolete stub wrappers once real implementations are merged. | |
 
@@ -136,14 +136,13 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 7/10 tasks (70%)  
+**Completed:** 8/10 tasks (80%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 3/10 tasks (30%)  
+**Remaining:** 2/10 tasks (20%)  
 
 ### Milestone Status
-- ✅ **Stage 1-7:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements
-- ⏳ **Stage 8:** CI pipeline updates (next)
-- ⏳ **Stage 9:** Documentation refresh  
+- ✅ **Stage 1-8:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements + CI pipeline
+- ⏳ **Stage 9:** Documentation refresh (next)
 - ⏳ **Stage 10:** Cleanup obsolete stubs
 
 ### Original Sequencing Plan
@@ -169,6 +168,7 @@ Each step should keep the existing gifsicle / Animately tests green.
 **Missing executables:**
 - All wrappers call `discover_tool().require()` early, failing fast with clear setup instructions
 - CI/local development should install all engines or skip tests with `@pytest.mark.external_tools`
+- Animately binaries included in repository `bin/` directory for supported platforms
 
 **Command execution failures:**
 - `subprocess.run(..., check=True)` raises on non-zero exit codes

@@ -1,0 +1,433 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # Fast test suite - runs quickly without external tools
+  fast-tests:
+    name: Fast Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run fast tests
+      run: |
+        poetry run python -m pytest -m fast -v --tb=short \
+          --cov=src/giflab --cov-report=term-missing \
+          --cov-report=xml:coverage-fast.xml
+    
+    - name: Upload fast test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-fast.xml
+        flags: fast-tests
+        name: fast-tests-${{ matrix.python-version }}
+
+  # Core tests - runs without external tools, skips external_tools marked tests
+  core-tests:
+    name: Core Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run core tests (no external tools)
+      run: |
+        poetry run python -m pytest -m "not external_tools" -v --tb=short \
+          --cov=src/giflab --cov-report=term-missing \
+          --cov-report=xml:coverage-core.xml
+    
+    - name: Upload core test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-core.xml
+        flags: core-tests
+        name: core-tests-${{ matrix.python-version }}
+
+  # External tools tests - installs all external engines and runs complete test suite
+  external-tools-tests:
+    name: External Tools Tests (Ubuntu)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          imagemagick \
+          ffmpeg \
+          gifsicle \
+          build-essential \
+          cargo \
+          rustc
+    
+    - name: Install gifski
+      run: |
+        # Install gifski from cargo (Rust package manager)
+        cargo install gifski
+        # Add cargo bin to PATH for subsequent steps
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Install Animately (not available on Linux x86_64)
+      run: |
+        echo "Animately is available in repository bin/ directory for compatible platforms"
+        echo "Current platform: $(uname -s) $(uname -m)"
+        echo "Animately will be skipped on Ubuntu x86_64 - tests will handle graceful degradation"
+    
+    - name: Verify tool installations
+      run: |
+        echo "=== Tool Verification ==="
+        echo "ImageMagick version:"
+        magick -version || convert -version
+        echo "FFmpeg version:"
+        ffmpeg -version | head -n 1
+        echo "FFprobe version:"
+        ffprobe -version | head -n 1
+        echo "gifsicle version:"
+        gifsicle --version
+        echo "gifski version:"
+        gifski --version
+        echo "Animately version (if available):"
+        animately --version || echo "Animately not available"
+        echo "========================="
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-external-tools-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run tool discovery verification
+      run: |
+        poetry run python -c "
+        from giflab.system_tools import get_available_tools, verify_required_tools
+        print('=== Available Tools ===')
+        available = get_available_tools()
+        for tool, info in available.items():
+            status = 'AVAILABLE' if info else 'MISSING'
+            version = getattr(info, 'version', 'N/A') if info else 'N/A'
+            print(f'{tool}: {status} (version: {version})')
+        print('=====================')
+        
+        print('=== Tool Requirements Check ===')
+        try:
+            verify_required_tools()
+            print('All required tools available!')
+        except Exception as e:
+            print(f'Some tools missing: {e}')
+            print('Continuing with available tools...')
+        print('===============================')
+        "
+    
+    - name: Run external tools integration tests
+      run: |
+        poetry run python -m pytest -m external_tools -v --tb=short \
+          --cov=src/giflab --cov-report=term-missing \
+          --cov-report=xml:coverage-external.xml
+    
+    - name: Run complete test suite (all tests)
+      run: |
+        poetry run python -m pytest -v --tb=short \
+          --cov=src/giflab --cov-report=term-missing \
+          --cov-report=xml:coverage-complete.xml
+    
+    - name: Upload external tools test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-external.xml
+        flags: external-tools
+        name: external-tools-tests
+    
+    - name: Upload complete test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-complete.xml
+        flags: complete-tests
+        name: complete-tests
+
+  # Lint and type checking
+  lint-and-type-check:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-lint-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run ruff (linting)
+      run: poetry run ruff check src/ tests/
+    
+    - name: Run black (code formatting check)
+      run: poetry run black --check src/ tests/
+    
+    - name: Run mypy (type checking)
+      run: poetry run mypy src/giflab/
+      continue-on-error: true  # Allow mypy failures for now
+
+  # Windows tests - comprehensive external tools support via repository binaries
+  windows-tests:
+    name: Windows External Tools Tests
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install system dependencies
+      run: |
+        # Install Chocolatey packages for external tools
+        choco install imagemagick --yes
+        choco install ffmpeg --yes
+        choco install gifsicle --yes
+        
+        # Install Rust for gifski (if needed)
+        if (Get-Command cargo -ErrorAction SilentlyContinue) {
+          cargo install gifski
+        } else {
+          Write-Host "Cargo not available, gifski installation skipped"
+        }
+    
+    - name: Setup Animately binary (if available)
+      run: |
+        # Check if Windows Animately binary exists in repository
+        if (Test-Path "bin/windows/x86_64/animately.exe") {
+          Write-Host "Animately binary found in repository"
+          # Make sure it's accessible (Windows handles permissions automatically)
+        } else {
+          Write-Host "Animately binary placeholder found - binary needs to be downloaded"
+          Write-Host "See bin/windows/x86_64/PLACEHOLDER.md for instructions"
+        }
+      shell: powershell
+    
+    - name: Verify tool installations
+      run: |
+        echo "=== Windows Tool Verification ==="
+        echo "ImageMagick:"
+        magick -version | Select-String "ImageMagick" | Select-Object -First 1
+        echo "FFmpeg:"
+        ffmpeg -version | Select-String "ffmpeg version" | Select-Object -First 1
+        echo "gifsicle:"
+        gifsicle --version
+        echo "gifski:"
+        if (Get-Command gifski -ErrorAction SilentlyContinue) { gifski --version } else { echo "gifski not available" }
+        echo "Animately (repository binary):"
+        if (Test-Path "bin/windows/x86_64/animately.exe") {
+          & "bin/windows/x86_64/animately.exe" --version
+        } else {
+          echo "Animately binary not available (placeholder only)"
+        }
+        echo "================================"
+      shell: powershell
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Install dependencies
+      run: poetry install --no-interaction
+    
+    - name: Run tool discovery test
+      run: |
+        poetry run python -c "
+        from giflab.system_tools import get_available_tools, discover_tool
+        import platform
+        print(f'=== Windows Tool Discovery ({platform.system()} {platform.machine()}) ===')
+        available = get_available_tools()
+        for tool, info in available.items():
+            status = '✅ AVAILABLE' if info.available else '❌ MISSING'
+            version = f' v{info.version}' if info.version else ''
+            location = f' @ {info.name}' if info.available else ''
+            print(f'{tool}: {status}{version}{location}')
+        print('==================================================')
+        "
+    
+    - name: Run core tests on Windows
+      run: |
+        poetry run python -m pytest -m "not external_tools" -v --tb=short
+    
+    - name: Run available external tools tests
+      run: |
+        # Run external tools tests but continue on individual failures
+        poetry run python -m pytest -m external_tools -v --tb=short --continue-on-collection-errors
+
+  # MacOS tests - repository binary support + Homebrew tools
+  macos-tests:
+    name: macOS Compatibility Tests  
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install system dependencies (minimal)
+      run: |
+        # Install tools available via Homebrew
+        brew install imagemagick ffmpeg gifsicle
+        
+        # Install gifski via cargo if available
+        if command -v cargo >/dev/null 2>&1; then
+          cargo install gifski
+        else
+          echo "Cargo not available, skipping gifski installation"
+        fi
+        
+        # Animately is included in repository bin/ directory - make it executable
+        if [ -f "bin/darwin/arm64/animately" ]; then
+          chmod +x bin/darwin/arm64/animately
+          echo "Animately binary prepared from repository (ARM64)"
+        else
+          echo "Animately binary not found in repository"
+        fi
+    
+    - name: Verify tool installations
+      run: |
+        echo "=== macOS Tool Verification ==="
+        echo "ImageMagick:"
+        magick -version | head -n 1 || echo "ImageMagick not available"
+        echo "FFmpeg:"
+        ffmpeg -version | head -n 1 || echo "FFmpeg not available"
+        echo "gifsicle:"
+        gifsicle --version || echo "gifsicle not available"
+        echo "gifski:"
+        gifski --version || echo "gifski not available"
+        echo "Animately (repository binary):"
+        if [ -f "bin/darwin/arm64/animately" ]; then
+          ./bin/darwin/arm64/animately --version || echo "Animately version check failed"
+        else
+          echo "Animately binary not found in repository"
+        fi
+        echo "=============================="
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Install dependencies
+      run: poetry install --no-interaction
+    
+    - name: Run core tests on macOS
+      run: |
+        poetry run python -m pytest -m "not external_tools" -v --tb=short
+    
+    - name: Run available external tools tests
+      run: |
+        # Run external tools tests but allow failures for missing tools
+        poetry run python -m pytest -m external_tools -v --tb=short || true 

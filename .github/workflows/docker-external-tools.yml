@@ -1,0 +1,106 @@
+name: Docker External Tools Tests
+
+on:
+  # Run this workflow manually or on specific triggers
+  workflow_dispatch:
+  schedule:
+    # Run weekly to catch external tool compatibility issues
+    - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
+
+jobs:
+  docker-external-tools:
+    name: External Tools Tests (Docker)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker image with all external tools
+      run: |
+        # Create a Dockerfile for testing environment
+        cat > Dockerfile.test << 'EOF'
+        FROM python:3.11-slim
+        
+        # Install system dependencies and all external tools
+        RUN apt-get update && apt-get install -y \
+            imagemagick \
+            ffmpeg \
+            gifsicle \
+            build-essential \
+            cargo \
+            rustc \
+            curl \
+            git \
+            && apt-get clean \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Install gifski via cargo
+        RUN cargo install gifski
+        ENV PATH="/root/.cargo/bin:${PATH}"
+        
+        # Install Poetry
+        RUN pip install poetry
+        
+        # Set working directory
+        WORKDIR /app
+        
+        # Copy project files
+        COPY . .
+        
+        # Install project dependencies
+        RUN poetry config virtualenvs.create false \
+            && poetry install --no-interaction
+        
+        # Verify all tools are installed
+        RUN echo "=== Docker Tool Verification ===" \
+            && magick -version | head -n 1 \
+            && ffmpeg -version | head -n 1 \
+            && ffprobe -version | head -n 1 \
+            && gifsicle --version \
+            && gifski --version \
+            && echo "================================"
+        
+        # Default command runs all tests
+        CMD ["python", "-m", "pytest", "-v", "--tb=short"]
+        EOF
+        
+        # Build the Docker image
+        docker build -f Dockerfile.test -t giflab-test .
+    
+    - name: Run comprehensive test suite in Docker
+      run: |
+        docker run --rm giflab-test python -m pytest -v --tb=short \
+          --cov=src/giflab --cov-report=term-missing
+    
+    - name: Run external tools specific tests in Docker
+      run: |
+        docker run --rm giflab-test python -m pytest -m external_tools -v --tb=short
+    
+    - name: Run fast test suite in Docker
+      run: |
+        docker run --rm giflab-test python -m pytest -m fast -v --tb=short
+    
+    - name: Verify tool discovery in Docker
+      run: |
+        docker run --rm giflab-test python -c "
+        from giflab.system_tools import get_available_tools, verify_required_tools
+        print('=== Docker Available Tools ===')
+        available = get_available_tools()
+        for tool, info in available.items():
+            status = 'AVAILABLE' if info else 'MISSING'
+            version = getattr(info, 'version', 'N/A') if info else 'N/A'
+            print(f'{tool}: {status} (version: {version})')
+        print('=============================')
+        
+        try:
+            verify_required_tools()
+            print('✅ All required tools available in Docker!')
+        except Exception as e:
+            print(f'❌ Some tools missing: {e}')
+            exit(1)
+        "
+    
+    - name: Clean up Docker image
+      if: always()
+      run: |
+        docker rmi giflab-test || true 

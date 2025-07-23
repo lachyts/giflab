@@ -8,10 +8,13 @@ avoid heavy dependencies and keep failures explicit so that CI and users get
 fast feedback if the environment is mis-configured.
 """
 
+import os
+import platform
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,15 +52,76 @@ def _extract_version(output: str, pattern: str) -> str | None:
 
 def _run_version_cmd(cmd: list[str], regex: str) -> str | None:
     try:
+        # Don't use check=True since some tools (like Animately) return non-zero for --version
         completed = subprocess.run(
-            cmd, capture_output=True, text=True, check=True, timeout=5
+            cmd, capture_output=True, text=True, timeout=5
         )
     except FileNotFoundError:
         return None  # Not installed
     except Exception:
         return None  # Fallback to generic "unknown" later
 
-    return _extract_version(completed.stdout, regex) or _extract_version(completed.stderr, regex)
+    # Check for version info in output regardless of exit code
+    version = _extract_version(completed.stdout, regex) or _extract_version(completed.stderr, regex)
+    
+    # Some tools return version info with non-zero exit codes (like Animately)
+    # If we found version info, return it even if exit code was non-zero
+    if version:
+        return version
+    
+    # If exit code was non-zero and no version found, tool might not support the flag
+    if completed.returncode != 0:
+        return None
+        
+    return version
+
+
+def _find_repository_binary(tool_key: str) -> str | None:
+    """Find binary in repository bin/ directory for current platform."""
+    # Map Python platform names to our directory structure
+    platform_map = {
+        "Darwin": "darwin",
+        "Linux": "linux",
+        "Windows": "windows",
+    }
+    
+    # Map machine architectures
+    arch_map = {
+        "x86_64": "x86_64",
+        "AMD64": "x86_64",    # Windows
+        "arm64": "arm64",     # Apple Silicon
+        "aarch64": "arm64",   # Linux ARM64
+    }
+    
+    system = platform.system()
+    machine = platform.machine()
+    
+    platform_dir = platform_map.get(system)
+    arch_dir = arch_map.get(machine)
+    
+    if not platform_dir or not arch_dir:
+        return None
+    
+    # Find project root (directory containing setup.py, pyproject.toml, etc.)
+    current = Path(__file__).parent
+    while current.parent != current:  # Stop at filesystem root
+        if any((current / marker).exists() for marker in ["pyproject.toml", "setup.py", ".git"]):
+            break
+        current = current.parent
+    else:
+        return None  # Couldn't find project root
+    
+    # Check for binary in bin/<platform>/<arch>/<tool>
+    # Handle platform-specific executable extensions
+    if platform_dir == "windows":
+        binary_path = current / "bin" / platform_dir / arch_dir / f"{tool_key}.exe"
+    else:
+        binary_path = current / "bin" / platform_dir / arch_dir / tool_key
+    
+    if binary_path.exists() and os.access(binary_path, os.X_OK):
+        return str(binary_path)
+    
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +144,7 @@ _VERSION_PATTERNS: dict[str, str] = {
     "ffprobe": r"ffprobe version (\S+)",
     "gifski": r"gifski (\S+)",
     "gifsicle": r"LCDF Gifsicle (\S+)",
-    "animately": r"animately (\S+)",
+    "animately": r"Version: (\S+)",  # Animately uses format "Version: 1.1.20.0"
 }
 
 # Map tool keys to configuration attributes
@@ -124,6 +188,14 @@ def discover_tool(tool_key: str, engine_config = None) -> ToolInfo:
                 version_cmd = [configured_path, "-version"]
                 version = _run_version_cmd(version_cmd, version_regex)
                 return ToolInfo(name=configured_path, available=True, version=version)
+    
+    # Try repository binary for this platform/architecture
+    repo_binary_path = _find_repository_binary(tool_key)
+    if repo_binary_path:
+        version_regex = _VERSION_PATTERNS.get(tool_key, r"(\d+\.\d+\.\d+)")
+        version_cmd = [repo_binary_path, "-version"]
+        version = _run_version_cmd(version_cmd, version_regex)
+        return ToolInfo(name=repo_binary_path, available=True, version=version)
     
     # Fallback to PATH discovery for backward compatibility
     if tool_key in _FALLBACK_TOOLS:
