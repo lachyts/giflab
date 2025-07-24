@@ -4,11 +4,9 @@ from __future__ import annotations
 
 Stage-2 of the matrix experimentation plan (see docs/technical/next-tools-priority.md).
 The wrappers inherit from the abstract interfaces in ``tool_interfaces.py`` and
-provide variable-specific ``apply`` methods.  For now, full implementations are
-only provided for *gifsicle* and *animately* because the project already ships
-robust helpers for these binaries.  ImageMagick, FFmpeg and gifski wrappers are
-stubbed with clear *NotImplementedError* so that the capability registry can be
-populated without breaking existing functionality.
+provide variable-specific ``apply`` methods. All external engines (gifsicle, 
+Animately, ImageMagick, FFmpeg, and gifski) are now fully implemented with 
+real functionality calling their respective helper modules.
 
 Key design choices
 ------------------

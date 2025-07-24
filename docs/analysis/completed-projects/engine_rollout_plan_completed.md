@@ -1,3 +1,22 @@
+# ✅ ARCHIVED: Multi-Engine Roll-Out Plan (COMPLETED)
+
+**Project Status: 100% COMPLETE - 2025-01-22**
+
+This rollout plan has been successfully completed. All 10 stages were implemented and the multi-engine architecture is now fully operational.
+
+## 📍 Where to Find Extracted Information
+
+The valuable architectural insights, testing strategies, and operational patterns from this plan have been extracted to:
+
+**📋 Technical Documentation:**
+- `docs/technical/cli_recipes.md` - Command-line recipes and parameter mappings
+- `docs/technical/ci-setup.md` - CI/CD workflows and testing strategies
+
+**🏗️ Technical Architecture:**
+- `docs/technical/multi-engine-architecture.md` - Architectural decisions, testing patterns, and integration guidelines
+
+---
+
 # Multi-Engine Roll-Out Plan
 
 _Rev 2 – updated 2025-07-22 with progress tracking_
@@ -40,7 +59,7 @@ Below is the ordered work-breakdown with completion status tracked.
 | 7 | **smoke-extend** | ✅ **DONE** | Remove skips in `test_engine_smoke.py` and add functional asserts for the new engines. | Enhanced smoke tests with @pytest.mark.fast markers, improved functional assertions for all engines, 30s performance thresholds, and comprehensive validation. All 13 smoke tests pass. |
 | 8 | **ci-update** | ✅ **DONE** | Update CI workflow / Docker image to include ImageMagick, FFmpeg, gifski so the tests pass in CI. | Created comprehensive GitHub Actions workflows: main CI with 5 jobs (fast/core/external-tools/lint/macos), Docker-based workflow for isolated testing, complete tool installation for all engines including Animately (via repository binaries), multi-platform support, and CI documentation. |
 | 9 | **docs-update** | ✅ **DONE** | Refresh README and technical docs to list the new engines, environment variables and usage examples. | Updated all documentation to reflect dual-pipeline architecture: Production pipeline (run command, gifsicle+Animately, proven reliability) vs Experimental pipeline (experiment command, all 5 engines, testing/comparison). Fixed all incorrect CLI examples, added proper experimental pipeline usage, clarified engine access methods. |
-| 10 | **cleanup-stubs** | ⏳ **TODO** | Remove obsolete stub wrappers once real implementations are merged. | |
+| 10 | **cleanup-stubs** | ✅ **DONE** | Remove obsolete stub wrappers once real implementations are merged. | Updated tool_wrappers.py docstring, implemented notebook placeholders, cleaned up Stage 10 TODOs. |
 
 ---
 ## 3  CLI recipes (draft)
@@ -136,13 +155,17 @@ gifski --quality 60 -o output.gif input_frames/*.png
 ## 5  Milestones & sequencing
 
 ### Progress Summary
-**Completed:** 9/10 tasks (90%)  
+**Completed:** 10/10 tasks (100%)  
 **In Progress:** 0/10 tasks  
-**Remaining:** 1/10 tasks (10%)  
+**Remaining:** 0/10 tasks (0%)  
 
 ### Milestone Status
 - ✅ **Stage 1-9:** CLI recipes + helper functions + wrappers + configuration & env vars + test fixtures + integration tests + smoke test enhancements + CI pipeline + comprehensive documentation
-- ⏳ **Stage 10:** Cleanup obsolete stubs (final)
+- ✅ **Stage 10:** Cleanup obsolete stubs - **COMPLETE**
+
+## 🎉 **ROLLOUT COMPLETE**
+
+**All 10 stages of the multi-engine rollout plan have been successfully completed!** The GifLab project now supports all 5 external engines (gifsicle, Animately, ImageMagick, FFmpeg, gifski) with comprehensive functionality, testing, CI integration, and documentation.
 
 ### Dual-Pipeline Architecture Rationale
 
@@ -172,8 +195,8 @@ This architecture ensures production stability while enabling continuous improve
 1. ✅ ImageMagick helpers & wrapper swap-in → merge.  
 2. ✅ FFmpeg helpers & wrappers → merge.  
 3. ✅ gifski lossy helper & wrapper → merge.  
-4. ⏳ Extended smoke + integration tests.  
-5. ⏳ CI and docs update.
+4. ✅ Extended smoke + integration tests.  
+5. ✅ CI and docs update.
 
 Each step should keep the existing gifsicle / Animately tests green.
 
