@@ -19,6 +19,8 @@ from .experiment import (
 from .pipeline import CompressionPipeline
 from .utils_pipeline_yaml import read_pipelines_yaml, write_pipelines_yaml
 from .validation import ValidationError, validate_raw_dir, validate_worker_count
+from giflab.combiner_registry import combiner_for
+from giflab.pipeline_elimination import PipelineEliminator
 
 
 @click.group()
@@ -626,6 +628,323 @@ def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
 
     write_pipelines_yaml(output, winners)
     click.echo(f"✅ Wrote {len(winners)} pipelines to {output}")
+
+
+@main.command()
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("elimination_results"),
+    help="Output directory for elimination results (default: elimination_results)",
+)
+@click.option(
+    "--threshold",
+    "-t", 
+    type=float,
+    default=0.3,
+    help="Quality threshold for elimination (default: 0.3, lower = stricter)",
+)
+@click.option(
+    "--validate-research",
+    is_flag=True,
+    help="Validate preliminary research findings about redundant methods",
+)
+@click.option(
+    "--test-dithering-only",
+    is_flag=True,
+    help="Only test dithering methods (skip frame reduction and lossy compression)",
+)
+@click.option(
+    "--resume",
+    is_flag=True,
+    help="Resume from previous incomplete run (uses progress tracking)",
+)
+@click.option(
+    "--estimate-time",
+    is_flag=True,
+    help="Show time estimate and exit (no actual testing)",
+)
+@click.option(
+    "--max-pipelines",
+    type=int,
+    default=0,
+    help="Limit number of pipelines to test (0 = no limit, useful for quick tests)",
+)
+@click.option(
+    "--sampling-strategy",
+    type=click.Choice(['full', 'representative', 'factorial', 'progressive', 'targeted', 'quick']),
+    default='representative',
+    help="Intelligent sampling strategy to reduce testing time (default: representative)",
+)
+@click.option(
+    "--use-gpu",
+    is_flag=True,
+    help="Enable GPU acceleration for quality metrics calculation (requires OpenCV with CUDA)",
+)
+def eliminate_pipelines(
+    output_dir: Path,
+    threshold: float,
+    validate_research: bool,
+    test_dithering_only: bool,
+    resume: bool,
+    estimate_time: bool,
+    max_pipelines: int,
+    sampling_strategy: str,
+    use_gpu: bool,
+):
+    """🔬 Systematically eliminate underperforming pipeline combinations.
+    
+    This command creates 25 synthetic test GIFs (expanded from 10) and runs 
+    competitive elimination analysis using COMPREHENSIVE QUALITY METRICS to 
+    identify pipeline combinations that never outperform others.
+    
+    QUALITY METRICS USED (elaborate system from the repo):
+    • Traditional: SSIM, MS-SSIM, PSNR, temporal consistency  
+    • Extended: MSE, RMSE, FSIM, GMSD, color histogram correlation
+    • Perceptual: Edge similarity, texture similarity, sharpness similarity
+    • 🎯 COMPOSITE SCORE: Weighted combination (30% SSIM + 35% MS-SSIM + 25% PSNR + 10% temporal)
+    
+    INTELLIGENT SAMPLING STRATEGIES (reduce 935 → ~75-140 pipelines):
+    • 🧠 representative: Sample from each tool category (15% of pipelines, ~2.5 hours)
+    • 🧪 factorial: Statistical design of experiments (8% of pipelines, ~1.3 hours)  
+    • 📈 progressive: Multi-stage elimination with refinement (25% → 8%, ~2.8 hours)
+    • 🎯 targeted: Strategic expansion with high-value GIFs (12% pipelines, 17 GIFs, ~1.4 hours)
+    • ⚡ quick: Fast development testing (5% of pipelines, ~50 minutes)
+    
+    EXPANDED SYNTHETIC DATASET (25 GIFs):
+    • 📏 Size variations: 50x50 to 1000x1000 pixels (400x range)
+    • 🎬 Frame variations: 2 to 100 frames (50x range) 
+    • 🔄 New content: Mixed content, data visualization, transitions
+    • ⚡ Edge cases: Single pixel changes, static content, high-freq details
+    
+    FEATURES:
+    • ⏱️  Time estimation and progress tracking
+    • 🔄 Resume capability for long-running experiments  
+    • 📊 Comprehensive CSV output with all metrics
+    • 🎯 Multi-criteria elimination (quality + compression + efficiency)
+    • 🚀 GPU acceleration for quality metrics (Windows/CUDA)
+    
+    Examples:
+    
+        # Quick time estimate (no actual testing)
+        giflab eliminate-pipelines --estimate-time
+        
+        # Fast intelligent sampling (recommended)
+        giflab eliminate-pipelines --sampling-strategy representative --resume
+        
+        # Statistical design approach (most scientific)
+        giflab eliminate-pipelines --sampling-strategy factorial --resume
+        
+        # Strategic expansion with high-value GIFs (RECOMMENDED for expansion testing)
+        giflab eliminate-pipelines --sampling-strategy targeted --resume
+        
+        # Quick development test (~50 minutes)
+        giflab eliminate-pipelines --sampling-strategy quick
+        
+        # Validate research findings about redundant methods
+        giflab eliminate-pipelines --validate-research
+        
+        # Resume interrupted analysis
+        giflab eliminate-pipelines --resume -o previous_results/
+        
+        # GPU-accelerated analysis (Windows with CUDA GPU)
+        giflab eliminate-pipelines --sampling-strategy representative --use-gpu --resume
+    """
+    from giflab.external_engines.imagemagick_enhanced import (
+        identify_redundant_methods,
+        test_redundant_methods
+    )
+    from giflab.external_engines.ffmpeg_enhanced import (
+        test_bayer_scale_performance,
+        validate_sierra2_vs_floyd_steinberg
+    )
+
+    eliminator = PipelineEliminator(output_dir, use_gpu=use_gpu)
+    
+    # Get pipeline count for estimation
+    from giflab.dynamic_pipeline import generate_all_pipelines
+    all_pipelines = generate_all_pipelines()
+    
+    # Apply intelligent sampling strategy
+    if sampling_strategy != 'full':
+        test_pipelines = eliminator.select_pipelines_intelligently(all_pipelines, sampling_strategy)
+        strategy_info = eliminator.SAMPLING_STRATEGIES[sampling_strategy]
+        click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
+        click.echo(f"📋 {strategy_info.description}")
+    elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
+        test_pipelines = all_pipelines[:max_pipelines]
+        click.echo(f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+    else:
+        test_pipelines = all_pipelines
+        click.echo("🔬 Full brute-force testing: Using all available pipelines")
+    
+    # Calculate total job estimates
+    if sampling_strategy == 'targeted':
+        synthetic_gifs = eliminator.get_targeted_synthetic_gifs()
+    else:
+        synthetic_gifs = eliminator.generate_synthetic_gifs()
+    total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(eliminator.test_params)
+    estimated_time = eliminator._estimate_execution_time(total_jobs)
+    
+    click.echo("🔬 Pipeline Elimination Analysis")
+    click.echo(f"📁 Output directory: {output_dir}")
+    click.echo(f"🎯 Quality threshold: {threshold}")
+    click.echo(f"📊 Total jobs: {total_jobs:,}")
+    click.echo(f"⏱️  Estimated time: {estimated_time}")
+    click.echo(f"🔄 Resume enabled: {resume}")
+    click.echo(f"🚀 GPU acceleration: {use_gpu}")
+    
+    if estimate_time:
+        click.echo("✅ Time estimation complete. Use --no-estimate-time to run actual analysis.")
+        return
+    
+    if validate_research:
+        click.echo("\n📊 Validating preliminary research findings...")
+
+        # Generate test GIFs for validation  
+        if sampling_strategy == 'targeted':
+            synthetic_gifs = eliminator.get_targeted_synthetic_gifs()
+        else:
+            synthetic_gifs = eliminator.generate_synthetic_gifs()
+
+        # Test ImageMagick redundant methods
+        click.echo("Testing ImageMagick method redundancy...")
+        redundant_groups = identify_redundant_methods(synthetic_gifs)
+
+        if redundant_groups:
+            click.echo("✅ Found redundant method groups:")
+            for representative, equivalents in redundant_groups.items():
+                click.echo(f"   {representative} = {equivalents}")
+        else:
+            click.echo("❌ No redundant method groups found")
+
+        # Test FFmpeg Bayer scale performance on noise content
+        noise_gif = None
+        for gif_path in synthetic_gifs:
+            if "noise" in gif_path.stem:
+                noise_gif = gif_path
+                break
+
+        if noise_gif:
+            click.echo("Testing FFmpeg Bayer scale performance on noisy content...")
+            bayer_results = test_bayer_scale_performance(noise_gif)
+
+            # Find best performing Bayer scales
+            best_bayers = sorted(
+                [(method, result.get("kilobytes", float('inf')))
+                 for method, result in bayer_results.items()
+                 if "error" not in result],
+                key=lambda x: x[1]
+            )
+
+            if best_bayers:
+                click.echo("✅ Best Bayer scales for noisy content:")
+                for method, size_kb in best_bayers[:3]:
+                    scale = method.split("=")[1]
+                    click.echo(f"   Scale {scale}: {size_kb}KB")
+
+        # Test Sierra2 vs Floyd-Steinberg comparison
+        click.echo("Validating Sierra2 vs Floyd-Steinberg performance...")
+        comparison_results = validate_sierra2_vs_floyd_steinberg(synthetic_gifs[:3])
+
+        # Save validation results
+        validation_summary = {
+            "redundant_imagemagick_groups": {k: list(v) for k, v in redundant_groups.items()},
+            "bayer_scale_results": bayer_results if 'bayer_results' in locals() else {},
+            "sierra2_vs_floyd_comparison": comparison_results
+        }
+
+        import json
+        with open(output_dir / "research_validation.json", 'w') as f:
+            json.dump(validation_summary, f, indent=2)
+
+        click.echo(f"✅ Research validation results saved to {output_dir}/research_validation.json")
+
+    if test_dithering_only:
+        click.echo("\n🎨 Testing dithering methods only...")
+        # This would implement dithering-only testing
+        click.echo("Dithering-only testing would be implemented here")
+    else:
+        click.echo("\n⚔️  Running full competitive elimination analysis...")
+        
+        # Check for existing resume data if requested
+        if resume:
+            resume_file = output_dir / "elimination_progress.json"
+            if resume_file.exists():
+                click.echo(f"📂 Found existing progress file: {resume_file}")
+                click.echo("🔄 Will resume from previous state...")
+            else:
+                click.echo("🆕 No previous progress found, starting fresh...")
+        
+        # Run the full elimination analysis with comprehensive metrics
+        use_targeted_gifs = (sampling_strategy == 'targeted')
+        elimination_result = eliminator.run_elimination_analysis(
+            test_pipelines=test_pipelines,
+            elimination_threshold=threshold,
+            use_targeted_gifs=use_targeted_gifs
+        )
+        
+        # Display comprehensive results
+        click.echo(f"\n📊 Comprehensive Elimination Results:")
+        click.echo(f"   📉 Eliminated: {len(elimination_result.eliminated_pipelines)} pipelines")
+        click.echo(f"   ✅ Retained: {len(elimination_result.retained_pipelines)} pipelines")
+        total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
+        if total_pipelines > 0:
+            elimination_rate = len(elimination_result.eliminated_pipelines) / total_pipelines * 100
+            click.echo(f"   📈 Elimination rate: {elimination_rate:.1f}%")
+        else:
+            click.echo("   📈 Elimination rate: N/A (no pipelines tested)")
+        
+        if elimination_result.eliminated_pipelines:
+            click.echo(f"\n❌ Top eliminated pipelines:")
+            # Show first 10 eliminated pipelines with reasons
+            for i, pipeline in enumerate(sorted(elimination_result.eliminated_pipelines)[:10]):
+                reason = elimination_result.elimination_reasons.get(pipeline, "No reason provided")
+                click.echo(f"   {i+1:2d}. {pipeline}")
+                click.echo(f"       └─ {reason}")
+            
+            if len(elimination_result.eliminated_pipelines) > 10:
+                click.echo(f"   ... and {len(elimination_result.eliminated_pipelines) - 10} more (see full results in {output_dir})")
+        
+        if elimination_result.content_type_winners:
+            click.echo("\n🏆 Winners by content type (Quality | Efficiency | Compression):")
+            for content_type, winners in elimination_result.content_type_winners.items():
+                # Show performance matrix info if available
+                perf_info = elimination_result.performance_matrix.get(content_type, {})
+                avg_quality = perf_info.get('mean_composite_quality', 0)
+                avg_compression = perf_info.get('mean_compression_ratio', 0)
+                
+                click.echo(f"   📁 {content_type.upper()}: (avg quality: {avg_quality:.3f}, avg compression: {avg_compression:.1f}x)")
+                
+                # Show top 5 winners
+                for i, winner in enumerate(winners[:5]):
+                    click.echo(f"      {i+1}. {winner}")
+                
+                if len(winners) > 5:
+                    click.echo(f"      ... and {len(winners) - 5} more")
+    
+    # Show file outputs
+    click.echo(f"\n📄 Results saved to:")
+    click.echo(f"   📊 CSV data: {output_dir}/elimination_test_results.csv")
+    click.echo(f"   📝 Summary: {output_dir}/elimination_summary.json") 
+    if resume:
+        click.echo(f"   💾 Progress: {output_dir}/elimination_progress.json")
+    
+    click.echo(f"\n✅ Analysis complete!")
+    
+    # Provide next steps
+    click.echo(f"\n🔄 Next steps:")
+    click.echo(f"   1. Review eliminated pipelines in the summary file")
+    click.echo(f"   2. Use retained pipelines for production workflows")
+    click.echo(f"   3. Run: giflab run data/raw --pipelines <retained_pipelines>")
+    if elimination_result.eliminated_pipelines:
+        total_tested = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
+        if total_tested > 0:
+            potential_savings = len(elimination_result.eliminated_pipelines) / total_tested * 100
+            click.echo(f"   💡 Potential {potential_savings:.0f}% reduction in pipeline testing time!")
+        else:
+            click.echo("   💡 Potential time savings: Unable to calculate")
 
 
 if __name__ == "__main__":

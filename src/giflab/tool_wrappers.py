@@ -331,16 +331,16 @@ class ImageMagickColorReducer(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.imagemagick import color_reduce
+        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
         
         colors = int(params["colors"])
-        dither = params.get("dither", False)
+        dithering_method = params.get("dithering_method", "None")
         
-        return color_reduce(
+        return color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
-            dither=dither,
+            dithering_method=dithering_method,
         )
 
 
@@ -413,15 +413,25 @@ class FFmpegColorReducer(ColorReductionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        from .external_engines.ffmpeg import color_reduce
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
         
-        fps = 15.0  # default fps for palette generation
-        if params and "fps" in params:
-            fps = float(params["fps"])
+        colors = 256  # default color count
+        fps = 15.0    # default fps for palette generation
+        dithering_method = "none"  # default no dithering
         
-        return color_reduce(
+        if params:
+            if "colors" in params:
+                colors = int(params["colors"])
+            if "fps" in params:
+                fps = float(params["fps"])
+            if "dithering_method" in params:
+                dithering_method = params["dithering_method"]
+        
+        return color_reduce_with_dithering(
             input_path,
             output_path,
+            colors=colors,
+            dithering_method=dithering_method,
             fps=fps,
         )
 
@@ -483,6 +493,380 @@ class FFmpegLossyCompressor(LossyCompressionTool):
             qv=qv,
             fps=fps,
         )
+
+# ---------------------------------------------------------------------------
+# ImageMagick Dithering-Specific Wrappers (Research-Based)
+# ---------------------------------------------------------------------------
+
+class ImageMagickColorReducerRiemersma(ColorReductionTool):
+    """ImageMagick color reducer with Riemersma dithering (best all-around performer from research)."""
+    NAME = "imagemagick-color-riemersma"
+    COMBINE_GROUP = "imagemagick"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("imagemagick").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("imagemagick").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="Riemersma",
+        )
+
+
+class ImageMagickColorReducerFloydSteinberg(ColorReductionTool):
+    """ImageMagick color reducer with Floyd-Steinberg dithering (standard high-quality baseline)."""
+    NAME = "imagemagick-color-floyd"
+    COMBINE_GROUP = "imagemagick"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("imagemagick").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("imagemagick").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="FloydSteinberg",
+        )
+
+
+class ImageMagickColorReducerNone(ColorReductionTool):
+    """ImageMagick color reducer with no dithering (size priority baseline)."""
+    NAME = "imagemagick-color-none"
+    COMBINE_GROUP = "imagemagick"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("imagemagick").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("imagemagick").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="None",
+        )
+
+
+# ---------------------------------------------------------------------------
+# FFmpeg Dithering-Specific Wrappers (Research-Based)
+# ---------------------------------------------------------------------------
+
+class FFmpegColorReducerSierra2(ColorReductionTool):
+    """FFmpeg color reducer with Sierra2 dithering (excellent quality/size balance from research)."""
+    NAME = "ffmpeg-color-sierra2"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="sierra2",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerFloydSteinberg(ColorReductionTool):
+    """FFmpeg color reducer with Floyd-Steinberg dithering (quality baseline)."""
+    NAME = "ffmpeg-color-floyd"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="floyd_steinberg",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale0(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 0 (2×2 matrix, poor quality from research - elimination candidate)."""
+    NAME = "ffmpeg-color-bayer0"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=0",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale1(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 1 (4×4 matrix, higher quality Bayer variant from research)."""
+    NAME = "ffmpeg-color-bayer1"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=1",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale2(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 2 (8×8 matrix, medium pattern from research)."""
+    NAME = "ffmpeg-color-bayer2"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=2",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale3(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 3 (16×16 matrix, good balance from research)."""
+    NAME = "ffmpeg-color-bayer3"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=3",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale4(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 4 (32×32 matrix, best compression for noisy content from research)."""
+    NAME = "ffmpeg-color-bayer4"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=4",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerBayerScale5(ColorReductionTool):
+    """FFmpeg color reducer with Bayer Scale 5 (64×64 matrix, maximum compression for noisy content from research)."""
+    NAME = "ffmpeg-color-bayer5"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="bayer:bayer_scale=5",
+            fps=fps,
+        )
+
+
+class FFmpegColorReducerNone(ColorReductionTool):
+    """FFmpeg color reducer with no dithering (size priority baseline)."""
+    NAME = "ffmpeg-color-none"
+    COMBINE_GROUP = "ffmpeg"
+
+    @classmethod
+    def available(cls) -> bool:
+        return discover_tool("ffmpeg").available
+
+    @classmethod
+    def version(cls) -> str:
+        return discover_tool("ffmpeg").version or "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params is None or "colors" not in params:
+            raise ValueError("params must include 'colors' for color reduction")
+        
+        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
+        
+        colors = int(params["colors"])
+        fps = params.get("fps", 15.0)
+        
+        return color_reduce_with_dithering(
+            input_path,
+            output_path,
+            colors=colors,
+            dithering_method="none",
+            fps=fps,
+        )
+
 
 # ---------------------------------------------------------------------------
 # gifski (stub)

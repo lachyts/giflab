@@ -12,6 +12,20 @@ from giflab.tool_wrappers import (
     FFmpegFrameReducer,
     FFmpegLossyCompressor,
     GifskiLossyCompressor,
+    # Dithering-specific wrappers
+    ImageMagickColorReducerRiemersma,
+    ImageMagickColorReducerFloydSteinberg,
+    ImageMagickColorReducerNone,
+    FFmpegColorReducerSierra2,
+    FFmpegColorReducerFloydSteinberg,
+    # All Bayer scale variations
+    FFmpegColorReducerBayerScale0,
+    FFmpegColorReducerBayerScale1,
+    FFmpegColorReducerBayerScale2,
+    FFmpegColorReducerBayerScale3,
+    FFmpegColorReducerBayerScale4,
+    FFmpegColorReducerBayerScale5,
+    FFmpegColorReducerNone,
 )
 from giflab.meta import extract_gif_metadata
 
@@ -376,3 +390,329 @@ class TestCrossEngineConsistency:
             version = wrapper.version()
             assert isinstance(version, str)
             assert len(version) > 0 
+
+
+# ---------------------------------------------------------------------------
+# Dithering-Specific Wrapper Tests (Research-Based)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.external_tools
+class TestImageMagickDitheringWrappers:
+    """Test ImageMagick dithering-specific wrappers based on research findings."""
+    
+    def test_riemersma_wrapper(self, many_colors_gif):
+        """Test ImageMagick Riemersma dithering wrapper (best all-around performer from research)."""
+        wrapper = ImageMagickColorReducerRiemersma()
+        
+        if not wrapper.available():
+            pytest.skip("ImageMagick not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16}
+            )
+            
+            # Validate metadata structure
+            assert result["engine"] == "imagemagick"
+            assert result["dithering_method"] == "Riemersma"
+            assert result["pipeline_variant"] == "imagemagick_dither_riemersma"
+            assert result["render_ms"] > 0
+            assert output_path.exists()
+    
+    def test_floyd_steinberg_wrapper(self, many_colors_gif):
+        """Test ImageMagick Floyd-Steinberg wrapper (standard baseline)."""
+        wrapper = ImageMagickColorReducerFloydSteinberg()
+        
+        if not wrapper.available():
+            pytest.skip("ImageMagick not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16}
+            )
+            
+            assert result["dithering_method"] == "FloydSteinberg"
+            assert result["pipeline_variant"] == "imagemagick_dither_floydsteinberg"
+            assert output_path.exists()
+    
+    def test_none_wrapper(self, many_colors_gif):
+        """Test ImageMagick no-dithering wrapper (size priority baseline)."""
+        wrapper = ImageMagickColorReducerNone()
+        
+        if not wrapper.available():
+            pytest.skip("ImageMagick not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16}
+            )
+            
+            assert result["dithering_method"] == "None"
+            assert result["pipeline_variant"] == "imagemagick_dither_none"
+            assert output_path.exists()
+    
+    def test_wrapper_combine_group_consistency(self):
+        """Test that all ImageMagick dithering wrappers have consistent COMBINE_GROUP."""
+        wrappers = [
+            ImageMagickColorReducerRiemersma(),
+            ImageMagickColorReducerFloydSteinberg(),
+            ImageMagickColorReducerNone(),
+        ]
+        
+        for wrapper in wrappers:
+            assert wrapper.COMBINE_GROUP == "imagemagick"
+
+
+@pytest.mark.external_tools
+class TestFFmpegDitheringWrappers:
+    """Test FFmpeg dithering-specific wrappers based on research findings."""
+    
+    def test_sierra2_wrapper(self, many_colors_gif):
+        """Test FFmpeg Sierra2 wrapper (excellent quality/size balance from research)."""
+        wrapper = FFmpegColorReducerSierra2()
+        
+        if not wrapper.available():
+            pytest.skip("FFmpeg not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16, "fps": 10.0}
+            )
+            
+            # Validate metadata structure
+            assert result["engine"] == "ffmpeg"
+            assert result["dithering_method"] == "sierra2"
+            assert result["pipeline_variant"] == "ffmpeg_dither_sierra2"
+            assert result["render_ms"] > 0
+            assert output_path.exists()
+    
+    def test_floyd_steinberg_wrapper(self, many_colors_gif):
+        """Test FFmpeg Floyd-Steinberg wrapper (quality baseline)."""
+        wrapper = FFmpegColorReducerFloydSteinberg()
+        
+        if not wrapper.available():
+            pytest.skip("FFmpeg not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16}
+            )
+            
+            assert result["dithering_method"] == "floyd_steinberg"
+            assert result["pipeline_variant"] == "ffmpeg_dither_floyd_steinberg"
+            assert output_path.exists()
+    
+    def test_all_bayer_scale_wrappers(self, many_colors_gif):
+        """Test all FFmpeg Bayer Scale wrappers (scales 0-5) for systematic comparison."""
+        bayer_wrappers = [
+            (FFmpegColorReducerBayerScale0, "bayer:bayer_scale=0", "Poor quality - elimination candidate"),
+            (FFmpegColorReducerBayerScale1, "bayer:bayer_scale=1", "Higher quality variant"),
+            (FFmpegColorReducerBayerScale2, "bayer:bayer_scale=2", "Medium pattern"),
+            (FFmpegColorReducerBayerScale3, "bayer:bayer_scale=3", "Good balance"),
+            (FFmpegColorReducerBayerScale4, "bayer:bayer_scale=4", "Best for noisy content"),
+            (FFmpegColorReducerBayerScale5, "bayer:bayer_scale=5", "Maximum compression"),
+        ]
+        
+        for wrapper_class, expected_method, description in bayer_wrappers:
+            wrapper = wrapper_class()
+            
+            if not wrapper.available():
+                pytest.skip("FFmpeg not available")
+            
+            with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+                output_path = Path(tmp.name)
+                
+                result = wrapper.apply(
+                    many_colors_gif,
+                    output_path,
+                    params={"colors": 16}
+                )
+                
+                # Validate metadata for each Bayer scale
+                assert result["engine"] == "ffmpeg"
+                assert result["dithering_method"] == expected_method
+                assert result["render_ms"] > 0
+                assert output_path.exists()
+                
+                # Validate pipeline variant naming
+                scale = expected_method.split("=")[1]
+                expected_variant = f"ffmpeg_dither_bayer_bayer_scale_{scale}"
+                assert result["pipeline_variant"] == expected_variant
+    
+    def test_none_wrapper(self, many_colors_gif):
+        """Test FFmpeg no-dithering wrapper (size priority baseline)."""
+        wrapper = FFmpegColorReducerNone()
+        
+        if not wrapper.available():
+            pytest.skip("FFmpeg not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+            output_path = Path(tmp.name)
+            
+            result = wrapper.apply(
+                many_colors_gif,
+                output_path,
+                params={"colors": 16}
+            )
+            
+            assert result["dithering_method"] == "none"
+            assert result["pipeline_variant"] == "ffmpeg_dither_none"
+            assert output_path.exists()
+    
+    def test_wrapper_combine_group_consistency(self):
+        """Test that all FFmpeg dithering wrappers have consistent COMBINE_GROUP."""
+        wrappers = [
+            FFmpegColorReducerSierra2(),
+            FFmpegColorReducerFloydSteinberg(),
+            # All Bayer scale variations
+            FFmpegColorReducerBayerScale0(),
+            FFmpegColorReducerBayerScale1(),
+            FFmpegColorReducerBayerScale2(),
+            FFmpegColorReducerBayerScale3(),
+            FFmpegColorReducerBayerScale4(),
+            FFmpegColorReducerBayerScale5(),
+            FFmpegColorReducerNone(),
+        ]
+        
+        for wrapper in wrappers:
+            assert wrapper.COMBINE_GROUP == "ffmpeg"
+
+
+@pytest.mark.external_tools
+class TestDitheringComparison:
+    """Test comparisons between different dithering methods based on research findings."""
+    
+    def test_enhanced_vs_basic_wrappers(self, many_colors_gif):
+        """Test that enhanced wrappers produce different results than basic wrapper."""
+        basic_wrapper = ImageMagickColorReducer()
+        riemersma_wrapper = ImageMagickColorReducerRiemersma()
+        
+        if not basic_wrapper.available():
+            pytest.skip("ImageMagick not available")
+        
+        with tempfile.NamedTemporaryFile(suffix=".gif") as tmp1, \
+             tempfile.NamedTemporaryFile(suffix=".gif") as tmp2:
+            
+            basic_output = Path(tmp1.name)
+            riemersma_output = Path(tmp2.name)
+            
+            # Test basic wrapper with dithering_method parameter
+            basic_result = basic_wrapper.apply(
+                many_colors_gif,
+                basic_output,
+                params={"colors": 16, "dithering_method": "None"}
+            )
+            
+            # Test Riemersma-specific wrapper
+            riemersma_result = riemersma_wrapper.apply(
+                many_colors_gif,
+                riemersma_output,
+                params={"colors": 16}
+            )
+            
+            # Both should succeed but potentially produce different results
+            assert basic_output.exists()
+            assert riemersma_output.exists()
+            
+            # Riemersma should include specific dithering metadata
+            assert riemersma_result["dithering_method"] == "Riemersma"
+            assert riemersma_result["pipeline_variant"] == "imagemagick_dither_riemersma"
+    
+    def test_dithering_method_naming_consistency(self):
+        """Test that wrapper names consistently reflect their dithering methods."""
+        test_cases = [
+            (ImageMagickColorReducerRiemersma, "riemersma"),
+            (ImageMagickColorReducerFloydSteinberg, "floyd"),
+            (ImageMagickColorReducerNone, "none"),
+            (FFmpegColorReducerSierra2, "sierra2"),
+            (FFmpegColorReducerFloydSteinberg, "floyd"),
+            # All Bayer scale variations
+            (FFmpegColorReducerBayerScale0, "bayer0"),
+            (FFmpegColorReducerBayerScale1, "bayer1"),
+            (FFmpegColorReducerBayerScale2, "bayer2"),
+            (FFmpegColorReducerBayerScale3, "bayer3"),
+            (FFmpegColorReducerBayerScale4, "bayer4"),
+            (FFmpegColorReducerBayerScale5, "bayer5"),
+            (FFmpegColorReducerNone, "none"),
+        ]
+        
+        for wrapper_class, expected_name_part in test_cases:
+            assert expected_name_part in wrapper_class.NAME.lower()
+    
+    def test_research_tier_coverage(self):
+        """Test that all Tier 1 methods from research are covered by wrappers."""
+        # Tier 1 - Essential Methods (Must Test) from research:
+        # 1. ImageMagick Riemersma - Best all-around performer ✅
+        # 2. FFmpeg Floyd-Steinberg - Standard high-quality baseline ✅
+        # 3. FFmpeg Sierra2 - Excellent quality/size balance ✅
+        # 4. ImageMagick None - Size priority baseline ✅
+        
+        tier_1_wrappers = [
+            ImageMagickColorReducerRiemersma,
+            FFmpegColorReducerFloydSteinberg,
+            FFmpegColorReducerSierra2,
+            ImageMagickColorReducerNone,
+        ]
+        
+        for wrapper_class in tier_1_wrappers:
+            # Each wrapper should be instantiable
+            wrapper = wrapper_class()
+            assert hasattr(wrapper, 'apply')
+            assert hasattr(wrapper, 'available')
+            assert hasattr(wrapper, 'COMBINE_GROUP')
+            
+            # NAME should indicate the dithering method
+            assert len(wrapper_class.NAME) > 10  # Should be descriptive
+    
+    def test_bayer_scale_research_validation(self):
+        """Test that all Bayer scale variations are available for elimination testing."""
+        # From research: Performance on Noise Content (16 colors):
+        # - Scale 4-5: 128K (SSIM: ~352) - Best compression
+        # - Scale 3: 137K (SSIM: 390) - Good balance  
+        # - Scale 1-2: 144-146K (SSIM: 505-1107) - Better quality, larger files
+        # - Scale 0: Poor quality from research
+        
+        scale_expectations = [
+            (FFmpegColorReducerBayerScale0, "elimination candidate", "poor quality"),
+            (FFmpegColorReducerBayerScale1, "tier 2", "higher quality"),
+            (FFmpegColorReducerBayerScale2, "tier 2", "better quality, larger files"),
+            (FFmpegColorReducerBayerScale3, "tier 2", "good balance"),
+            (FFmpegColorReducerBayerScale4, "tier 1", "best compression"),
+            (FFmpegColorReducerBayerScale5, "tier 1", "maximum compression"),
+        ]
+        
+        for wrapper_class, tier, description in scale_expectations:
+            wrapper = wrapper_class()
+            
+            # Each Bayer scale should be available for testing
+            assert hasattr(wrapper, 'apply')
+            assert hasattr(wrapper, 'available')
+            assert wrapper.COMBINE_GROUP == "ffmpeg"
+            
+            # Naming should indicate the scale
+            scale = wrapper_class.NAME[-1]  # Last character should be scale number
+            assert scale.isdigit()
+            assert "bayer" in wrapper.NAME.lower()
+            
+            # Docstring should reference research findings
+            assert description.split()[0] in wrapper_class.__doc__.lower() or tier in wrapper_class.__doc__.lower()

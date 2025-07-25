@@ -148,4 +148,18 @@ from .tool_wrappers import (
     ImageMagickColorReducer,
     ImageMagickFrameReducer,
     ImageMagickLossyCompressor,
+    # Dithering-specific wrappers (research-based)
+    ImageMagickColorReducerRiemersma,
+    ImageMagickColorReducerFloydSteinberg,
+    ImageMagickColorReducerNone,
+    FFmpegColorReducerSierra2,
+    FFmpegColorReducerFloydSteinberg,
+    # All Bayer scale variations for systematic elimination testing
+    FFmpegColorReducerBayerScale0,
+    FFmpegColorReducerBayerScale1,
+    FFmpegColorReducerBayerScale2,
+    FFmpegColorReducerBayerScale3,
+    FFmpegColorReducerBayerScale4,
+    FFmpegColorReducerBayerScale5,
+    FFmpegColorReducerNone,
 )

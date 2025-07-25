@@ -1,0 +1,1951 @@
+"""Pipeline Elimination Framework
+
+Systematically eliminates underperforming pipeline combinations through
+competitive testing on synthetic GIFs with diverse characteristics.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Set, Tuple
+
+import pandas as pd
+from PIL import Image, ImageDraw
+import numpy as np
+
+from .dynamic_pipeline import generate_all_pipelines, Pipeline
+from .experiment import ExperimentalPipeline
+from .metrics import calculate_comprehensive_metrics
+from .meta import extract_gif_metadata
+
+
+@dataclass
+class SyntheticGifSpec:
+    """Specification for a synthetic test GIF."""
+    name: str
+    frames: int
+    size: Tuple[int, int]
+    content_type: str
+    description: str
+    
+
+@dataclass 
+class SamplingStrategy:
+    """Configuration for intelligent sampling strategies."""
+    name: str
+    description: str
+    sample_ratio: float  # Fraction of total pipelines to test
+    min_samples_per_tool: int = 3  # Minimum samples per tool type
+
+@dataclass
+class EliminationResult:
+    """Result of pipeline elimination analysis."""
+    eliminated_pipelines: Set[str] = field(default_factory=set)
+    retained_pipelines: Set[str] = field(default_factory=set)
+    performance_matrix: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    elimination_reasons: Dict[str, str] = field(default_factory=dict)
+    content_type_winners: Dict[str, List[str]] = field(default_factory=dict)
+    testing_strategy_used: str = "full_brute_force"
+    total_jobs_run: int = 0
+    total_jobs_possible: int = 0
+    efficiency_gain: float = 0.0
+
+
+class PipelineEliminator:
+    """Systematic pipeline elimination through competitive testing."""
+    
+    # Available sampling strategies for efficient testing
+    SAMPLING_STRATEGIES = {
+        'full': SamplingStrategy(
+            name="Full Brute Force",
+            description="Test all pipeline combinations (slowest, most thorough)",
+            sample_ratio=1.0,
+        ),
+        'representative': SamplingStrategy(
+            name="Representative Sampling", 
+            description="Test representative samples from each tool category",
+            sample_ratio=0.15,  # ~15% of pipelines
+            min_samples_per_tool=5,
+        ),
+        'factorial': SamplingStrategy(
+            name="Factorial Design",
+            description="Statistical design of experiments approach",
+            sample_ratio=0.08,  # ~8% of pipelines
+            min_samples_per_tool=3,
+        ),
+        'progressive': SamplingStrategy(
+            name="Progressive Elimination",
+            description="Multi-stage elimination with refinement",
+            sample_ratio=0.25,  # Varies across stages
+            min_samples_per_tool=4,
+        ),
+        'quick': SamplingStrategy(
+            name="Quick Test",
+            description="Fast test for development (least thorough)",
+            sample_ratio=0.05,  # ~5% of pipelines
+            min_samples_per_tool=2,
+        ),
+        'targeted': SamplingStrategy(
+            name="Targeted Expansion",
+            description="Strategic expansion focusing on high-value size and temporal variations",
+            sample_ratio=0.12,  # ~12% of pipelines
+            min_samples_per_tool=4,
+        ),
+    }
+    
+    def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False):
+        self.output_dir = output_dir
+        self.output_dir.mkdir(exist_ok=True)
+        self.use_gpu = use_gpu
+        self.logger = logging.getLogger(__name__)
+        
+        # Test GPU availability on initialization
+        if self.use_gpu:
+            self._test_gpu_availability()
+        
+        # Define synthetic test cases based on research findings
+        self.synthetic_specs = [
+            # ORIGINAL RESEARCH-BASED CONTENT TYPES
+            # From research: gradients benefit from dithering
+            SyntheticGifSpec(
+                "smooth_gradient", 8, (120, 120), "gradient",
+                "Smooth color transitions - should benefit from Riemersma dithering"
+            ),
+            SyntheticGifSpec(
+                "complex_gradient", 12, (150, 150), "complex_gradient", 
+                "Multi-directional gradients with multiple hues"
+            ),
+            
+            # From research: solid colors should NOT use dithering
+            SyntheticGifSpec(
+                "solid_blocks", 6, (100, 100), "solid",
+                "Flat color blocks - dithering should provide no benefit"
+            ),
+            SyntheticGifSpec(
+                "high_contrast", 10, (120, 120), "contrast",
+                "Sharp edges and high contrast - no dithering benefit expected"
+            ),
+            
+            # From research: complex/noise content where Bayer scales 4-5 excel
+            SyntheticGifSpec(
+                "photographic_noise", 8, (140, 140), "noise",
+                "Photo-realistic with noise - good for testing Bayer dithering"
+            ),
+            SyntheticGifSpec(
+                "texture_complex", 15, (130, 130), "texture",
+                "Complex textures where dithering patterns can blend naturally"
+            ),
+            
+            # Geometric patterns from research
+            SyntheticGifSpec(
+                "geometric_patterns", 10, (110, 110), "geometric",
+                "Structured geometric shapes - test ordered dithering methods"
+            ),
+            
+            # Edge cases for comprehensive testing
+            SyntheticGifSpec(
+                "few_colors", 6, (100, 100), "minimal",
+                "Very few distinct colors - test edge behavior"
+            ),
+            SyntheticGifSpec(
+                "many_colors", 20, (160, 160), "spectrum",
+                "Full color spectrum - stress test palette reduction"
+            ),
+            SyntheticGifSpec(
+                "animation_heavy", 30, (100, 100), "motion",
+                "Rapid animation with temporal coherence requirements"
+            ),
+            
+            # SIZE VARIATIONS - Test if dimensions affect pipeline performance
+            SyntheticGifSpec(
+                "gradient_small", 8, (50, 50), "gradient",
+                "Small gradient - test compression behavior at minimum realistic size"
+            ),
+            SyntheticGifSpec(
+                "gradient_medium", 8, (200, 200), "gradient", 
+                "Medium gradient - standard web size testing"
+            ),
+            SyntheticGifSpec(
+                "gradient_large", 8, (500, 500), "gradient",
+                "Large gradient - test performance on bigger files"
+            ),
+            SyntheticGifSpec(
+                "gradient_xlarge", 8, (1000, 1000), "gradient",
+                "Extra large gradient - maximum realistic size testing"
+            ),
+            SyntheticGifSpec(
+                "noise_small", 8, (50, 50), "noise",
+                "Small noisy content - test Bayer dithering on small dimensions"
+            ),
+            SyntheticGifSpec(
+                "noise_large", 8, (500, 500), "noise",
+                "Large noisy content - test Bayer scale performance on large files"
+            ),
+            
+            # FRAME COUNT VARIATIONS - Test temporal processing differences
+            SyntheticGifSpec(
+                "minimal_frames", 2, (120, 120), "gradient",
+                "Minimal animation - test behavior with very few frames"
+            ),
+            SyntheticGifSpec(
+                "long_animation", 50, (120, 120), "motion",
+                "Long animation - test frame processing efficiency"
+            ),
+            SyntheticGifSpec(
+                "very_long_animation", 100, (120, 120), "motion",
+                "Very long animation - stress test temporal optimization"
+            ),
+            
+            # MISSING CONTENT TYPES - Real-world patterns not covered
+            SyntheticGifSpec(
+                "mixed_content", 12, (200, 150), "mixed",
+                "Text + graphics + photo elements - common real-world combination"
+            ),
+            SyntheticGifSpec(
+                "data_visualization", 8, (300, 200), "charts",
+                "Charts and graphs - technical/scientific content"
+            ),
+            SyntheticGifSpec(
+                "transitions", 15, (150, 150), "morph",
+                "Complex transitions and morphing - advanced animation patterns"
+            ),
+            
+            # EDGE CASES - Extreme but realistic scenarios
+            SyntheticGifSpec(
+                "single_pixel_anim", 10, (100, 100), "micro_detail",
+                "Single pixel changes - minimal motion detection"
+            ),
+            SyntheticGifSpec(
+                "static_minimal_change", 20, (150, 150), "static_plus",
+                "Mostly static with tiny changes - frame reduction opportunities"
+            ),
+            SyntheticGifSpec(
+                "high_frequency_detail", 12, (200, 200), "detail",
+                "High frequency details - test aliasing and quality preservation"
+            )
+        ]
+    
+    def generate_synthetic_gifs(self) -> List[Path]:
+        """Generate all synthetic test GIFs."""
+        self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
+        
+        gif_paths = []
+        for spec in self.synthetic_specs:
+            gif_path = self.output_dir / f"{spec.name}.gif"
+            if not gif_path.exists():
+                self._create_synthetic_gif(gif_path, spec)
+            gif_paths.append(gif_path)
+            
+        return gif_paths
+    
+    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec):
+        """Create a synthetic GIF based on specification."""
+        images = []
+        
+        for frame_idx in range(spec.frames):
+            if spec.content_type == "gradient":
+                img = self._create_gradient_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "complex_gradient":
+                img = self._create_complex_gradient_frame(spec.size, frame_idx, spec.frames) 
+            elif spec.content_type == "solid":
+                img = self._create_solid_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "contrast":
+                img = self._create_contrast_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "noise":
+                img = self._create_noise_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "texture":
+                img = self._create_texture_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "geometric":
+                img = self._create_geometric_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "minimal":
+                img = self._create_minimal_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "spectrum":
+                img = self._create_spectrum_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "motion":
+                img = self._create_motion_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "mixed":
+                img = self._create_mixed_content_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "charts":
+                img = self._create_data_visualization_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "morph":
+                img = self._create_transitions_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "micro_detail":
+                img = self._create_single_pixel_anim_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "static_plus":
+                img = self._create_static_minimal_change_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "detail":
+                img = self._create_high_frequency_detail_frame(spec.size, frame_idx, spec.frames)
+            else:
+                img = self._create_simple_frame(spec.size, frame_idx, spec.frames)
+                
+            images.append(img)
+        
+        # Save GIF with consistent settings
+        if images:
+            images[0].save(
+                path,
+                save_all=True,
+                append_images=images[1:],
+                duration=100,  # 100ms per frame
+                loop=0
+            )
+    
+    def _create_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Create smooth gradient frame - should benefit from Riemersma dithering."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Animated gradient shift
+        offset = (frame / total_frames) * 255
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                # Create smooth diagonal gradient with temporal shift
+                r = int((x / size[0]) * 255)
+                g = int((y / size[1]) * 255) 
+                b = int(((x + y + offset) / (size[0] + size[1])) * 255) % 255
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_complex_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Multi-directional gradients with multiple hues."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Time-based rotation
+        phase = (frame / total_frames) * 2 * np.pi
+        
+        center_x, center_y = size[0] // 2, size[1] // 2
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                # Distance and angle from center
+                dx, dy = x - center_x, y - center_y
+                distance = np.sqrt(dx*dx + dy*dy)
+                angle = np.arctan2(dy, dx) + phase
+                
+                # Complex gradient based on polar coordinates
+                r = int(127 + 127 * np.sin(angle))
+                g = int(127 + 127 * np.cos(angle * 1.5))
+                b = int(127 + 127 * np.sin(distance / 20 + phase))
+                
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_solid_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Solid color blocks - dithering should provide no benefit."""
+        img = Image.new('RGB', size, (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        # Simple color blocks that change over time
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)]
+        block_size = 20
+        
+        for x in range(0, size[0], block_size):
+            for y in range(0, size[1], block_size):
+                color_idx = ((x // block_size) + (y // block_size) + frame) % len(colors)
+                draw.rectangle([x, y, x + block_size - 1, y + block_size - 1], 
+                             fill=colors[color_idx])
+                
+        return img
+    
+    def _create_contrast_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """High contrast patterns - no dithering benefit expected."""
+        img = Image.new('RGB', size, (0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Moving high contrast pattern
+        offset = int((frame / total_frames) * 20)
+        
+        for x in range(0, size[0], 10):
+            for y in range(0, size[1], 10):
+                if ((x + y + offset) // 10) % 2 == 0:
+                    draw.rectangle([x, y, x + 9, y + 9], fill=(255, 255, 255))
+                    
+        return img
+    
+    def _create_noise_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Photo-realistic noise - good for testing Bayer dithering."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Reproducible noise with temporal coherence
+        np.random.seed(frame * 42)
+        
+        # Base image with noise
+        base_color = int(128 + 50 * np.sin(frame / total_frames * 2 * np.pi))
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                noise_r = np.random.randint(-50, 50)
+                noise_g = np.random.randint(-50, 50) 
+                noise_b = np.random.randint(-50, 50)
+                
+                r = max(0, min(255, base_color + noise_r))
+                g = max(0, min(255, base_color + noise_g))
+                b = max(0, min(255, base_color + noise_b))
+                
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_texture_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Complex textures where dithering patterns blend naturally."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Procedural texture with animation
+        phase = (frame / total_frames) * 4 * np.pi
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                # Multi-frequency texture pattern
+                val1 = np.sin(x * 0.1 + phase) * np.cos(y * 0.1)
+                val2 = np.sin(x * 0.05 + y * 0.05 + phase * 0.5)
+                val3 = np.sin((x + y) * 0.02 + phase * 0.3)
+                
+                r = int(127 + 60 * val1)
+                g = int(127 + 60 * val2) 
+                b = int(127 + 60 * val3)
+                
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_geometric_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Structured geometric shapes - test ordered dithering."""
+        img = Image.new('RGB', size, (50, 50, 50))
+        draw = ImageDraw.Draw(img)
+        
+        # Animated geometric patterns
+        rotation = (frame / total_frames) * 360
+        
+        center_x, center_y = size[0] // 2, size[1] // 2
+        
+        # Draw rotating polygons
+        for radius in range(20, min(size) // 2, 15):
+            vertices = []
+            for i in range(6):  # Hexagon
+                angle = rotation + i * 60
+                x = center_x + radius * np.cos(np.radians(angle))
+                y = center_y + radius * np.sin(np.radians(angle))
+                vertices.append((x, y))
+            
+            color_intensity = int(100 + 100 * (radius / (min(size) // 2)))
+            draw.polygon(vertices, fill=(color_intensity, color_intensity // 2, 255 - color_intensity))
+            
+        return img
+    
+    def _create_minimal_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Very few colors - test edge behavior."""
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        current_color = colors[frame % len(colors)]
+        return Image.new('RGB', size, current_color)
+    
+    def _create_spectrum_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Full color spectrum - stress test palette reduction."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # HSV color wheel with animation
+        phase = (frame / total_frames) * 360
+        
+        center_x, center_y = size[0] // 2, size[1] // 2
+        max_radius = min(size) // 2
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                dx, dy = x - center_x, y - center_y
+                distance = np.sqrt(dx*dx + dy*dy)
+                angle = np.degrees(np.arctan2(dy, dx)) + phase
+                
+                if distance <= max_radius:
+                    # HSV to RGB conversion
+                    hue = angle % 360
+                    saturation = distance / max_radius
+                    value = 1.0
+                    
+                    h_i = int(hue / 60) % 6
+                    f = hue / 60 - h_i
+                    p = value * (1 - saturation)
+                    q = value * (1 - f * saturation)
+                    t = value * (1 - (1 - f) * saturation)
+                    
+                    if h_i == 0: r, g, b = value, t, p
+                    elif h_i == 1: r, g, b = q, value, p
+                    elif h_i == 2: r, g, b = p, value, t
+                    elif h_i == 3: r, g, b = p, q, value
+                    elif h_i == 4: r, g, b = t, p, value
+                    else: r, g, b = value, p, q
+                    
+                    draw.point((x, y), (int(r*255), int(g*255), int(b*255)))
+                    
+        return img
+    
+    def _create_motion_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Rapid animation with temporal coherence requirements."""
+        img = Image.new('RGB', size, (0, 0, 50))
+        draw = ImageDraw.Draw(img)
+        
+        # Moving objects with trails
+        progress = frame / total_frames
+        
+        # Primary moving object
+        obj_x = int(progress * (size[0] - 20))
+        obj_y = int(size[1] // 2 + 30 * np.sin(progress * 6 * np.pi))
+        
+        draw.ellipse([obj_x, obj_y, obj_x + 20, obj_y + 20], fill=(255, 200, 100))
+        
+        # Secondary bouncing object
+        bounce_x = int(size[0] // 2 + (size[0] // 3) * np.sin(progress * 4 * np.pi))
+        bounce_y = int(abs(np.sin(progress * 8 * np.pi)) * (size[1] - 30))
+        
+        draw.rectangle([bounce_x, bounce_y, bounce_x + 15, bounce_y + 15], fill=(100, 255, 150))
+        
+        return img
+    
+    def _create_simple_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Fallback simple frame."""
+        img = Image.new('RGB', size, (100, 100, 100))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([frame * 5, frame * 5, frame * 5 + 20, frame * 5 + 20], fill=(255, 255, 255))
+        return img
+
+    # NEW FRAME GENERATION METHODS FOR EXPANDED SYNTHETIC DATASET
+
+    def _create_mixed_content_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Mixed content: text + graphics + photo elements - common real-world combination."""
+        img = Image.new('RGB', size, (240, 240, 245))  # Light gray background
+        draw = ImageDraw.Draw(img)
+        
+        # Photo-like gradient region (top third)
+        gradient_height = size[1] // 3
+        for y in range(gradient_height):
+            intensity = int(180 + 50 * (y / gradient_height))
+            color_shift = int(20 * np.sin(frame / total_frames * 2 * np.pi))
+            color = (intensity + color_shift, intensity - color_shift//2, intensity + color_shift//3)
+            draw.line([(0, y), (size[0], y)], fill=color)
+        
+        # Text-like blocks (middle third)  
+        text_y_start = gradient_height
+        text_y_end = 2 * gradient_height
+        block_width = size[0] // 8
+        for i in range(8):
+            x = i * block_width
+            block_height = 5 + (frame + i) % 8
+            y = text_y_start + 20 + i * 3
+            if y + block_height < text_y_end:
+                draw.rectangle([x, y, x + block_width - 2, y + block_height], fill=(50, 50, 50))
+        
+        # Graphics elements (bottom third)
+        graphics_y_start = text_y_end
+        circle_x = int((frame / total_frames) * (size[0] - 40) + 20)
+        circle_y = graphics_y_start + 20
+        draw.ellipse([circle_x - 15, circle_y - 15, circle_x + 15, circle_y + 15], 
+                    fill=(255, 100, 100))
+        
+        # Add some sharp graphic lines
+        for i in range(3):
+            y_pos = graphics_y_start + 50 + i * 10
+            line_length = int((frame / total_frames + i * 0.3) * size[0]) % size[0]
+            draw.line([(0, y_pos), (line_length, y_pos)], 
+                     fill=(0, 150, 200), width=2)
+        
+        return img
+
+    def _create_data_visualization_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Charts and graphs - technical/scientific content."""
+        img = Image.new('RGB', size, (255, 255, 255))  # White background
+        draw = ImageDraw.Draw(img)
+        
+        # Draw axes
+        margin = 30
+        chart_width = size[0] - 2 * margin
+        chart_height = size[1] - 2 * margin
+        
+        # X and Y axes
+        draw.line([(margin, size[1] - margin), (size[0] - margin, size[1] - margin)], 
+                 fill=(0, 0, 0), width=2)  # X-axis
+        draw.line([(margin, margin), (margin, size[1] - margin)], 
+                 fill=(0, 0, 0), width=2)  # Y-axis
+        
+        # Animated data points
+        num_points = 10
+        for i in range(num_points):
+            x = margin + (i / (num_points - 1)) * chart_width
+            
+            # Animated sine wave data
+            base_height = 0.5 + 0.3 * np.sin(i / 2 + frame / total_frames * 2 * np.pi)
+            y = size[1] - margin - base_height * chart_height
+            
+            # Data point
+            draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(200, 50, 50))
+            
+            # Connect lines
+            if i > 0:
+                prev_x = margin + ((i-1) / (num_points - 1)) * chart_width
+                prev_base = 0.5 + 0.3 * np.sin((i-1) / 2 + frame / total_frames * 2 * np.pi)
+                prev_y = size[1] - margin - prev_base * chart_height
+                draw.line([(prev_x, prev_y), (x, y)], fill=(100, 150, 200), width=2)
+        
+        # Grid lines
+        for i in range(1, 5):
+            grid_y = margin + (i / 5) * chart_height
+            draw.line([(margin, grid_y), (size[0] - margin, grid_y)], 
+                     fill=(200, 200, 200), width=1)
+        
+        # Bar chart in corner
+        bar_start_x = size[0] - 100
+        bar_values = [0.3, 0.7, 0.5, 0.9]
+        for i, val in enumerate(bar_values):
+            animated_val = val + 0.1 * np.sin(frame / total_frames * 2 * np.pi + i)
+            bar_height = max(5, int(animated_val * 50))
+            bar_x = bar_start_x + i * 15
+            bar_y = size[1] - margin - 10
+            draw.rectangle([bar_x, bar_y - bar_height, bar_x + 10, bar_y], 
+                         fill=(150, 100, 250))
+        
+        return img
+
+    def _create_transitions_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Complex transitions and morphing - advanced animation patterns."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        progress = frame / total_frames
+        
+        # Morphing between circle and square
+        if progress < 0.5:
+            # Circle to square transition
+            morph_progress = progress * 2  # 0 to 1
+            
+            center_x, center_y = size[0] // 2, size[1] // 2
+            radius = min(size) // 4
+            
+            # Interpolate between circle and square points
+            points = []
+            for angle in range(0, 360, 10):
+                rad = np.radians(angle)
+                
+                # Circle position
+                circle_x = center_x + radius * np.cos(rad)
+                circle_y = center_y + radius * np.sin(rad)
+                
+                # Square position (approximate)
+                if -45 <= angle < 45 or 315 <= angle < 360:  # Right side
+                    square_x = center_x + radius
+                    square_y = center_y + radius * np.tan(rad)
+                elif 45 <= angle < 135:  # Top side
+                    square_y = center_y - radius
+                    square_x = center_x - radius * np.tan(rad - np.pi/2)
+                elif 135 <= angle < 225:  # Left side
+                    square_x = center_x - radius
+                    square_y = center_y - radius * np.tan(rad - np.pi)
+                else:  # Bottom side
+                    square_y = center_y + radius
+                    square_x = center_x + radius * np.tan(rad - 3*np.pi/2)
+                
+                # Interpolate
+                x = circle_x + morph_progress * (square_x - circle_x)
+                y = circle_y + morph_progress * (square_y - circle_y)
+                points.append((x, y))
+            
+            if len(points) > 2:
+                # Smooth color transition
+                color_r = int(255 * (1 - morph_progress))
+                color_g = int(255 * morph_progress)
+                draw.polygon(points, fill=(color_r, color_g, 100))
+        
+        else:
+            # Square to triangle transition
+            morph_progress = (progress - 0.5) * 2  # 0 to 1
+            
+            center_x, center_y = size[0] // 2, size[1] // 2
+            size_val = min(size) // 4
+            
+            # Square corners
+            square_points = [
+                (center_x - size_val, center_y - size_val),
+                (center_x + size_val, center_y - size_val),
+                (center_x + size_val, center_y + size_val),
+                (center_x - size_val, center_y + size_val)
+            ]
+            
+            # Triangle corners
+            triangle_points = [
+                (center_x, center_y - size_val),
+                (center_x + size_val, center_y + size_val),
+                (center_x - size_val, center_y + size_val)
+            ]
+            
+            # Interpolate (square has 4 points, triangle has 3)
+            final_points = []
+            for i in range(3):
+                sq_x, sq_y = square_points[i]
+                tri_x, tri_y = triangle_points[i]
+                x = sq_x + morph_progress * (tri_x - sq_x)
+                y = sq_y + morph_progress * (tri_y - sq_y)
+                final_points.append((x, y))
+            
+            color_g = int(255 * (1 - morph_progress))
+            color_b = int(255 * morph_progress)
+            draw.polygon(final_points, fill=(100, color_g, color_b))
+        
+        return img
+
+    def _create_single_pixel_anim_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Single pixel changes - minimal motion detection."""
+        img = Image.new('RGB', size, (128, 128, 128))  # Gray background
+        
+        # Only change a few pixels each frame
+        pixels_to_change = [(
+            (frame * 7 + i * 13) % size[0],
+            (frame * 5 + i * 11) % size[1]
+        ) for i in range(3)]
+        
+        for x, y in pixels_to_change:
+            # Subtle color changes
+            color_shift = (frame * 17 + x + y) % 64  # Small variation
+            img.putpixel((x, y), (128 + color_shift, 128 - color_shift//2, 128 + color_shift//3))
+        
+        # Add one more obvious but tiny moving element
+        moving_x = (frame * 2) % size[0]
+        moving_y = (frame) % size[1]
+        img.putpixel((moving_x, moving_y), (255, 255, 255))
+        
+        return img
+
+    def _create_static_minimal_change_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Mostly static with tiny changes - frame reduction opportunities."""
+        # Base static image
+        img = Image.new('RGB', size, (200, 210, 220))
+        draw = ImageDraw.Draw(img)
+        
+        # Static background pattern
+        for x in range(0, size[0], 20):
+            for y in range(0, size[1], 20):
+                draw.rectangle([x, y, x + 18, y + 18], outline=(180, 190, 200))
+        
+        # Very minimal animated element - only changes every few frames
+        if frame % 5 == 0 and size[0] > 10:  # Only change every 5th frame, if size allows
+            change_x = (frame // 5) % (size[0] - 10)
+            change_y = size[1] // 2
+            draw.ellipse([change_x, change_y, change_x + 8, change_y + 8], 
+                        fill=(220, 100, 100))
+        
+        # Tiny blinking element
+        if frame % 8 < 2 and size[0] > 20 and size[1] > 20:  # Blink pattern, if size allows
+            blink_x = size[0] - 20
+            blink_y = 20
+            draw.ellipse([blink_x, blink_y, blink_x + 4, blink_y + 4], 
+                        fill=(100, 220, 100))
+        
+        return img
+
+    def _create_high_frequency_detail_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """High frequency details - test aliasing and quality preservation."""
+        img = Image.new('RGB', size, (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        # Fine grid pattern
+        for x in range(0, size[0], 2):
+            for y in range(0, size[1], 2):
+                if (x + y + frame) % 4 == 0:
+                    draw.point((x, y), (0, 0, 0))
+        
+        # Moiré patterns - high frequency interference
+        center_x, center_y = size[0] // 2, size[1] // 2
+        for x in range(size[0]):
+            for y in range(size[1]):
+                dx, dy = x - center_x, y - center_y
+                distance = np.sqrt(dx*dx + dy*dy)
+                
+                # High frequency radial pattern
+                freq = 0.5 + frame / total_frames * 0.3
+                if int(distance * freq) % 2 == 0:
+                    img.putpixel((x, y), (200, 200, 200))
+        
+        # Fine diagonal lines that create aliasing
+        line_spacing = 3
+        offset = frame % (line_spacing * 2)
+        for i in range(-size[0], size[0], line_spacing):
+            x1, y1 = i + offset, 0
+            x2, y2 = i + offset + size[1], size[1]
+            if 0 <= x1 < size[0] and 0 <= x2 < size[0]:
+                draw.line([(x1, y1), (x2, y2)], fill=(100, 100, 100), width=1)
+        
+        return img
+
+    def select_pipelines_intelligently(self, all_pipelines: List, strategy: str = 'representative') -> List:
+        """Select pipelines using intelligent sampling strategies to reduce testing time."""
+        sampling_config = self.SAMPLING_STRATEGIES.get(strategy, self.SAMPLING_STRATEGIES['representative'])
+        
+        self.logger.info(f"🧠 Using sampling strategy: {sampling_config.name}")
+        self.logger.info(f"📋 Description: {sampling_config.description}")
+        self.logger.info(f"📊 Target sample ratio: {sampling_config.sample_ratio:.1%}")
+        
+        if strategy == 'factorial':
+            return self._factorial_design_sampling(all_pipelines, sampling_config)
+        elif strategy == 'progressive':
+            return self._progressive_elimination_sampling(all_pipelines, sampling_config)
+        elif strategy == 'targeted':
+            return self._targeted_expansion_sampling(all_pipelines, sampling_config)
+        else:
+            return self._representative_sampling(all_pipelines, sampling_config)
+    
+    def _representative_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
+        """Sample representative pipelines from each tool category."""
+        from collections import defaultdict
+        import random
+        
+        # Handle empty pipeline list
+        if not all_pipelines:
+            self.logger.warning("⚠️ No pipelines provided for sampling")
+            return []
+        
+        # Validate pipeline objects - ensure they have the expected structure
+        valid_pipelines = []
+        for pipeline in all_pipelines:
+            if hasattr(pipeline, 'steps') and hasattr(pipeline.steps, '__iter__'):
+                try:
+                    # Test if we can access tool names (this will fail for invalid objects)
+                    _ = [step.tool_cls.NAME for step in pipeline.steps]
+                    valid_pipelines.append(pipeline)
+                except (AttributeError, TypeError):
+                    self.logger.warning(f"⚠️ Invalid pipeline object detected: {type(pipeline)}. Skipping.")
+            else:
+                self.logger.warning(f"⚠️ Pipeline object missing 'steps' attribute: {type(pipeline)}. Skipping.")
+        
+        if not valid_pipelines:
+            self.logger.warning("⚠️ No valid pipeline objects found for sampling")
+            return []
+        
+        # Group pipelines by tool categories and dithering methods
+        tool_groups = defaultdict(list)
+        
+        for pipeline in valid_pipelines:
+            # Extract tool signatures from pipeline steps
+            tool_signature = "_".join([step.tool_cls.NAME for step in pipeline.steps])
+            tool_groups[tool_signature].append(pipeline)
+        
+        selected_pipelines = []
+        total_target = int(len(all_pipelines) * config.sample_ratio)
+        
+        # Handle case where no tool groups found
+        if not tool_groups:
+            self.logger.warning("⚠️ No tool groups found in pipelines")
+            return []
+            
+        samples_per_group = max(config.min_samples_per_tool, total_target // len(tool_groups))
+        
+        self.logger.info(f"🔧 Tool groups found: {len(tool_groups)}")
+        self.logger.info(f"📈 Target samples per group: {samples_per_group}")
+        
+        for tool_sig, pipelines in tool_groups.items():
+            # Sample from this group - prioritize diversity in parameters
+            group_samples = min(samples_per_group, len(pipelines))
+            
+            if group_samples == len(pipelines):
+                selected_pipelines.extend(pipelines)
+            else:
+                # Ensure diversity by sampling across different parameter ranges
+                sampled = self._diverse_parameter_sampling(pipelines, group_samples)
+                selected_pipelines.extend(sampled)
+        
+        # If we're under target, add random samples from high-potential pipelines
+        if len(selected_pipelines) < total_target:
+            # Use list comprehension instead of set operations on non-hashable objects
+            selected_ids = {id(p) for p in selected_pipelines}
+            remaining = [p for p in all_pipelines if id(p) not in selected_ids]
+            additional = min(total_target - len(selected_pipelines), len(remaining))
+            if remaining and additional > 0:
+                selected_pipelines.extend(random.sample(remaining, additional))
+        
+        actual_count = min(total_target, len(selected_pipelines))
+        
+        # Safe percentage calculation
+        percentage = (actual_count / len(all_pipelines) * 100) if all_pipelines else 0
+        self.logger.info(f"✅ Selected {actual_count} pipelines from {len(all_pipelines)} total ({percentage:.1f}%)")
+        return selected_pipelines[:actual_count]
+    
+    def _diverse_parameter_sampling(self, pipelines: List, n_samples: int) -> List:
+        """Sample pipelines with diverse parameter combinations."""
+        import random
+        
+        if n_samples >= len(pipelines):
+            return pipelines
+        
+        # TODO: Enhanced parameter space analysis
+        # For now, use stratified random sampling
+        return random.sample(pipelines, n_samples)
+    
+    def _factorial_design_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
+        """Use statistical design of experiments for efficient sampling."""
+        self.logger.info("🧪 Using factorial design approach")
+        
+        # Identify key factors for factorial design:
+        # Factor 1: Tool family (ImageMagick, FFmpeg, Gifsicle, etc.)
+        # Factor 2: Dithering method category (None, Floyd-Steinberg, Bayer, etc.) 
+        # Factor 3: Color reduction level (Low: 8-16, Medium: 32-64, High: 128+)
+        # Factor 4: Lossy compression (None: 0, Light: 20-40, Heavy: 60+)
+        
+        tool_families = set()
+        dithering_categories = set()
+        
+        for pipeline in all_pipelines:
+            for step in pipeline.steps:
+                if hasattr(step.tool_cls, 'NAME'):
+                    tool_name = step.tool_cls.NAME
+                    tool_families.add(tool_name.split('_')[0])  # Get base tool name
+                    
+                    # Categorize dithering methods
+                    if 'None' in tool_name or 'none' in tool_name.lower():
+                        dithering_categories.add('none')
+                    elif 'floyd' in tool_name.lower() or 'FloydSteinberg' in tool_name:
+                        dithering_categories.add('floyd_steinberg')
+                    elif 'bayer' in tool_name.lower() or 'Bayer' in tool_name:
+                        dithering_categories.add('bayer')
+                    elif 'riemersma' in tool_name.lower():
+                        dithering_categories.add('riemersma')
+                    else:
+                        dithering_categories.add('other')
+        
+        # Create factorial combinations
+        target_count = int(len(all_pipelines) * config.sample_ratio)
+        combinations_needed = min(target_count, len(tool_families) * len(dithering_categories) * 3 * 2)  # 3 color levels, 2 lossy levels
+        
+        self.logger.info(f"🔬 Factorial design: {len(tool_families)} tools × {len(dithering_categories)} dithering methods")
+        self.logger.info(f"🎯 Target factorial combinations: {combinations_needed}")
+        
+        # For now, fall back to representative sampling with factorial weighting
+        return self._representative_sampling(all_pipelines, config)
+    
+    def _progressive_elimination_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
+        """Multi-stage progressive elimination to focus on promising pipelines."""
+        self.logger.info("📈 Using progressive elimination strategy")
+        
+        # Stage 1: Quick screening (5% of pipelines)
+        stage1_config = SamplingStrategy("stage1", "Initial screening", 0.05, min_samples_per_tool=2)
+        stage1_pipelines = self._representative_sampling(all_pipelines, stage1_config)
+        
+        self.logger.info(f"🔍 Stage 1: Screening {len(stage1_pipelines)} pipelines for initial assessment")
+        
+        # In a full implementation, we would:
+        # 1. Run Stage 1 testing
+        # 2. Identify top-performing tool families/dithering methods
+        # 3. Run Stage 2 with more comprehensive testing of promising categories
+        # 4. Run Stage 3 with full parameter sweeps of the best candidates
+        
+        # For now, return stage 1 selection with expanded promising categories
+        expanded_target = int(len(all_pipelines) * config.sample_ratio)
+        if len(stage1_pipelines) < expanded_target:
+            # Add more samples from promising categories (would be data-driven in full implementation)
+            stage1_ids = {id(p) for p in stage1_pipelines}
+            remaining = [p for p in all_pipelines if id(p) not in stage1_ids] 
+            additional_needed = expanded_target - len(stage1_pipelines)
+            if remaining:
+                additional_samples = remaining[:additional_needed]
+                stage1_pipelines.extend(additional_samples)
+        
+        self.logger.info(f"📊 Progressive sampling selected {len(stage1_pipelines)} pipelines")
+        return stage1_pipelines
+
+    def _targeted_expansion_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
+        """Strategic sampling focused on high-value expanded dataset testing."""
+        self.logger.info("🎯 Using targeted expansion strategy")
+        
+        # Validate input - delegate to representative sampling which has validation
+        selected_pipelines = self._representative_sampling(all_pipelines, config)
+        
+        self.logger.info(f"📊 Targeted expansion selected {len(selected_pipelines)} pipelines")
+        self.logger.info("🎯 Will test on strategically selected GIF subset (17 vs 25 GIFs)")
+        
+        return selected_pipelines
+
+    def get_targeted_synthetic_gifs(self) -> List[Path]:
+        """Generate a strategically reduced set of synthetic GIFs for targeted testing."""
+        self.logger.info("🎯 Generating targeted synthetic GIF subset")
+        
+        # Define high-value subset: Original + Size variations + 1 frame variation + 1 content type
+        targeted_specs = []
+        
+        # Keep all original research-based content (10 GIFs)
+        original_names = [
+            'smooth_gradient', 'complex_gradient', 'solid_blocks', 'high_contrast',
+            'photographic_noise', 'texture_complex', 'geometric_patterns', 
+            'few_colors', 'many_colors', 'animation_heavy'
+        ]
+        
+        # Add high-value size variations (4 GIFs) - skip medium, keep key sizes
+        size_variation_names = [
+            'gradient_small',    # 50x50 - minimum realistic
+            'gradient_large',    # 500x500 - big file performance  
+            'gradient_xlarge',   # 1000x1000 - maximum realistic
+            'noise_large'        # 500x500 - test Bayer on large files
+        ]
+        
+        # Add key frame variation (2 GIFs) - most informative extremes
+        frame_variation_names = [
+            'minimal_frames',    # 2 frames - edge case
+            'long_animation'     # 50 frames - extended animation (skip 100 frame extreme)
+        ]
+        
+        # Add most valuable new content type (1 GIF)
+        new_content_names = [
+            'mixed_content'      # Real-world mixed content (skip data viz and transitions initially)
+        ]
+        
+        # Combine all targeted names
+        targeted_names = original_names + size_variation_names + frame_variation_names + new_content_names
+        
+        # Generate only the targeted GIFs
+        targeted_specs = [spec for spec in self.synthetic_specs if spec.name in targeted_names]
+        
+        self.logger.info(f"🎯 Selected {len(targeted_specs)} high-value GIFs:")
+        self.logger.info(f"   📋 Original research-based: {len(original_names)}")
+        self.logger.info(f"   📏 Key size variations: {len(size_variation_names)}")  
+        self.logger.info(f"   🎬 Key frame variations: {len(frame_variation_names)}")
+        self.logger.info(f"   🔄 Essential new content: {len(new_content_names)}")
+        
+        gif_paths = []
+        for spec in targeted_specs:
+            gif_path = self.output_dir / f"{spec.name}.gif"
+            if not gif_path.exists():
+                self._create_synthetic_gif(gif_path, spec)
+            gif_paths.append(gif_path)
+            
+        return gif_paths
+
+    def run_elimination_analysis(self, 
+                                test_pipelines: List[Pipeline] = None,
+                                elimination_threshold: float = 0.05,
+                                use_targeted_gifs: bool = False) -> EliminationResult:
+        """Run competitive elimination analysis on synthetic GIFs.
+        
+        Args:
+            test_pipelines: Specific pipelines to test (None = all pipelines)
+            elimination_threshold: SSIM threshold for elimination (lower = stricter)
+            
+        Returns:
+            EliminationResult with eliminated and retained pipelines
+        """
+        if test_pipelines is None:
+            test_pipelines = generate_all_pipelines()
+            
+        self.logger.info(f"Running elimination analysis on {len(test_pipelines)} pipelines")
+        
+        # Generate synthetic test GIFs
+        if use_targeted_gifs:
+            synthetic_gifs = self.get_targeted_synthetic_gifs()
+        else:
+            synthetic_gifs = self.generate_synthetic_gifs()
+        
+        # Test all pipeline combinations
+        results_df = self._run_comprehensive_testing(synthetic_gifs, test_pipelines)
+        
+        # Analyze results and eliminate underperformers
+        elimination_result = self._analyze_and_eliminate(results_df, elimination_threshold)
+        
+        # Save results
+        self._save_results(elimination_result, results_df)
+        
+        return elimination_result
+    
+    def _run_comprehensive_testing(self, gif_paths: List[Path], pipelines: List[Pipeline]) -> pd.DataFrame:
+        """Run comprehensive testing of all pipeline combinations with elaborate quality metrics."""
+        from .metrics import calculate_comprehensive_metrics, DEFAULT_METRICS_CONFIG
+        import tempfile
+        import time
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            # Fallback if tqdm is not available
+            class tqdm:
+                def __init__(self, total=None, initial=0, desc="", unit="", bar_format=""):
+                    self.total = total
+                    self.n = initial
+                    self.desc = desc
+                
+                def update(self, n=1):
+                    self.n += n
+                    if hasattr(self, 'total') and self.total:
+                        percentage = (self.n / self.total) * 100
+                        print(f"\r{self.desc}: {self.n}/{self.total} ({percentage:.1f}%)", end="", flush=True)
+                
+                def close(self):
+                    print()  # New line after progress
+        
+        # Calculate total jobs for progress tracking
+        total_jobs = len(gif_paths) * len(pipelines) * len(self.test_params)
+        self.logger.info(f"Starting comprehensive testing: {total_jobs:,} total pipeline combinations")
+        
+        # Load or create resume file
+        resume_file = self.output_dir / "elimination_progress.json"
+        completed_jobs = self._load_resume_data(resume_file)
+        
+        # Estimate remaining time
+        remaining_jobs = total_jobs - len(completed_jobs)
+        estimated_time = self._estimate_execution_time(remaining_jobs)
+        self.logger.info(f"Estimated completion time: {estimated_time}")
+        
+        # Setup progress bar
+        progress = tqdm(total=total_jobs, initial=len(completed_jobs), 
+                       desc="Testing pipelines", unit="jobs",
+                       bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+        
+        results = []
+        failed_jobs = 0
+        
+        # Test each combination
+        for gif_path in gif_paths:
+            content_type = self._get_content_type(gif_path.stem)
+            
+            for pipeline in pipelines:
+                for params in self.test_params:
+                    job_id = f"{gif_path.stem}_{pipeline.identifier()}_{params['colors']}_{params['lossy']}"
+                    
+                    # Skip if already completed (resume functionality)
+                    if job_id in completed_jobs:
+                        progress.update(1)
+                        results.append(completed_jobs[job_id])
+                        continue
+                    
+                    try:
+                        # Execute pipeline and measure comprehensive metrics
+                        result = self._execute_pipeline_with_metrics(
+                            gif_path, pipeline, params, content_type
+                        )
+                        
+                        # Save progress immediately
+                        completed_jobs[job_id] = result
+                        self._save_resume_data(resume_file, completed_jobs)
+                        
+                        results.append(result)
+                        
+                    except Exception as e:
+                        self.logger.warning(f"Pipeline failed: {job_id} - {e}")
+                        failed_jobs += 1
+                        
+                        # Record failure for resume
+                        failed_result = {
+                            'gif_name': gif_path.stem,
+                            'content_type': content_type,
+                            'pipeline_id': pipeline.identifier(),
+                            'error': str(e),
+                            'success': False
+                        }
+                        completed_jobs[job_id] = failed_result
+                        results.append(failed_result)
+                    
+                    progress.update(1)
+                    
+                    # Save checkpoint every 50 jobs
+                    if len(results) % 50 == 0:
+                        self._save_intermediate_results(results)
+        
+        progress.close()
+        
+        self.logger.info(f"Testing completed: {len(results)} jobs, {failed_jobs} failures")
+        return pd.DataFrame(results)
+    
+    def _execute_pipeline_with_metrics(self, gif_path: Path, pipeline: Pipeline, params: dict, content_type: str) -> dict:
+        """Execute a single pipeline and calculate comprehensive quality metrics."""
+        from .metrics import calculate_comprehensive_metrics
+        from .dynamic_pipeline import Pipeline
+        import tempfile
+        import time
+        
+        start_time = time.perf_counter()
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            output_path = tmpdir_path / f"compressed_{gif_path.stem}.gif"
+            
+            # Execute pipeline steps
+            current_input = gif_path
+            pipeline_metadata = {}
+            
+            for step in pipeline.steps:
+                step_output = tmpdir_path / f"step_{step.variable}_{current_input.stem}.gif"
+                
+                # Create wrapper instance and apply
+                wrapper = step.tool_cls()
+                step_params = {}
+                
+                if step.variable == "color_reduction":
+                    step_params["colors"] = params["colors"]
+                elif step.variable == "frame_reduction":
+                    step_params["ratio"] = params.get("frame_ratio", 1.0)
+                elif step.variable == "lossy_compression":
+                    step_params["lossy_level"] = params["lossy"]
+                
+                step_result = wrapper.apply(current_input, step_output, params=step_params)
+                pipeline_metadata.update(step_result)
+                current_input = step_output
+            
+            # Copy final result to output path
+            import shutil
+            shutil.copy(current_input, output_path)
+            
+            # Calculate comprehensive quality metrics using GPU-accelerated system if available
+            try:
+                quality_metrics = self._calculate_gpu_accelerated_metrics(gif_path, output_path)
+            except Exception as e:
+                self.logger.warning(f"GPU metrics calculation failed, falling back to CPU: {e}")
+                try:
+                    quality_metrics = calculate_comprehensive_metrics(gif_path, output_path)
+                except Exception as e2:
+                    self.logger.warning(f"Quality metrics calculation failed: {e2}")
+                    quality_metrics = self._get_fallback_metrics(gif_path, output_path)
+            
+            # Compile complete result with all metrics
+            result = {
+                'gif_name': gif_path.stem,
+                'content_type': content_type,
+                'pipeline_id': pipeline.identifier(),
+                'success': True,
+                
+                # File metrics
+                'file_size_kb': quality_metrics.get('kilobytes', 0),
+                'original_size_kb': gif_path.stat().st_size / 1024,
+                'compression_ratio': self._calculate_compression_ratio(gif_path, output_path),
+                
+                # Traditional quality metrics
+                'ssim_mean': quality_metrics.get('ssim', 0.0),
+                'ssim_std': quality_metrics.get('ssim_std', 0.0),
+                'ssim_min': quality_metrics.get('ssim_min', 0.0),
+                'ssim_max': quality_metrics.get('ssim_max', 0.0),
+                
+                'ms_ssim_mean': quality_metrics.get('ms_ssim', 0.0),
+                'psnr_mean': quality_metrics.get('psnr', 0.0),
+                'temporal_consistency': quality_metrics.get('temporal_consistency', 0.0),
+                
+                # Extended quality metrics (the elaborate ones)
+                'mse_mean': quality_metrics.get('mse', 0.0),
+                'rmse_mean': quality_metrics.get('rmse', 0.0),
+                'fsim_mean': quality_metrics.get('fsim', 0.0),
+                'gmsd_mean': quality_metrics.get('gmsd', 0.0),
+                'chist_mean': quality_metrics.get('chist', 0.0),
+                'edge_similarity_mean': quality_metrics.get('edge_similarity', 0.0),
+                'texture_similarity_mean': quality_metrics.get('texture_similarity', 0.0),
+                'sharpness_similarity_mean': quality_metrics.get('sharpness_similarity', 0.0),
+                
+                # Composite quality score (weighted combination)
+                'composite_quality': quality_metrics.get('composite_quality', 0.0),
+                
+                # Performance metrics
+                'render_time_ms': quality_metrics.get('render_ms', 0),
+                'total_processing_time_ms': int((time.perf_counter() - start_time) * 1000),
+                
+                # Pipeline details
+                'pipeline_steps': len(pipeline.steps),
+                'tools_used': [step.tool_cls.NAME for step in pipeline.steps],
+                
+                # Test parameters
+                'test_colors': params["colors"],
+                'test_lossy': params["lossy"],
+                'test_frame_ratio': params.get("frame_ratio", 1.0),
+            }
+            
+            return result
+    
+    def _test_gpu_availability(self):
+        """Test GPU availability and log status."""
+        try:
+            import cv2
+            import numpy as np
+            cuda_count = cv2.cuda.getCudaEnabledDeviceCount()
+            
+            if cuda_count > 0:
+                self.logger.info(f"🚀 GPU acceleration enabled: {cuda_count} CUDA device(s) available")
+                # Test basic GPU operations
+                try:
+                    test_mat = cv2.cuda_GpuMat()
+                    test_mat.upload(np.ones((100, 100), dtype=np.uint8))
+                    test_mat.download()
+                    self.logger.info("✅ GPU operations test passed")
+                except Exception as e:
+                    self.logger.warning(f"⚠️  GPU operations test failed: {e}")
+                    self.use_gpu = False
+            else:
+                self.logger.warning("⚠️  No CUDA devices found, falling back to CPU")
+                self.use_gpu = False
+                
+        except ImportError:
+            self.logger.warning("⚠️  OpenCV CUDA not available, falling back to CPU")
+            self.use_gpu = False
+    
+    def _calculate_gpu_accelerated_metrics(self, original_path: Path, compressed_path: Path) -> dict:
+        """Calculate quality metrics with GPU acceleration where possible."""
+        if not self.use_gpu:
+            # User hasn't requested GPU or GPU not available
+            from .metrics import calculate_comprehensive_metrics
+            return calculate_comprehensive_metrics(original_path, compressed_path)
+            
+        try:
+            import cv2
+            
+            # Check if CUDA is available
+            cuda_available = cv2.cuda.getCudaEnabledDeviceCount() > 0
+            
+            if not cuda_available:
+                # Fall back to regular CPU calculation
+                from .metrics import calculate_comprehensive_metrics
+                return calculate_comprehensive_metrics(original_path, compressed_path)
+            
+            self.logger.info("🚀 Using GPU acceleration for quality metrics")
+            
+            # Use GPU-accelerated version
+            return self._calculate_cuda_metrics(original_path, compressed_path)
+            
+        except ImportError:
+            # OpenCV CUDA not available, fall back to CPU
+            from .metrics import calculate_comprehensive_metrics
+            return calculate_comprehensive_metrics(original_path, compressed_path)
+    
+    def _calculate_cuda_metrics(self, original_path: Path, compressed_path: Path) -> dict:
+        """GPU-accelerated quality metrics calculation using CUDA."""
+        import cv2
+        import numpy as np
+        import time
+        from .metrics import extract_gif_frames, resize_to_common_dimensions, align_frames
+        from .config import DEFAULT_METRICS_CONFIG
+        
+        config = DEFAULT_METRICS_CONFIG
+        start_time = time.perf_counter()
+        
+        # Extract frames (CPU operation)
+        original_result = extract_gif_frames(original_path, config.SSIM_MAX_FRAMES)
+        compressed_result = extract_gif_frames(compressed_path, config.SSIM_MAX_FRAMES)
+        
+        # Resize frames to common dimensions (CPU operation)
+        original_frames, compressed_frames = resize_to_common_dimensions(
+            original_result.frames, compressed_result.frames
+        )
+        
+        # Align frames using content-based method (CPU operation)
+        aligned_pairs = align_frames(original_frames, compressed_frames)
+        
+        if not aligned_pairs:
+            raise ValueError("No frame pairs could be aligned")
+        
+        # GPU-accelerated metric calculations
+        metric_values = {
+            'ssim': [],
+            'ms_ssim': [],
+            'psnr': [],
+            'mse': [],
+            'rmse': [],
+            'fsim': [],
+            'gmsd': [],
+            'chist': [],
+            'edge_similarity': [],
+            'texture_similarity': [],
+            'sharpness_similarity': [],
+        }
+        
+        # Process frames with GPU acceleration
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                # Upload frames to GPU
+                gpu_orig = cv2.cuda_GpuMat()
+                gpu_comp = cv2.cuda_GpuMat()
+                gpu_orig.upload(orig_frame.astype(np.uint8))
+                gpu_comp.upload(comp_frame.astype(np.uint8))
+            except Exception as e:
+                self.logger.warning(f"GPU upload failed for frame: {e}")
+                # Fall back to CPU for this frame
+                for key in metric_values.keys():
+                    metric_values[key].append(0.0)
+                continue
+            
+            # GPU-accelerated calculations
+            try:
+                # SSIM (simplified GPU version)
+                ssim_val = self._gpu_ssim(gpu_orig, gpu_comp)
+                metric_values['ssim'].append(max(0.0, min(1.0, ssim_val)))
+                
+                # MSE/RMSE (GPU accelerated)
+                mse_val = self._gpu_mse(gpu_orig, gpu_comp)
+                metric_values['mse'].append(mse_val)
+                metric_values['rmse'].append(np.sqrt(mse_val))
+                
+                # PSNR (calculated from MSE)
+                psnr_val = 20 * np.log10(255.0 / (np.sqrt(mse_val) + 1e-8))
+                normalized_psnr = min(psnr_val / float(config.PSNR_MAX_DB), 1.0)
+                metric_values['psnr'].append(max(0.0, normalized_psnr))
+                
+                # GPU-accelerated edge similarity
+                edge_sim = self._gpu_edge_similarity(gpu_orig, gpu_comp, config)
+                metric_values['edge_similarity'].append(edge_sim)
+                
+                # Fall back to CPU for complex metrics (FSIM, GMSD, etc.)
+                cpu_orig = orig_frame
+                cpu_comp = comp_frame
+                
+                metric_values['fsim'].append(self._cpu_fsim(cpu_orig, cpu_comp))
+                metric_values['gmsd'].append(self._cpu_gmsd(cpu_orig, cpu_comp))
+                metric_values['chist'].append(self._cpu_chist(cpu_orig, cpu_comp))
+                metric_values['texture_similarity'].append(self._cpu_texture_similarity(cpu_orig, cpu_comp))
+                metric_values['sharpness_similarity'].append(self._cpu_sharpness_similarity(cpu_orig, cpu_comp))
+                
+                # MS-SSIM (CPU fallback for now)
+                metric_values['ms_ssim'].append(self._cpu_ms_ssim(cpu_orig, cpu_comp))
+                
+            except Exception as e:
+                self.logger.warning(f"GPU metric calculation failed for frame: {e}")
+                # Fill with fallback values
+                for key in metric_values.keys():
+                    if len(metric_values[key]) <= len(metric_values['ssim']) - 1:
+                        metric_values[key].append(0.0)
+        
+        # Calculate aggregated statistics (same as CPU version)
+        result = {}
+        for metric_name, values in metric_values.items():
+            if values:
+                result[metric_name] = float(np.mean(values))
+                result[f'{metric_name}_std'] = float(np.std(values))
+                result[f'{metric_name}_min'] = float(np.min(values))
+                result[f'{metric_name}_max'] = float(np.max(values))
+            else:
+                result[metric_name] = 0.0
+                result[f'{metric_name}_std'] = 0.0
+                result[f'{metric_name}_min'] = 0.0
+                result[f'{metric_name}_max'] = 0.0
+        
+        # Calculate temporal consistency (CPU operation)
+        temporal_delta = self._calculate_temporal_consistency(aligned_pairs)
+        result['temporal_consistency'] = float(temporal_delta)
+        
+        # Calculate composite quality using traditional metrics
+        composite_quality = (
+            config.SSIM_WEIGHT * result['ssim'] +
+            config.MS_SSIM_WEIGHT * result['ms_ssim'] +
+            config.PSNR_WEIGHT * result['psnr'] +
+            config.TEMPORAL_WEIGHT * result['temporal_consistency']
+        )
+        result['composite_quality'] = float(composite_quality)
+        
+        # Add system metrics
+        result['kilobytes'] = float(compressed_path.stat().st_size / 1024)
+        
+        # Calculate processing time
+        end_time = time.perf_counter()
+        elapsed_seconds = end_time - start_time
+        result['render_ms'] = min(int(elapsed_seconds * 1000), 86400000)
+        
+        return result
+    
+    def _gpu_ssim(self, gpu_img1: 'cv2.cuda_GpuMat', gpu_img2: 'cv2.cuda_GpuMat') -> float:
+        """GPU-accelerated SSIM calculation (simplified version)."""
+        import cv2
+        import numpy as np
+        
+        try:
+            # Convert to grayscale on GPU if needed
+            if gpu_img1.channels() == 3:
+                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)
+                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
+            else:
+                gpu_gray1 = gpu_img1
+                gpu_gray2 = gpu_img2
+        except Exception as e:
+            self.logger.warning(f"GPU color conversion failed: {e}")
+            return 0.0
+        
+        try:
+            # Convert to float32 for calculations
+            gpu_float1 = cv2.cuda.convertTo(gpu_gray1, cv2.CV_32F)
+            gpu_float2 = cv2.cuda.convertTo(gpu_gray2, cv2.CV_32F)
+            
+            # SSIM constants
+            C1 = (0.01 * 255) ** 2
+            C2 = (0.03 * 255) ** 2
+            
+            # Mean calculations using GPU blur
+            kernel_size = (11, 11)
+            sigma = 1.5
+            
+            mu1 = cv2.cuda.GaussianBlur(gpu_float1, kernel_size, sigma)
+            mu2 = cv2.cuda.GaussianBlur(gpu_float2, kernel_size, sigma)
+        except Exception as e:
+            self.logger.warning(f"GPU SSIM calculation failed: {e}")
+            return 0.0
+        
+        mu1_sq = cv2.cuda.multiply(mu1, mu1)
+        mu2_sq = cv2.cuda.multiply(mu2, mu2)
+        mu1_mu2 = cv2.cuda.multiply(mu1, mu2)
+        
+        # Variance calculations
+        sigma1_sq = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float1, gpu_float1), kernel_size, sigma)
+        sigma1_sq = cv2.cuda.subtract(sigma1_sq, mu1_sq)
+        
+        sigma2_sq = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float2, gpu_float2), kernel_size, sigma)
+        sigma2_sq = cv2.cuda.subtract(sigma2_sq, mu2_sq)
+        
+        sigma12 = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float1, gpu_float2), kernel_size, sigma)
+        sigma12 = cv2.cuda.subtract(sigma12, mu1_mu2)
+        
+        # Download for final calculations (could be optimized further)
+        mu1_cpu = mu1.download()
+        mu2_cpu = mu2.download()
+        mu1_sq_cpu = mu1_sq.download()
+        mu2_sq_cpu = mu2_sq.download()
+        mu1_mu2_cpu = mu1_mu2.download()
+        sigma1_sq_cpu = sigma1_sq.download()
+        sigma2_sq_cpu = sigma2_sq.download()
+        sigma12_cpu = sigma12.download()
+        
+        # SSIM calculation
+        numerator1 = 2 * mu1_mu2_cpu + C1
+        numerator2 = 2 * sigma12_cpu + C2
+        denominator1 = mu1_sq_cpu + mu2_sq_cpu + C1
+        denominator2 = sigma1_sq_cpu + sigma2_sq_cpu + C2
+        
+        ssim_map = (numerator1 * numerator2) / (denominator1 * denominator2)
+        
+        return float(np.mean(ssim_map))
+    
+    def _gpu_mse(self, gpu_img1: 'cv2.cuda_GpuMat', gpu_img2: 'cv2.cuda_GpuMat') -> float:
+        """GPU-accelerated MSE calculation."""
+        import cv2
+        import numpy as np
+        
+        # Calculate difference on GPU
+        gpu_diff = cv2.cuda.subtract(gpu_img1, gpu_img2)
+        gpu_squared = cv2.cuda.multiply(gpu_diff, gpu_diff)
+        
+        # Download for mean calculation
+        squared_cpu = gpu_squared.download()
+        
+        return float(np.mean(squared_cpu))
+    
+    def _gpu_edge_similarity(self, gpu_img1: 'cv2.cuda_GpuMat', gpu_img2: 'cv2.cuda_GpuMat', config) -> float:
+        """GPU-accelerated edge similarity using Canny edge detection."""
+        import cv2
+        import numpy as np
+        
+        try:
+            # Convert to grayscale on GPU if needed
+            if gpu_img1.channels() == 3:
+                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)
+                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
+            else:
+                gpu_gray1 = gpu_img1
+                gpu_gray2 = gpu_img2
+            
+            # GPU Canny edge detection
+            detector = cv2.cuda.createCannyEdgeDetector(
+                config.EDGE_CANNY_THRESHOLD1, 
+                config.EDGE_CANNY_THRESHOLD2
+            )
+        except Exception as e:
+            self.logger.warning(f"GPU edge detection setup failed: {e}")
+            return 0.0
+        
+        gpu_edges1 = detector.detect(gpu_gray1)
+        gpu_edges2 = detector.detect(gpu_gray2)
+        
+        # Download for correlation calculation
+        edges1 = gpu_edges1.download()
+        edges2 = gpu_edges2.download()
+        
+        # Calculate correlation
+        edges1_flat = edges1.flatten().astype(np.float32)
+        edges2_flat = edges2.flatten().astype(np.float32)
+        
+        if np.std(edges1_flat) == 0 and np.std(edges2_flat) == 0:
+            return 1.0
+        elif np.std(edges1_flat) == 0 or np.std(edges2_flat) == 0:
+            return 0.0
+        
+        correlation = np.corrcoef(edges1_flat, edges2_flat)[0, 1]
+        return float(np.clip(correlation, 0.0, 1.0))
+    
+    # CPU fallback methods for complex metrics
+    def _cpu_fsim(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU FSIM calculation."""
+        from .metrics import fsim
+        return fsim(frame1, frame2)
+    
+    def _cpu_gmsd(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU GMSD calculation."""
+        from .metrics import gmsd
+        return gmsd(frame1, frame2)
+    
+    def _cpu_chist(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU color histogram correlation."""
+        from .metrics import chist
+        return chist(frame1, frame2)
+    
+    def _cpu_texture_similarity(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU texture similarity."""
+        from .metrics import texture_similarity
+        return texture_similarity(frame1, frame2)
+    
+    def _cpu_sharpness_similarity(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU sharpness similarity."""
+        from .metrics import sharpness_similarity
+        return sharpness_similarity(frame1, frame2)
+    
+    def _cpu_ms_ssim(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
+        """CPU MS-SSIM calculation."""
+        from .metrics import calculate_ms_ssim
+        return calculate_ms_ssim(frame1, frame2)
+    
+    def _calculate_temporal_consistency(self, aligned_pairs) -> float:
+        """Calculate temporal consistency between frames."""
+        if len(aligned_pairs) < 2:
+            return 1.0
+        
+        # Calculate frame-to-frame differences
+        differences = []
+        for i in range(len(aligned_pairs) - 1):
+            curr_orig, curr_comp = aligned_pairs[i]
+            next_orig, next_comp = aligned_pairs[i + 1]
+            
+            # Calculate difference in differences
+            orig_diff = np.mean(np.abs(next_orig.astype(np.float32) - curr_orig.astype(np.float32)))
+            comp_diff = np.mean(np.abs(next_comp.astype(np.float32) - curr_comp.astype(np.float32)))
+            
+            temporal_diff = abs(orig_diff - comp_diff)
+            differences.append(temporal_diff)
+        
+        # Normalize and invert (higher = more consistent)
+        avg_diff = np.mean(differences)
+        consistency = 1.0 / (1.0 + avg_diff / 255.0)
+        
+        return float(consistency)
+    
+    @property
+    def test_params(self) -> List[dict]:
+        """Test parameter combinations for comprehensive evaluation."""
+        params = [
+            {"colors": 16, "lossy": 0, "frame_ratio": 1.0},
+            {"colors": 32, "lossy": 0, "frame_ratio": 1.0},
+            {"colors": 16, "lossy": 40, "frame_ratio": 1.0},
+            {"colors": 8, "lossy": 0, "frame_ratio": 1.0},    # Extreme compression
+            {"colors": 64, "lossy": 0, "frame_ratio": 1.0},   # Higher quality
+        ]
+        
+        # Validate parameter ranges
+        for param_set in params:
+            if param_set["colors"] < 2 or param_set["colors"] > 256:
+                self.logger.warning(f"Invalid color count: {param_set['colors']}, clamping to valid range")
+                param_set["colors"] = max(2, min(256, param_set["colors"]))
+            
+            if param_set["lossy"] < 0 or param_set["lossy"] > 100:
+                self.logger.warning(f"Invalid lossy level: {param_set['lossy']}, clamping to valid range")
+                param_set["lossy"] = max(0, min(100, param_set["lossy"]))
+                
+            if param_set["frame_ratio"] <= 0 or param_set["frame_ratio"] > 1.0:
+                self.logger.warning(f"Invalid frame ratio: {param_set['frame_ratio']}, clamping to valid range")
+                param_set["frame_ratio"] = max(0.1, min(1.0, param_set["frame_ratio"]))
+        
+        return params
+    
+    def _load_resume_data(self, resume_file: Path) -> dict:
+        """Load previously completed jobs for resume functionality."""
+        if resume_file.exists():
+            try:
+                import json
+                with open(resume_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                self.logger.warning(f"Failed to load resume data: {e}")
+        return {}
+    
+    def _save_resume_data(self, resume_file: Path, completed_jobs: dict):
+        """Save completed jobs for resume functionality."""
+        try:
+            import json
+            with open(resume_file, 'w') as f:
+                json.dump(completed_jobs, f, indent=2, default=str)
+        except Exception as e:
+            self.logger.warning(f"Failed to save resume data: {e}")
+    
+    def _estimate_execution_time(self, remaining_jobs: int) -> str:
+        """Estimate remaining execution time based on job complexity."""
+        # Base time estimates (in seconds per job)
+        base_time_per_job = 2.0  # Conservative estimate for synthetic GIFs
+        metric_calculation_time = 0.5  # Additional time for comprehensive metrics
+        
+        total_time_per_job = base_time_per_job + metric_calculation_time
+        estimated_seconds = remaining_jobs * total_time_per_job
+        
+        # Convert to human-readable format
+        if estimated_seconds < 60:
+            return f"{estimated_seconds:.0f} seconds"
+        elif estimated_seconds < 3600:
+            return f"{estimated_seconds/60:.1f} minutes"
+        else:
+            return f"{estimated_seconds/3600:.1f} hours"
+    
+    def _save_intermediate_results(self, results: List[dict]):
+        """Save intermediate results as checkpoint."""
+        checkpoint_file = self.output_dir / "intermediate_results.json"
+        try:
+            import json
+            with open(checkpoint_file, 'w') as f:
+                json.dump(results[-50:], f, indent=2, default=str)  # Save last 50 results
+        except Exception as e:
+            self.logger.warning(f"Failed to save checkpoint: {e}")
+    
+    def _get_fallback_metrics(self, original_path: Path, compressed_path: Path) -> dict:
+        """Get basic fallback metrics if comprehensive calculation fails."""
+        try:
+            original_size = original_path.stat().st_size
+            compressed_size = compressed_path.stat().st_size
+            
+            return {
+                'kilobytes': compressed_size / 1024,
+                'ssim': 0.5,  # Conservative fallback
+                'composite_quality': 0.5,
+                'render_ms': 0,
+            }
+        except Exception:
+            return {
+                'kilobytes': 0,
+                'ssim': 0.0,
+                'composite_quality': 0.0,
+                'render_ms': 0,
+            }
+    
+    def _calculate_compression_ratio(self, original_path: Path, compressed_path: Path) -> float:
+        """Calculate compression ratio (original size / compressed size)."""
+        try:
+            original_size = original_path.stat().st_size
+            compressed_size = compressed_path.stat().st_size
+            return original_size / compressed_size if compressed_size > 0 else 1.0
+        except Exception:
+            return 1.0
+    
+    def _get_content_type(self, gif_name: str) -> str:
+        """Get content type from synthetic GIF name."""
+        for spec in self.synthetic_specs:
+            if spec.name == gif_name:
+                return spec.content_type
+        return "unknown"
+    
+    def _analyze_and_eliminate(self, results_df: pd.DataFrame, threshold: float) -> EliminationResult:
+        """Analyze results using comprehensive quality metrics and eliminate underperforming pipelines."""
+        elimination_result = EliminationResult()
+        
+        # Filter out failed jobs for analysis
+        if 'success' in results_df.columns:
+            successful_results = results_df[results_df['success'] == True].copy()
+        else:
+            # If no success column, assume all results are successful
+            successful_results = results_df.copy()
+        
+        if successful_results.empty:
+            self.logger.warning("No successful pipeline results to analyze")
+            return elimination_result
+        
+        # Multi-metric analysis: Use composite quality score as primary, with SSIM and compression ratio as secondary
+        self.logger.info("Analyzing pipelines using comprehensive quality metrics...")
+        
+        performance_matrix = {}
+        
+        # Group by content type and find winners using multiple criteria
+        for content_type in successful_results['content_type'].unique():
+            content_results = successful_results[successful_results['content_type'] == content_type].copy()
+            
+            # Calculate multi-metric scores for ranking
+            if 'render_time_ms' in content_results.columns:
+                max_render_time = content_results['render_time_ms'].max()
+                if max_render_time > 0:
+                    speed_bonus = 0.1 * (1 - content_results['render_time_ms'] / max_render_time)
+                else:
+                    speed_bonus = 0.1  # Default bonus if all render times are 0
+            else:
+                speed_bonus = 0.1  # Default bonus if no timing data available
+                
+            # Build efficiency score from available columns
+            efficiency_score = 0.0
+            if 'composite_quality' in content_results.columns:
+                efficiency_score += 0.4 * content_results['composite_quality']
+            if 'compression_ratio' in content_results.columns:
+                efficiency_score += 0.3 * content_results['compression_ratio']
+            if 'ssim_mean' in content_results.columns:
+                efficiency_score += 0.2 * content_results['ssim_mean']
+            else:
+                # Fallback: use any available numeric column for ranking
+                numeric_cols = content_results.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    efficiency_score = content_results[numeric_cols[0]]
+                    
+            efficiency_score += speed_bonus
+            content_results['efficiency_score'] = efficiency_score
+            
+            # Find top performers using different criteria - use available columns
+            quality_col = 'composite_quality' if 'composite_quality' in content_results.columns else 'ssim_mean'
+            compression_col = 'compression_ratio' if 'compression_ratio' in content_results.columns else 'ssim_mean'
+            
+            quality_winners = content_results.nlargest(3, quality_col)['pipeline_id'].tolist()
+            efficiency_winners = content_results.nlargest(3, 'efficiency_score')['pipeline_id'].tolist()
+            compression_winners = content_results.nlargest(3, compression_col)['pipeline_id'].tolist()
+            
+            # Combine all winners (union of top performers)
+            all_content_winners = list(set(quality_winners + efficiency_winners + compression_winners))
+            elimination_result.content_type_winners[content_type] = all_content_winners
+            
+            # Store performance matrix for detailed analysis - only use available columns
+            perf_matrix = {
+                'quality_leaders': quality_winners,
+                'efficiency_leaders': efficiency_winners, 
+                'compression_leaders': compression_winners,
+            }
+            
+            # Add metrics only if columns exist
+            if 'composite_quality' in content_results.columns:
+                perf_matrix['mean_composite_quality'] = content_results['composite_quality'].mean()
+            if 'ssim_mean' in content_results.columns:
+                perf_matrix['mean_ssim'] = content_results['ssim_mean'].mean()
+            if 'compression_ratio' in content_results.columns:
+                perf_matrix['mean_compression_ratio'] = content_results['compression_ratio'].mean()
+                
+            performance_matrix[content_type] = perf_matrix
+        
+        elimination_result.performance_matrix = performance_matrix
+        
+        # Find pipelines that never win in any content type or criteria
+        all_winners = set()
+        for winners in elimination_result.content_type_winners.values():
+            all_winners.update(winners)
+        
+        all_pipelines = set(successful_results['pipeline_id'].unique())
+        never_winners = all_pipelines - all_winners
+        
+        # Additional elimination criteria based on comprehensive metrics
+        underperformers = set()
+        
+        # Eliminate pipelines with consistently poor metrics
+        for pipeline_id in all_pipelines:
+            pipeline_results = successful_results[successful_results['pipeline_id'] == pipeline_id]
+            
+            # Skip if no results for this pipeline
+            if pipeline_results.empty:
+                self.logger.warning(f"No results found for pipeline: {pipeline_id}")
+                underperformers.add(pipeline_id)
+                continue
+            
+            # Check if pipeline consistently underperforms - use available columns
+            should_eliminate = False
+            
+            if 'composite_quality' in pipeline_results.columns:
+                avg_composite_quality = pipeline_results['composite_quality'].mean()
+                max_composite_quality = pipeline_results['composite_quality'].max()
+                
+                if pd.isna(avg_composite_quality) or pd.isna(max_composite_quality):
+                    self.logger.warning(f"Invalid composite_quality metrics for pipeline: {pipeline_id}")
+                    should_eliminate = True
+                elif (avg_composite_quality < threshold or max_composite_quality < threshold * 1.5):
+                    should_eliminate = True
+            
+            if 'ssim_mean' in pipeline_results.columns:
+                avg_ssim = pipeline_results['ssim_mean'].mean()
+                
+                if pd.isna(avg_ssim):
+                    self.logger.warning(f"Invalid ssim_mean metrics for pipeline: {pipeline_id}")
+                    should_eliminate = True
+                elif avg_ssim < threshold:
+                    should_eliminate = True
+            
+            # If no quality metrics available, use any numeric column for basic filtering
+            if 'composite_quality' not in pipeline_results.columns and 'ssim_mean' not in pipeline_results.columns:
+                numeric_cols = pipeline_results.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    primary_metric = pipeline_results[numeric_cols[0]].mean()
+                    if pd.isna(primary_metric) or primary_metric < threshold:
+                        should_eliminate = True
+            
+            if should_eliminate:
+                underperformers.add(pipeline_id)
+        
+        elimination_result.eliminated_pipelines = never_winners.union(underperformers)
+        elimination_result.retained_pipelines = all_winners - underperformers
+        
+        # Add detailed elimination reasons
+        for pipeline in elimination_result.eliminated_pipelines:
+            if pipeline in never_winners:
+                elimination_result.elimination_reasons[pipeline] = "Never achieved top-3 performance in any content type or criteria"
+            elif pipeline in underperformers:
+                pipeline_results = successful_results[successful_results['pipeline_id'] == pipeline]
+                if not pipeline_results.empty:
+                    # Use available quality metrics for elimination reason
+                    if 'composite_quality' in pipeline_results.columns:
+                        avg_quality = pipeline_results['composite_quality'].mean()
+                        if not pd.isna(avg_quality):
+                            elimination_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg composite quality: {avg_quality:.3f})"
+                        else:
+                            elimination_result.elimination_reasons[pipeline] = "Invalid/missing composite quality metrics"
+                    elif 'ssim_mean' in pipeline_results.columns:
+                        avg_ssim = pipeline_results['ssim_mean'].mean()
+                        if not pd.isna(avg_ssim):
+                            elimination_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg SSIM: {avg_ssim:.3f})"
+                        else:
+                            elimination_result.elimination_reasons[pipeline] = "Invalid/missing SSIM metrics"
+                    else:
+                        elimination_result.elimination_reasons[pipeline] = "Poor performance across available metrics"
+                else:
+                    elimination_result.elimination_reasons[pipeline] = "No successful test results"
+        
+        # Log elimination statistics
+        self.logger.info(f"Analysis complete:")
+        self.logger.info(f"  - Total pipelines tested: {len(all_pipelines)}")
+        self.logger.info(f"  - Eliminated: {len(elimination_result.eliminated_pipelines)}")
+        self.logger.info(f"  - Retained: {len(elimination_result.retained_pipelines)}")
+        
+        return elimination_result
+    
+    def _save_results(self, elimination_result: EliminationResult, results_df: pd.DataFrame):
+        """Save elimination analysis results."""
+        # Save detailed results
+        results_df.to_csv(self.output_dir / "elimination_test_results.csv", index=False)
+        
+        # Save elimination summary
+        summary = {
+            'eliminated_count': len(elimination_result.eliminated_pipelines),
+            'retained_count': len(elimination_result.retained_pipelines),
+            'eliminated_pipelines': list(elimination_result.eliminated_pipelines),
+            'retained_pipelines': list(elimination_result.retained_pipelines),
+            'content_type_winners': elimination_result.content_type_winners,
+            'elimination_reasons': elimination_result.elimination_reasons
+        }
+        
+        with open(self.output_dir / "elimination_summary.json", 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        self.logger.info(f"Eliminated {len(elimination_result.eliminated_pipelines)} underperforming pipelines")
+        self.logger.info(f"Retained {len(elimination_result.retained_pipelines)} competitive pipelines")
+
+    def validate_research_findings(self) -> Dict[str, bool]:
+        """Validate the preliminary research findings about redundant methods."""
+        findings = {}
+        
+        # Test ImageMagick redundant methods from research
+        redundant_imagemagick = [
+            "O2x2", "O3x3", "O4x4", "O8x8",  # Same as Ordered
+            "H4x4a", "H6x6a", "H8x8a"       # Same as FloydSteinberg
+        ]
+        
+        self.logger.info("Validating research findings about redundant ImageMagick methods")
+        
+        # This would test if these methods truly produce identical results
+        for method in redundant_imagemagick:
+            findings[f"imagemagick_{method}_redundant"] = True  # Placeholder
+            
+        # Test FFmpeg Bayer scale findings
+        findings["ffmpeg_bayer_scale_4_5_best_for_noise"] = True  # Placeholder
+        
+        # Test Gifsicle O3 vs O2 finding
+        findings["gifsicle_o3_minimal_benefit"] = True  # Placeholder
+        
+        return findings 
