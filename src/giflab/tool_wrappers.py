@@ -4,8 +4,8 @@ from __future__ import annotations
 
 Stage-2 of the matrix experimentation plan (see docs/technical/next-tools-priority.md).
 The wrappers inherit from the abstract interfaces in ``tool_interfaces.py`` and
-provide variable-specific ``apply`` methods. All external engines (gifsicle, 
-Animately, ImageMagick, FFmpeg, and gifski) are now fully implemented with 
+provide variable-specific ``apply`` methods. All external engines (gifsicle,
+Animately, ImageMagick, FFmpeg, and gifski) are now fully implemented with
 real functionality calling their respective helper modules.
 
 Key design choices
@@ -449,17 +449,32 @@ class FFmpegFrameReducer(FrameReductionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        if params is None or "fps" not in params:
-            raise ValueError("params must include 'fps' for frame reduction")
+        if params is None or "ratio" not in params:
+            raise ValueError("params must include 'ratio' for frame reduction")
         
         from .external_engines.ffmpeg import frame_reduce
+        from .meta import extract_gif_metadata
         
-        fps = float(params["fps"])
+        ratio = float(params["ratio"])
+        
+        # Get original FPS to calculate target FPS
+        try:
+            metadata = extract_gif_metadata(input_path)
+            original_fps = metadata.orig_fps
+        except Exception:
+            # Fallback to default FPS if metadata extraction fails
+            original_fps = 10.0
+        
+        # Calculate target FPS based on ratio
+        target_fps = original_fps * ratio
+        
+        # Ensure minimum FPS to avoid issues
+        target_fps = max(target_fps, 0.1)
         
         return frame_reduce(
             input_path,
             output_path,
-            fps=fps,
+            fps=target_fps,
         )
 
 

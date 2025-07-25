@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from giflab.system_tools import discover_tool
@@ -31,13 +31,17 @@ def color_reduce(
     *,
     fps: float = 15.0,
 ) -> dict[str, Any]:
-    """Palette-based color reduction via two-pass FFmpeg."""
+    """Palette-based color reduction via two-pass FFmpeg.
+    
+    Note: fps parameter is deprecated and no longer used to avoid
+    pipeline conflicts when used after frame reduction steps.
+    """
     ffmpeg = _ffmpeg_binary()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         palette_path = Path(tmpdir) / "palette.png"
 
-        # 1️⃣ generate palette
+        # 1️⃣ generate palette (no fps filter to avoid pipeline conflicts)
         gen_cmd = [
             ffmpeg,
             "-y",
@@ -46,12 +50,12 @@ def color_reduce(
             "-i",
             str(input_path),
             "-filter_complex",
-            f"fps={fps},palettegen",
+            "palettegen",
             str(palette_path),
         ]
         meta1 = run_command(gen_cmd, engine="ffmpeg", output_path=palette_path)
 
-        # 2️⃣ apply palette
+        # 2️⃣ apply palette (no fps filter to avoid pipeline conflicts)
         use_cmd = [
             ffmpeg,
             "-y",
@@ -62,7 +66,7 @@ def color_reduce(
             "-i",
             str(palette_path),
             "-filter_complex",
-            f"fps={fps},paletteuse",
+            "paletteuse",
             str(output_path),
         ]
         meta2 = run_command(use_cmd, engine="ffmpeg", output_path=output_path)
@@ -120,4 +124,4 @@ def lossy_compress(
         str(qv),
         str(output_path),
     ]
-    return run_command(cmd, engine="ffmpeg", output_path=output_path) 
+    return run_command(cmd, engine="ffmpeg", output_path=output_path)

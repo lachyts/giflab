@@ -1,6 +1,10 @@
-from .imagemagick import color_reduce as imagemagick_color_reduce, frame_reduce as imagemagick_frame_reduce, lossy_compress as imagemagick_lossy_compress
-from .ffmpeg import color_reduce as ffmpeg_color_reduce, frame_reduce as ffmpeg_frame_reduce, lossy_compress as ffmpeg_lossy_compress
+from .ffmpeg import color_reduce as ffmpeg_color_reduce
+from .ffmpeg import frame_reduce as ffmpeg_frame_reduce
+from .ffmpeg import lossy_compress as ffmpeg_lossy_compress
 from .gifski import lossy_compress as gifski_lossy_compress
+from .imagemagick import color_reduce as imagemagick_color_reduce
+from .imagemagick import frame_reduce as imagemagick_frame_reduce
+from .imagemagick import lossy_compress as imagemagick_lossy_compress
 
 __all__ = [
     # ImageMagick
@@ -13,4 +17,4 @@ __all__ = [
     "ffmpeg_lossy_compress",
     # gifski
     "gifski_lossy_compress",
-] 
+]

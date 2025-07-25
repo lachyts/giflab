@@ -6,8 +6,8 @@ Based on research findings identifying FFmpeg dithering methods and Bayer scales
 
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any, Literal
 
 from giflab.system_tools import discover_tool
@@ -17,7 +17,7 @@ from .common import run_command
 __all__ = [
     "color_reduce_with_dithering",
     "frame_reduce",
-    "lossy_compress", 
+    "lossy_compress",
     "FFMPEG_DITHERING_METHODS",
 ]
 
@@ -29,7 +29,7 @@ FFMPEG_DITHERING_METHODS = [
     "sierra2_4a",       # Alternative to sierra2
     # Bayer scale variants (research shows scales 4-5 excel for noisy content)
     "bayer:bayer_scale=0",  # Poor quality from research
-    "bayer:bayer_scale=1",  # Higher quality Bayer variant 
+    "bayer:bayer_scale=1",  # Higher quality Bayer variant
     "bayer:bayer_scale=2",  # Medium pattern
     "bayer:bayer_scale=3",  # Good balance
     "bayer:bayer_scale=4",  # ⭐ Best compression for noisy content
@@ -38,7 +38,7 @@ FFMPEG_DITHERING_METHODS = [
 
 FFmpegDitheringMethod = Literal[
     "none", "floyd_steinberg", "sierra2", "sierra2_4a",
-    "bayer:bayer_scale=0", "bayer:bayer_scale=1", "bayer:bayer_scale=2", 
+    "bayer:bayer_scale=0", "bayer:bayer_scale=1", "bayer:bayer_scale=2",
     "bayer:bayer_scale=3", "bayer:bayer_scale=4", "bayer:bayer_scale=5"
 ]
 
@@ -70,7 +70,7 @@ def color_reduce_with_dithering(
     dithering_method
         Specific dithering method from research findings.
     fps
-        Frame rate for processing.
+        Frame rate for processing (deprecated - no longer used to avoid pipeline conflicts).
     """
     if colors < 2 or colors > 256:
         raise ValueError("colors must be between 2 and 256 inclusive")
@@ -83,7 +83,7 @@ def color_reduce_with_dithering(
     with tempfile.TemporaryDirectory() as tmpdir:
         palette_path = Path(tmpdir) / "palette.png"
 
-        # 1️⃣ Generate palette with specified color count
+        # 1️⃣ Generate palette with specified color count (no fps filter to avoid pipeline conflicts)
         gen_cmd = [
             ffmpeg,
             "-y",
@@ -92,12 +92,12 @@ def color_reduce_with_dithering(
             "-i",
             str(input_path),
             "-filter_complex",
-            f"fps={fps},palettegen=max_colors={colors}",
+            f"palettegen=max_colors={colors}",
             str(palette_path),
         ]
         meta1 = run_command(gen_cmd, engine="ffmpeg", output_path=palette_path)
 
-        # 2️⃣ Apply palette with specific dithering method
+        # 2️⃣ Apply palette with specific dithering method (no fps filter to avoid pipeline conflicts)
         use_cmd = [
             ffmpeg,
             "-y",
@@ -108,7 +108,7 @@ def color_reduce_with_dithering(
             "-i",
             str(palette_path),
             "-filter_complex",
-            f"fps={fps},paletteuse=dither={dithering_method}",
+            f"paletteuse=dither={dithering_method}",
             str(output_path),
         ]
         meta2 = run_command(use_cmd, engine="ffmpeg", output_path=output_path)
@@ -180,6 +180,7 @@ def test_bayer_scale_performance(input_path: Path, colors: int = 16) -> dict[str
     Returns detailed metrics for each Bayer scale variant.
     """
     import tempfile
+
     from ..metrics import calculate_ssim_metrics
     
     results = {}
@@ -211,7 +212,7 @@ def test_bayer_scale_performance(input_path: Path, colors: int = 16) -> dict[str
 
 
 def analyze_dithering_by_content_type(
-    test_gifs: dict[str, Path], 
+    test_gifs: dict[str, Path],
     colors: int = 16
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Analyze dithering method performance by content type.
@@ -276,4 +277,4 @@ def validate_sierra2_vs_floyd_steinberg(test_gifs: list[Path]) -> dict[str, dict
             except Exception as e:
                 comparison_results[gif_name][method] = {"error": str(e)}
     
-    return comparison_results 
+    return comparison_results

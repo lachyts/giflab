@@ -48,7 +48,7 @@ _FRAME_WRAPPERS = [
     (GifsicleFrameReducer, {"ratio": 0.5}),
     (AnimatelyFrameReducer, {"ratio": 0.5}),
     (ImageMagickFrameReducer, {"ratio": 0.5}),
-    (FFmpegFrameReducer, {"fps": 5.0}),  # FFmpeg uses target fps
+    (FFmpegFrameReducer, {"ratio": 0.5}),  # FFmpeg now uses ratio like other frame reducers
 ]
 
 _LOSSY_WRAPPERS = [
@@ -145,10 +145,9 @@ def test_frame_wrapper_smoke(wrapper_cls, params, tmp_path):
         # FFmpeg: validate output and reasonable frame handling
         assert out.stat().st_size > 0, "FFmpeg frame reduction output is empty"
         assert out_frames >= 1, f"FFmpeg should produce at least 1 frame, got {out_frames}"
-        # FFmpeg with fps parameter should produce reasonable frame count
-        if "fps" in params:
-            # Allow wide tolerance since FFmpeg fps is target rate, not ratio
-            assert out_frames <= src_frames * 2, f"FFmpeg produced too many frames: {out_frames} (from {src_frames})"
+        # FFmpeg with ratio parameter should produce reasonable frame count
+        if "ratio" in params and params["ratio"] < 1.0:
+            assert out_frames <= src_frames, f"FFmpeg frame count should not increase: {out_frames} > {src_frames}"
 
 
 @pytest.mark.fast

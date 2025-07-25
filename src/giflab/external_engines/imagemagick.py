@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+import os
 import shutil
 import time
-import os
+from pathlib import Path
+from typing import Any
 
 from giflab.system_tools import discover_tool
 
@@ -133,4 +133,4 @@ def lossy_compress(
         str(output_path),
     ]
 
-    return run_command(cmd, engine="imagemagick", output_path=output_path) 
+    return run_command(cmd, engine="imagemagick", output_path=output_path)

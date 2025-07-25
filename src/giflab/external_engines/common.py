@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
 import os
 import subprocess
 import time
+from pathlib import Path
+from typing import Any
 
 __all__ = [
     "run_command",
@@ -57,4 +57,4 @@ def run_command(cmd: list[str], *, engine: str, output_path: Path, timeout: int 
         "engine": engine,
         "command": " ".join(cmd),
         "kilobytes": size_kb,
-    } 
+    }

@@ -6,11 +6,11 @@ Based on research findings identifying 13 different dithering methods.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Literal
+import os
 import shutil
 import time
-import os
+from pathlib import Path
+from typing import Any, Literal
 
 from giflab.system_tools import discover_tool
 
@@ -18,7 +18,7 @@ from .common import run_command
 
 __all__ = [
     "color_reduce_with_dithering",
-    "frame_reduce", 
+    "frame_reduce",
     "lossy_compress",
     "IMAGEMAGICK_DITHERING_METHODS",
 ]
@@ -26,14 +26,14 @@ __all__ = [
 # All 13 ImageMagick dithering methods from research
 IMAGEMAGICK_DITHERING_METHODS = [
     "None",
-    "FloydSteinberg", 
+    "FloydSteinberg",
     "Riemersma",      # ⭐ Best performer from research
     "Threshold",
     "Random",
     "Ordered",
     # Ordered variants (research shows these are redundant)
     "O2x2",
-    "O3x3", 
+    "O3x3",
     "O4x4",
     "O8x8",
     # Halftone variants (research shows these are redundant)
@@ -68,7 +68,7 @@ def color_reduce_with_dithering(
     ----------
     input_path
         Source GIF.
-    output_path  
+    output_path
         Destination GIF.
     colors
         Target palette size (1–256).
@@ -114,7 +114,7 @@ def frame_reduce(
 
     # Shortcut – no reduction needed.
     if keep_ratio == 1.0:
-        start = time.perf_counter()  
+        start = time.perf_counter()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(input_path, output_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -189,7 +189,7 @@ def test_redundant_methods(input_path: Path, colors: int = 16) -> dict[str, byte
             
             try:
                 color_reduce_with_dithering(
-                    input_path, output_path, 
+                    input_path, output_path,
                     colors=colors, dithering_method=method
                 )
                 
@@ -234,4 +234,4 @@ def identify_redundant_methods(input_paths: list[Path]) -> dict[str, set[str]]:
                 equivalence_groups[representative] = methods
                 processed_methods.update(methods)
     
-    return equivalence_groups 
+    return equivalence_groups

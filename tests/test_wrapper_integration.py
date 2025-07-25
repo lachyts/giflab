@@ -219,13 +219,13 @@ class TestFFmpegWrapperIntegration:
             result = wrapper.apply(
                 test_gif,
                 output_path,
-                params={"fps": 5.0}
+                params={"ratio": 0.5}
             )
             
             # Validate metadata
             assert result["engine"] == "ffmpeg"
             assert result["render_ms"] > 0
-            assert "fps=5.0" in result["command"]
+            assert "fps=" in result["command"]  # Should contain fps parameter (calculated from ratio)
             assert output_path.exists()
     
     def test_lossy_compressor_functionality(self, test_gif):

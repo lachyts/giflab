@@ -239,11 +239,11 @@ class TestFrameReduction:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "output.gif"
             
-            # FFmpeg uses fps-based frame reduction
+            # FFmpeg uses ratio-based frame reduction (consistent with other reducers)
             result = reducer.apply(
                 SIMPLE_4FRAME,
                 output_path,
-                params={"fps": 2.0}  # Lower fps = fewer frames
+                params={"ratio": 0.5}  # Keep 50% of frames
             )
             
             # Validate functional change
