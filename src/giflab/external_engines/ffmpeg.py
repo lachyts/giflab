@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ __all__ = [
     "color_reduce",
     "frame_reduce",
     "lossy_compress",
+    "export_png_sequence",
 ]
 
 
@@ -28,14 +30,8 @@ def _ffmpeg_binary() -> str:
 def color_reduce(
     input_path: Path,
     output_path: Path,
-    *,
-    fps: float = 15.0,
 ) -> dict[str, Any]:
-    """Palette-based color reduction via two-pass FFmpeg.
-    
-    Note: fps parameter is deprecated and no longer used to avoid
-    pipeline conflicts when used after frame reduction steps.
-    """
+    """Palette-based color reduction via two-pass FFmpeg."""
     ffmpeg = _ffmpeg_binary()
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -106,11 +102,14 @@ def lossy_compress(
     input_path: Path,
     output_path: Path,
     *,
-    qv: int = 30,
-    fps: float = 15.0,
+    q_scale: int = 4,
 ) -> dict[str, Any]:
-    """Single-pass lossy compression using quantiser *qv* and *fps* filter."""
+    """Lossy compression via FFmpeg."""
+    if q_scale < 1 or q_scale > 31:
+        raise ValueError("q_scale must be in 1–31 range")
+
     ffmpeg = _ffmpeg_binary()
+
     cmd = [
         ffmpeg,
         "-y",
@@ -118,10 +117,58 @@ def lossy_compress(
         "error",
         "-i",
         str(input_path),
-        "-lavfi",
-        f"fps={fps}",
         "-q:v",
-        str(qv),
+        str(q_scale),
         str(output_path),
     ]
+
     return run_command(cmd, engine="ffmpeg", output_path=output_path)
+
+
+def export_png_sequence(
+    input_path: Path,
+    output_dir: Path,
+    *,
+    frame_pattern: str = "frame_%04d.png",
+) -> dict[str, Any]:
+    """Export GIF frames as PNG sequence for gifski pipeline optimization.
+    
+    Args:
+        input_path: Input GIF file
+        output_dir: Directory to store PNG sequence
+        frame_pattern: Pattern for PNG filenames (default: frame_%04d.png)
+        
+    Returns:
+        Metadata dict with execution info and PNG sequence details
+    """
+    ffmpeg = _ffmpeg_binary()
+    
+    # Ensure output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Build output path with pattern
+    output_pattern = output_dir / frame_pattern
+    
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-v",
+        "error", 
+        "-i",
+        str(input_path),
+        str(output_pattern),
+    ]
+    
+    metadata = run_command(cmd, engine="ffmpeg", output_path=output_pattern)
+    
+    # Count generated PNG files
+    png_files = glob.glob(str(output_dir / "frame_*.png"))
+    
+    # Add PNG sequence info to metadata
+    metadata.update({
+        "png_sequence_dir": str(output_dir),
+        "frame_count": len(png_files),
+        "frame_pattern": frame_pattern,
+    })
+    
+    return metadata

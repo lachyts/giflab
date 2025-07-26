@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 import time
@@ -14,6 +15,7 @@ __all__ = [
     "color_reduce",
     "frame_reduce",
     "lossy_compress",
+    "export_png_sequence",
 ]
 
 
@@ -116,21 +118,64 @@ def lossy_compress(
     input_path: Path,
     output_path: Path,
     *,
-    quality: int = 85,
+    quality: int = 80,
 ) -> dict[str, Any]:
-    """Apply simple lossy compression via sampling-factor and *-quality*."""
-    if quality < 1 or quality > 100:
-        raise ValueError("quality must be in 1–100 range")
+    """Lossy compression using ImageMagick's -quality flag."""
+    if quality < 0 or quality > 100:
+        raise ValueError("quality must be in 0–100 range")
 
     cmd = [
         _magick_binary(),
         str(input_path),
-        "-sampling-factor",
-        "4:2:0",
-        "-strip",
         "-quality",
         str(quality),
         str(output_path),
     ]
 
     return run_command(cmd, engine="imagemagick", output_path=output_path)
+
+
+def export_png_sequence(
+    input_path: Path,
+    output_dir: Path,
+    *,
+    frame_pattern: str = "frame_%04d.png",
+) -> dict[str, Any]:
+    """Export GIF frames as PNG sequence for gifski pipeline optimization.
+    
+    Args:
+        input_path: Input GIF file
+        output_dir: Directory to store PNG sequence  
+        frame_pattern: Pattern for PNG filenames (default: frame_%04d.png)
+        
+    Returns:
+        Metadata dict with execution info and PNG sequence details
+    """
+    magick = _magick_binary()
+    
+    # Ensure output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Build output path with pattern
+    output_pattern = output_dir / frame_pattern
+    
+    cmd = [
+        magick,
+        str(input_path),
+        "-coalesce",  # Ensure frames are properly separated
+        str(output_pattern),
+    ]
+    
+    metadata = run_command(cmd, engine="imagemagick", output_path=output_pattern)
+    
+    # Count generated PNG files
+    png_files = glob.glob(str(output_dir / "frame_*.png"))
+    
+    # Add PNG sequence info to metadata
+    metadata.update({
+        "png_sequence_dir": str(output_dir),
+        "frame_count": len(png_files),
+        "frame_pattern": frame_pattern,
+    })
+    
+    return metadata

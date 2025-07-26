@@ -145,8 +145,7 @@ class TestFFmpegHelpers:
             
             result = ffmpeg_color_reduce(
                 test_gif,
-                output_path,
-                fps=10.0
+                output_path
             )
             
             assert result["engine"] == "ffmpeg"

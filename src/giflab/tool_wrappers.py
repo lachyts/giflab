@@ -52,6 +52,16 @@ from .tool_interfaces import (
     LossyCompressionTool,
 )
 
+# External engine imports - centralized at top level for consistency
+from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
+from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
+from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering
+from .external_engines.gifski import lossy_compress as gifski_lossy_compress
+from .external_engines.imagemagick import frame_reduce as imagemagick_frame_reduce
+from .external_engines.imagemagick import lossy_compress as imagemagick_lossy_compress
+from .external_engines.imagemagick_enhanced import color_reduce_with_dithering as imagemagick_color_reduce_with_dithering
+from .meta import extract_gif_metadata
+
 # ---------------------------------------------------------------------------
 # GIFSICLE
 # ---------------------------------------------------------------------------
@@ -331,12 +341,10 @@ class ImageMagickColorReducer(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         dithering_method = params.get("dithering_method", "None")
         
-        return color_reduce_with_dithering(
+        return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -360,11 +368,9 @@ class ImageMagickFrameReducer(FrameReductionTool):
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         
-        from .external_engines.imagemagick import frame_reduce
-        
         keep_ratio = float(params["ratio"])
         
-        return frame_reduce(
+        return imagemagick_frame_reduce(
             input_path,
             output_path,
             keep_ratio=keep_ratio,
@@ -384,13 +390,11 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
         return discover_tool("imagemagick").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        from .external_engines.imagemagick import lossy_compress
-        
         quality = 85  # default quality
         if params and "quality" in params:
             quality = int(params["quality"])
         
-        return lossy_compress(
+        return imagemagick_lossy_compress(
             input_path,
             output_path,
             quality=quality,
@@ -413,8 +417,6 @@ class FFmpegColorReducer(ColorReductionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = 256  # default color count
         fps = 15.0    # default fps for palette generation
         dithering_method = "none"  # default no dithering
@@ -427,7 +429,7 @@ class FFmpegColorReducer(ColorReductionTool):
             if "dithering_method" in params:
                 dithering_method = params["dithering_method"]
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -452,9 +454,6 @@ class FFmpegFrameReducer(FrameReductionTool):
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         
-        from .external_engines.ffmpeg import frame_reduce
-        from .meta import extract_gif_metadata
-        
         ratio = float(params["ratio"])
         
         # Get original FPS to calculate target FPS
@@ -471,7 +470,7 @@ class FFmpegFrameReducer(FrameReductionTool):
         # Ensure minimum FPS to avoid issues
         target_fps = max(target_fps, 0.1)
         
-        return frame_reduce(
+        return ffmpeg_frame_reduce(
             input_path,
             output_path,
             fps=target_fps,
@@ -491,8 +490,6 @@ class FFmpegLossyCompressor(LossyCompressionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        from .external_engines.ffmpeg import lossy_compress
-        
         qv = 30  # default quantiser value
         fps = 15.0  # default fps
         
@@ -502,7 +499,7 @@ class FFmpegLossyCompressor(LossyCompressionTool):
             if "fps" in params:
                 fps = float(params["fps"])
         
-        return lossy_compress(
+        return ffmpeg_lossy_compress(
             input_path,
             output_path,
             qv=qv,
@@ -530,11 +527,9 @@ class ImageMagickColorReducerRiemersma(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         
-        return color_reduce_with_dithering(
+        return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -559,11 +554,9 @@ class ImageMagickColorReducerFloydSteinberg(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         
-        return color_reduce_with_dithering(
+        return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -588,11 +581,9 @@ class ImageMagickColorReducerNone(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.imagemagick_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         
-        return color_reduce_with_dithering(
+        return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -621,12 +612,10 @@ class FFmpegColorReducerSierra2(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -652,12 +641,10 @@ class FFmpegColorReducerFloydSteinberg(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -683,12 +670,10 @@ class FFmpegColorReducerBayerScale0(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -714,12 +699,10 @@ class FFmpegColorReducerBayerScale1(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -745,12 +728,10 @@ class FFmpegColorReducerBayerScale2(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -776,12 +757,10 @@ class FFmpegColorReducerBayerScale3(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -807,12 +786,10 @@ class FFmpegColorReducerBayerScale4(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -838,12 +815,10 @@ class FFmpegColorReducerBayerScale5(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -869,12 +844,10 @@ class FFmpegColorReducerNone(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         
-        from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering
-        
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
         
-        return color_reduce_with_dithering(
+        return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
@@ -900,16 +873,20 @@ class GifskiLossyCompressor(LossyCompressionTool):
         return discover_tool("gifski").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        from .external_engines.gifski import lossy_compress
-        
         quality = 60  # default quality
         if params and "quality" in params:
             quality = int(params["quality"])
         
-        return lossy_compress(
+        # Check if PNG sequence was provided by previous pipeline step
+        png_sequence_dir = None
+        if params and "png_sequence_dir" in params:
+            png_sequence_dir = Path(params["png_sequence_dir"])
+        
+        return gifski_lossy_compress(
             input_path,
             output_path,
             quality=quality,
+            png_sequence_dir=png_sequence_dir,
         )
 
 # ---------------------------------------------------------------------------

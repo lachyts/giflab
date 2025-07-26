@@ -833,6 +833,10 @@ class PipelineEliminator:
         ),
     }
     
+    # Constants for progress tracking and memory management
+    PROGRESS_SAVE_INTERVAL = 100  # Save resume data every N jobs to prevent memory buildup
+    BUFFER_FLUSH_INTERVAL = 50    # Flush results buffer every N jobs for performance
+    
     def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False, use_cache: bool = True):
         self.base_output_dir = output_dir
         self.use_gpu = use_gpu
@@ -1860,9 +1864,22 @@ class PipelineEliminator:
         total_jobs = len(gif_paths) * len(pipelines) * len(self.test_params)
         self.logger.info(f"Starting comprehensive testing: {total_jobs:,} total pipeline combinations")
         
-        # Load or create resume file
+        # Load or create resume file - optimize memory by tracking only job IDs
         resume_file = self.output_dir / "elimination_progress.json"
-        completed_jobs = self._load_resume_data(resume_file)
+        completed_jobs_full = self._load_resume_data(resume_file)
+        
+        # Extract just job IDs for efficient memory usage during processing
+        completed_job_ids = set(completed_jobs_full.keys())
+        
+        # Clear the full data to free memory, keeping only IDs for resume logic
+        completed_jobs_data_for_streaming = {}
+        
+        # Add completed jobs to streaming buffer for any that haven't been written to CSV yet
+        for job_id, job_data in completed_jobs_full.items():
+            completed_jobs_data_for_streaming[job_id] = job_data
+        
+        # Clear the full completed_jobs dict to save memory
+        del completed_jobs_full
         
         # Setup streaming CSV file for results
         streaming_csv_path = self.output_dir / "streaming_results.csv"
@@ -1887,12 +1904,12 @@ class PipelineEliminator:
             csv_writer.writeheader()
         
         # Estimate remaining time
-        remaining_jobs = total_jobs - len(completed_jobs)
+        remaining_jobs = total_jobs - len(completed_job_ids)
         estimated_time = self._estimate_execution_time(remaining_jobs)
         self.logger.info(f"Estimated completion time: {estimated_time}")
         
         # Setup progress bar
-        progress = tqdm(total=total_jobs, initial=len(completed_jobs), 
+        progress = tqdm(total=total_jobs, initial=len(completed_job_ids), 
                        desc="Testing pipelines", unit="jobs",
                        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
         
@@ -1913,10 +1930,13 @@ class PipelineEliminator:
                     job_id = f"{gif_path.stem}_{pipeline.identifier()}_{params['colors']}_{params['lossy']}"
                     
                     # Skip if already completed (resume functionality)
-                    if job_id in completed_jobs:
+                    if job_id in completed_job_ids:
                         progress.update(1)
-                        # Add to buffer for potential DataFrame creation, but don't accumulate indefinitely
-                        self._add_result_to_buffer(completed_jobs[job_id], results_buffer, csv_writer, buffer_size)
+                        # Add to buffer if data is available for streaming
+                        if job_id in completed_jobs_data_for_streaming:
+                            self._add_result_to_buffer(completed_jobs_data_for_streaming[job_id], results_buffer, csv_writer, buffer_size)
+                            # Remove from memory after adding to buffer to save memory
+                            del completed_jobs_data_for_streaming[job_id]
                         continue
                     
                     # Check cache first (if enabled)
@@ -1928,7 +1948,7 @@ class PipelineEliminator:
                         if cached_result:
                             cache_hits += 1
                             # Update progress tracking
-                            completed_jobs[job_id] = cached_result
+                            completed_job_ids.add(job_id)
                             self._add_result_to_buffer(cached_result, results_buffer, csv_writer, buffer_size)
                             progress.update(1)
                             continue
@@ -1944,17 +1964,32 @@ class PipelineEliminator:
                                 pipeline_id=pipeline.identifier(),
                                 gif_name=gif_path.name,
                                 test_colors=params.get("colors", 0),
-                                test_lossy=params.get("lossy_level", 0),
-                                test_frame_ratio=params.get("ratio", 1.0),
+                                test_lossy=params.get("lossy", 0),
+                                test_frame_ratio=params.get("frame_ratio", 1.0),
                                 error_type="validation",
                                 error_message=error_msg,
                                 error_traceback="",
                                 pipeline_steps=str([step.name() for step in pipeline.steps]),
                                 tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
                             )
-                            return {"success": False, "error": error_msg}
+                            # Add validation failure to completed jobs and continue
+                            failed_result = {
+                                'gif_name': gif_path.stem,
+                                'content_type': content_type,
+                                'pipeline_id': pipeline.identifier(),
+                                'success': False,
+                                'error': error_msg,
+                                'test_colors': params.get("colors", 0),
+                                'test_lossy': params.get("lossy", 0),
+                                'test_frame_ratio': params.get("frame_ratio", 1.0),
+                            }
+                            completed_job_ids.add(job_id)
+                            self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
+                            progress.update(1)
+                            continue
 
                         # Validate individual tool names
+                        validation_failed = False
                         for step in pipeline.steps:
                             if step.tool_cls.NAME == "external-tool":
                                 error_msg = f"Invalid tool with external-tool NAME in step: {step.name()}"
@@ -1963,15 +1998,33 @@ class PipelineEliminator:
                                     pipeline_id=pipeline.identifier(),
                                     gif_name=gif_path.name,
                                     test_colors=params.get("colors", 0),
-                                    test_lossy=params.get("lossy_level", 0),
-                                    test_frame_ratio=params.get("ratio", 1.0),
+                                    test_lossy=params.get("lossy", 0),
+                                    test_frame_ratio=params.get("frame_ratio", 1.0),
                                     error_type="validation",
                                     error_message=error_msg,
                                     error_traceback="",
                                     pipeline_steps=str([step.name() for step in pipeline.steps]),
                                     tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
                                 )
-                                return {"success": False, "error": error_msg}
+                                # Add validation failure to completed jobs and skip this pipeline
+                                failed_result = {
+                                    'gif_name': gif_path.stem,
+                                    'content_type': content_type,
+                                    'pipeline_id': pipeline.identifier(),
+                                    'success': False,
+                                    'error': error_msg,
+                                    'test_colors': params.get("colors", 0),
+                                    'test_lossy': params.get("lossy", 0),
+                                    'test_frame_ratio': params.get("frame_ratio", 1.0),
+                                }
+                                completed_job_ids.add(job_id)
+                                self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
+                                progress.update(1)
+                                validation_failed = True
+                                break  # Exit the step validation loop
+                        
+                        if validation_failed:
+                            continue  # Skip to next pipeline combination
 
                         # Execute pipeline and measure comprehensive metrics
                         result = self._execute_pipeline_with_metrics(
@@ -1984,9 +2037,12 @@ class PipelineEliminator:
                                 pipeline.identifier(), gif_path.stem, params, result
                             )
                         
-                        # Save progress immediately
-                        completed_jobs[job_id] = result
-                        self._save_resume_data(resume_file, completed_jobs)
+                        # Save progress immediately with minimal data
+                        completed_job_ids.add(job_id)
+                        
+                        # Store minimal resume data periodically to avoid memory buildup
+                        if len(completed_job_ids) % self.PROGRESS_SAVE_INTERVAL == 0:
+                            self._save_resume_data_minimal(resume_file, completed_job_ids)
                         
                         self._add_result_to_buffer(result, results_buffer, csv_writer, buffer_size)
                         
@@ -2043,14 +2099,14 @@ class PipelineEliminator:
                                 }
                             )
                         
-                        completed_jobs[job_id] = failed_result
+                        completed_job_ids.add(job_id)
                         self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
                     
                     progress.update(1)
                     
-                    # Flush buffer and cache every 50 jobs  
-                    total_processed = len(results_buffer) + (completed_jobs_processed if 'completed_jobs_processed' in locals() else 0)
-                    if total_processed % 50 == 0:
+                    # Flush buffer and cache periodically for performance
+                    total_processed = len(completed_job_ids)
+                    if total_processed % self.BUFFER_FLUSH_INTERVAL == 0:
                         self._flush_results_buffer(results_buffer, csv_writer)
                         if self.cache:
                             self.cache.flush_batch(force=True)  # Flush accumulated batches
@@ -2080,9 +2136,12 @@ class PipelineEliminator:
         self._flush_results_buffer(results_buffer, csv_writer, force=True)
         csv_file.close()
         
+        # Final save of all completed job IDs for resume functionality
+        self._save_resume_data_minimal(resume_file, completed_job_ids)
+        
         # Read results from streaming CSV to create DataFrame
         # This prevents memory exhaustion for large result sets
-        total_results = len(results_buffer) + len(completed_jobs)
+        total_results = len(completed_job_ids)
         self.logger.info(f"Testing completed: {total_results} jobs, {failed_jobs} failures")
         
         # Load results from streaming CSV file
@@ -2093,7 +2152,7 @@ class PipelineEliminator:
         except Exception as e:
             self.logger.warning(f"Failed to load streaming results: {e}")
             # Fallback to empty DataFrame
-                         return pd.DataFrame()
+            return pd.DataFrame()
     
     def _add_result_to_buffer(self, result: dict, buffer: list, csv_writer, buffer_size: int):
         """Add a result to the memory buffer and flush to CSV if buffer is full.
@@ -2189,8 +2248,9 @@ class PipelineEliminator:
             # Execute pipeline steps
             current_input = gif_path
             pipeline_metadata = {}
+            png_sequence_dir = None  # Track PNG sequences for gifski optimization
             
-            for step in pipeline.steps:
+            for i, step in enumerate(pipeline.steps):
                 step_output = tmpdir_path / f"step_{step.variable}_{current_input.stem}.gif"
                 
                 # Create wrapper instance and apply
@@ -2208,9 +2268,43 @@ class PipelineEliminator:
                         wrapper.__class__.__name__
                     )
                     step_params["lossy_level"] = engine_specific_lossy
+                    
+                    # Pass PNG sequence to gifski if available from previous step
+                    if png_sequence_dir and "Gifski" in wrapper.__class__.__name__:
+                        step_params["png_sequence_dir"] = str(png_sequence_dir)
                 
-                step_result = wrapper.apply(current_input, step_output, params=step_params)
-                pipeline_metadata.update(step_result)
+                # Check if next step is gifski and current tool can export PNG sequences
+                next_step_is_gifski = False
+                if i + 1 < len(pipeline.steps):
+                    next_wrapper_name = pipeline.steps[i + 1].tool_cls.__name__
+                    next_step_is_gifski = "Gifski" in next_wrapper_name
+                
+                # Export PNG sequence if next step is gifski and current tool supports it
+                # Also verify gifski tool is actually available to prevent race conditions
+                if (next_step_is_gifski and 
+                    wrapper.__class__.__name__ in ["FFmpegFrameReducer", "FFmpegColorReducer", "ImageMagickFrameReducer", "ImageMagickColorReducer"] and
+                    self._is_gifski_available()):
+                    png_sequence_dir = tmpdir_path / f"png_sequence_{step.variable}"
+                    
+                    # Use appropriate export function based on tool
+                    if "FFmpeg" in wrapper.__class__.__name__:
+                        from .external_engines.ffmpeg import export_png_sequence
+                        png_result = export_png_sequence(current_input, png_sequence_dir)
+                    else:  # ImageMagick
+                        from .external_engines.imagemagick import export_png_sequence
+                        png_result = export_png_sequence(current_input, png_sequence_dir)
+                    
+                    # Still run the normal step for color/frame processing
+                    step_result = wrapper.apply(current_input, step_output, params=step_params)
+                    
+                    # Merge metadata from both operations
+                    pipeline_metadata.update(step_result)
+                    pipeline_metadata.update({f"png_export_{step.variable}": png_result})
+                else:
+                    step_result = wrapper.apply(current_input, step_output, params=step_params)
+                    pipeline_metadata.update(step_result)
+                    png_sequence_dir = None  # Reset if not using PNG sequence optimization
+                
                 current_input = step_output
             
             # Copy final result to output path
@@ -2751,6 +2845,29 @@ class PipelineEliminator:
                 json.dump(completed_jobs, f, indent=2, default=str)
         except Exception as e:
             self.logger.warning(f"Failed to save resume data: {e}")
+    
+    def _save_resume_data_minimal(self, resume_file: Path, completed_job_ids: set):
+        """Save only completed job IDs for memory-efficient resume functionality."""
+        try:
+            import json
+            # Convert set to dict with minimal placeholder data for compatibility
+            minimal_data = {job_id: {"status": "completed"} for job_id in completed_job_ids}
+            with open(resume_file, 'w') as f:
+                json.dump(minimal_data, f, indent=2)
+        except Exception as e:
+            self.logger.warning(f"Failed to save minimal resume data: {e}")
+    
+    def _is_gifski_available(self) -> bool:
+        """Check if gifski tool is available for PNG sequence optimization.
+        
+        Returns:
+            True if gifski is available and can be used, False otherwise
+        """
+        try:
+            from .system_tools import discover_tool
+            return discover_tool("gifski").available
+        except Exception:
+            return False
     
     def _estimate_execution_time(self, remaining_jobs: int) -> str:
         """Estimate remaining execution time based on job complexity."""
