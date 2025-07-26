@@ -25,6 +25,42 @@ from .meta import extract_gif_metadata
 from .validation import validate_path_security
 
 
+def validate_lossy_level_for_engine(lossy_level: int, engine_name: str) -> None:
+    """Validate lossy level for specific engine with engine-aware ranges.
+    
+    Engine ranges:
+    - Gifsicle: 0-300
+    - Animately: 0-100  
+    - FFmpeg: 0-100
+    - Gifski: 0-100
+    - ImageMagick: 0-100
+    
+    Args:
+        lossy_level: Lossy compression level to validate
+        engine_name: Name of the engine (case-insensitive)
+        
+    Raises:
+        ValueError: If lossy level is outside valid range for the engine
+    """
+    engine_name_lower = engine_name.lower()
+    
+    if "gifsicle" in engine_name_lower:
+        max_lossy = 300
+        engine_display = "Gifsicle"
+    else:
+        # Most engines use 0-100 range
+        max_lossy = 100
+        engine_display = engine_name
+    
+    if lossy_level < 0 or lossy_level > max_lossy:
+        raise ValueError(
+            f"lossy_level must be between 0 and {max_lossy} for {engine_display}, got {lossy_level}"
+        )
+
+
+
+
+
 class GifsicleOptimizationLevel(Enum):
     """Gifsicle optimization levels."""
     BASIC = "basic"      # --optimize
@@ -150,9 +186,8 @@ def compress_with_gifsicle_extended(
         RuntimeError: If gifsicle command fails
         ValueError: If parameters are invalid
     """
-    # Validate parameters  
-    if lossy_level < 0 or lossy_level > 300:
-        raise ValueError(f"lossy_level must be between 0 and 300, got {lossy_level}")
+    # Validate parameters using engine-aware validation
+    validate_lossy_level_for_engine(lossy_level, "gifsicle")
 
     validate_frame_keep_ratio(frame_keep_ratio)
     # Allow *None* to preserve existing palette (no validation or color args)

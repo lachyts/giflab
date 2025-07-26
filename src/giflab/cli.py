@@ -769,7 +769,25 @@ def eliminate_pipelines(
     click.echo(f"📊 Total jobs: {total_jobs:,}")
     click.echo(f"⏱️  Estimated time: {estimated_time}")
     click.echo(f"🔄 Resume enabled: {resume}")
-    click.echo(f"🚀 GPU acceleration: {use_gpu}")
+    # Display GPU status with helpful information
+    if use_gpu:
+        try:
+            import cv2
+            cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
+            if cuda_devices > 0:
+                click.echo(f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)")
+            else:
+                click.echo(f"🔄 GPU acceleration: Requested but no CUDA devices found - will use CPU")
+                click.echo("💡 Install CUDA drivers and CUDA-capable hardware for GPU acceleration")
+        except ImportError:
+            click.echo(f"🔄 GPU acceleration: Requested but OpenCV CUDA not available - will use CPU")
+            click.echo("💡 Install opencv-python with CUDA support for GPU acceleration")
+        except Exception as e:
+            click.echo(f"🔄 GPU acceleration: Requested but initialization failed - will use CPU")
+            click.echo(f"💡 GPU error: {e}")
+    else:
+        click.echo(f"📊 GPU acceleration: Disabled (using CPU processing)")
+        click.echo("💡 Use --use-gpu flag to enable GPU acceleration for faster quality metrics")
     
     if estimate_time:
         click.echo("✅ Time estimation complete. Use --no-estimate-time to run actual analysis.")

@@ -27,16 +27,8 @@ from .metrics import calculate_comprehensive_metrics
 from .meta import extract_gif_metadata
 
 
-def clean_error_message(error_msg: str) -> str:
-    """Clean error message for CSV output by removing problematic characters.
-    
-    Args:
-        error_msg: Raw error message string
-        
-    Returns:
-        Cleaned error message safe for CSV output
-    """
-    return str(error_msg).replace('\n', ' ').replace('"', "'")
+# Use enhanced error message cleaning from error_handling module
+from .error_handling import clean_error_message
 
 
 class ErrorTypes:
@@ -1839,10 +1831,12 @@ class PipelineEliminator:
         return elimination_result
     
     def _run_comprehensive_testing(self, gif_paths: List[Path], pipelines: List[Pipeline]) -> pd.DataFrame:
-        """Run comprehensive testing of all pipeline combinations with elaborate quality metrics."""
+        """Run comprehensive testing of all pipeline combinations with streaming results to disk."""
         from .metrics import calculate_comprehensive_metrics, DEFAULT_METRICS_CONFIG
         import tempfile
         import time
+        import csv
+        
         try:
             from tqdm import tqdm
         except ImportError:
@@ -1870,6 +1864,28 @@ class PipelineEliminator:
         resume_file = self.output_dir / "elimination_progress.json"
         completed_jobs = self._load_resume_data(resume_file)
         
+        # Setup streaming CSV file for results
+        streaming_csv_path = self.output_dir / "streaming_results.csv"
+        csv_fieldnames = [
+            'gif_name', 'content_type', 'pipeline_id', 'success',
+            'file_size_kb', 'original_size_kb', 'compression_ratio',
+            'ssim_mean', 'ssim_std', 'ssim_min', 'ssim_max',
+            'ms_ssim_mean', 'psnr_mean', 'temporal_consistency',
+            'mse_mean', 'rmse_mean', 'fsim_mean', 'gmsd_mean',
+            'chist_mean', 'edge_similarity_mean', 'texture_similarity_mean',
+            'sharpness_similarity_mean', 'composite_quality',
+            'render_time_ms', 'total_processing_time_ms',
+            'pipeline_steps', 'tools_used', 'test_colors', 'test_lossy', 'test_frame_ratio',
+            'error', 'error_traceback', 'error_timestamp'
+        ]
+        
+        # Initialize streaming CSV with headers
+        write_csv_header = not streaming_csv_path.exists()
+        csv_file = open(streaming_csv_path, 'a', newline='', encoding='utf-8')
+        csv_writer = csv.DictWriter(csv_file, fieldnames=csv_fieldnames)
+        if write_csv_header:
+            csv_writer.writeheader()
+        
         # Estimate remaining time
         remaining_jobs = total_jobs - len(completed_jobs)
         estimated_time = self._estimate_execution_time(remaining_jobs)
@@ -1880,7 +1896,9 @@ class PipelineEliminator:
                        desc="Testing pipelines", unit="jobs",
                        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
         
-        results = []
+        # Use small memory buffer for batching, not unlimited accumulation
+        results_buffer = []
+        buffer_size = 100  # Process in batches of 100 results
         failed_jobs = 0
         
         # Test each combination
@@ -1897,7 +1915,8 @@ class PipelineEliminator:
                     # Skip if already completed (resume functionality)
                     if job_id in completed_jobs:
                         progress.update(1)
-                        results.append(completed_jobs[job_id])
+                        # Add to buffer for potential DataFrame creation, but don't accumulate indefinitely
+                        self._add_result_to_buffer(completed_jobs[job_id], results_buffer, csv_writer, buffer_size)
                         continue
                     
                     # Check cache first (if enabled)
@@ -1910,7 +1929,7 @@ class PipelineEliminator:
                             cache_hits += 1
                             # Update progress tracking
                             completed_jobs[job_id] = cached_result
-                            results.append(cached_result)
+                            self._add_result_to_buffer(cached_result, results_buffer, csv_writer, buffer_size)
                             progress.update(1)
                             continue
                         else:
@@ -1969,7 +1988,7 @@ class PipelineEliminator:
                         completed_jobs[job_id] = result
                         self._save_resume_data(resume_file, completed_jobs)
                         
-                        results.append(result)
+                        self._add_result_to_buffer(result, results_buffer, csv_writer, buffer_size)
                         
                     except Exception as e:
                         self.logger.warning(f"Pipeline failed: {job_id} - {e}")
@@ -2025,13 +2044,14 @@ class PipelineEliminator:
                             )
                         
                         completed_jobs[job_id] = failed_result
-                        results.append(failed_result)
+                        self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
                     
                     progress.update(1)
                     
-                    # Save checkpoint and flush cache every 50 jobs
-                    if len(results) % 50 == 0:
-                        self._save_intermediate_results(results)
+                    # Flush buffer and cache every 50 jobs  
+                    total_processed = len(results_buffer) + (completed_jobs_processed if 'completed_jobs_processed' in locals() else 0)
+                    if total_processed % 50 == 0:
+                        self._flush_results_buffer(results_buffer, csv_writer)
                         if self.cache:
                             self.cache.flush_batch(force=True)  # Flush accumulated batches
         
@@ -2056,8 +2076,102 @@ class PipelineEliminator:
             else:
                 self.logger.info("💾 Cache statistics: No cache operations performed")
         
-        self.logger.info(f"Testing completed: {len(results)} jobs, {failed_jobs} failures")
-        return pd.DataFrame(results)
+        # Final flush of any remaining results in buffer
+        self._flush_results_buffer(results_buffer, csv_writer, force=True)
+        csv_file.close()
+        
+        # Read results from streaming CSV to create DataFrame
+        # This prevents memory exhaustion for large result sets
+        total_results = len(results_buffer) + len(completed_jobs)
+        self.logger.info(f"Testing completed: {total_results} jobs, {failed_jobs} failures")
+        
+        # Load results from streaming CSV file
+        try:
+            results_df = pd.read_csv(streaming_csv_path)
+            self.logger.info(f"📊 Loaded {len(results_df)} results from streaming CSV")
+            return results_df
+        except Exception as e:
+            self.logger.warning(f"Failed to load streaming results: {e}")
+            # Fallback to empty DataFrame
+                         return pd.DataFrame()
+    
+    def _add_result_to_buffer(self, result: dict, buffer: list, csv_writer, buffer_size: int):
+        """Add a result to the memory buffer and flush to CSV if buffer is full.
+        
+        Args:
+            result: Result dictionary to add
+            buffer: Memory buffer list
+            csv_writer: CSV writer instance
+            buffer_size: Maximum buffer size before flushing
+        """
+        buffer.append(result)
+        
+        if len(buffer) >= buffer_size:
+            self._flush_results_buffer(buffer, csv_writer)
+    
+    def _flush_results_buffer(self, buffer: list, csv_writer, force: bool = False):
+        """Flush results buffer to CSV file and clear memory.
+        
+        Args:
+            buffer: Memory buffer to flush
+            csv_writer: CSV writer instance
+            force: If True, flush regardless of buffer size
+        """
+        if not buffer:
+            return
+            
+        if force or len(buffer) >= 50:  # Configurable flush threshold
+            try:
+                # Write all buffered results to CSV
+                for result in buffer:
+                    # Ensure all required fields are present with safe defaults
+                    safe_result = {
+                        'gif_name': result.get('gif_name', ''),
+                        'content_type': result.get('content_type', ''),
+                        'pipeline_id': result.get('pipeline_id', ''),
+                        'success': result.get('success', False),
+                        'file_size_kb': result.get('file_size_kb', 0),
+                        'original_size_kb': result.get('original_size_kb', 0),
+                        'compression_ratio': result.get('compression_ratio', 1.0),
+                        'ssim_mean': result.get('ssim_mean', 0.0),
+                        'ssim_std': result.get('ssim_std', 0.0),
+                        'ssim_min': result.get('ssim_min', 0.0),
+                        'ssim_max': result.get('ssim_max', 0.0),
+                        'ms_ssim_mean': result.get('ms_ssim_mean', 0.0),
+                        'psnr_mean': result.get('psnr_mean', 0.0),
+                        'temporal_consistency': result.get('temporal_consistency', 0.0),
+                        'mse_mean': result.get('mse_mean', 0.0),
+                        'rmse_mean': result.get('rmse_mean', 0.0),
+                        'fsim_mean': result.get('fsim_mean', 0.0),
+                        'gmsd_mean': result.get('gmsd_mean', 0.0),
+                        'chist_mean': result.get('chist_mean', 0.0),
+                        'edge_similarity_mean': result.get('edge_similarity_mean', 0.0),
+                        'texture_similarity_mean': result.get('texture_similarity_mean', 0.0),
+                        'sharpness_similarity_mean': result.get('sharpness_similarity_mean', 0.0),
+                        'composite_quality': result.get('composite_quality', 0.0),
+                        'render_time_ms': result.get('render_time_ms', 0),
+                        'total_processing_time_ms': result.get('total_processing_time_ms', 0),
+                        'pipeline_steps': str(result.get('pipeline_steps', [])),
+                        'tools_used': str(result.get('tools_used', [])),
+                        'test_colors': result.get('test_colors', 0),
+                        'test_lossy': result.get('test_lossy', 0),
+                        'test_frame_ratio': result.get('test_frame_ratio', 1.0),
+                        'error': result.get('error', ''),
+                        'error_traceback': result.get('error_traceback', ''),
+                        'error_timestamp': result.get('error_timestamp', '')
+                    }
+                    csv_writer.writerow(safe_result)
+                
+                # Force write to disk
+                csv_writer._f.flush()
+                
+                self.logger.debug(f"💾 Flushed {len(buffer)} results to streaming CSV")
+                
+                # Clear the buffer to free memory
+                buffer.clear()
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to flush results buffer: {e}")
     
     def _execute_pipeline_with_metrics(self, gif_path: Path, pipeline: Pipeline, params: dict, content_type: str) -> dict:
         """Execute a single pipeline and calculate comprehensive quality metrics."""
@@ -2179,22 +2293,29 @@ class PipelineEliminator:
                     test_mat = cv2.cuda_GpuMat()
                     test_mat.upload(np.ones((100, 100), dtype=np.uint8))
                     test_mat.download()
-                    self.logger.info("✅ GPU operations test passed")
+                    self.logger.info("✅ GPU operations test passed - GPU acceleration enabled")
                 except Exception as e:
-                    self.logger.warning(f"⚠️  GPU operations test failed: {e}")
+                    self.logger.warning(f"🔄 GPU operations test failed: {e}")
+                    self.logger.warning("🔄 GPU acceleration disabled - continuing with CPU processing")
+                    self.logger.info("💡 To enable GPU: ensure CUDA drivers and OpenCV-CUDA are properly installed")
                     self.use_gpu = False
             else:
-                self.logger.warning("⚠️  No CUDA devices found, falling back to CPU")
+                self.logger.warning("🔄 No CUDA devices found on this system")
+                self.logger.warning("🔄 GPU acceleration disabled - continuing with CPU processing")
+                self.logger.info("💡 To enable GPU: install CUDA-capable hardware and drivers")
                 self.use_gpu = False
                 
         except ImportError:
-            self.logger.warning("⚠️  OpenCV CUDA not available, falling back to CPU")
+            self.logger.warning("🔄 OpenCV CUDA support not available")
+            self.logger.warning("🔄 GPU acceleration disabled - continuing with CPU processing") 
+            self.logger.info("💡 To enable GPU: install opencv-python with CUDA support")
             self.use_gpu = False
     
     def _calculate_gpu_accelerated_metrics(self, original_path: Path, compressed_path: Path) -> dict:
         """Calculate quality metrics with GPU acceleration where possible."""
         if not self.use_gpu:
             # User hasn't requested GPU or GPU not available
+            self.logger.debug("📊 Computing quality metrics using CPU (GPU not requested or unavailable)")
             from .metrics import calculate_comprehensive_metrics
             return calculate_comprehensive_metrics(original_path, compressed_path)
             
@@ -2205,17 +2326,23 @@ class PipelineEliminator:
             cuda_available = cv2.cuda.getCudaEnabledDeviceCount() > 0
             
             if not cuda_available:
-                # Fall back to regular CPU calculation
+                # Fall back to regular CPU calculation with clear communication
+                self.logger.warning("🔄 CUDA devices became unavailable during processing")
+                self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
+                self.logger.info("💡 Performance may be slower than expected")
                 from .metrics import calculate_comprehensive_metrics
                 return calculate_comprehensive_metrics(original_path, compressed_path)
             
-            self.logger.info("🚀 Using GPU acceleration for quality metrics")
+            self.logger.debug("🚀 Computing quality metrics using GPU acceleration")
             
             # Use GPU-accelerated version
             return self._calculate_cuda_metrics(original_path, compressed_path)
             
         except ImportError:
-            # OpenCV CUDA not available, fall back to CPU
+            # OpenCV CUDA not available, fall back to CPU with clear explanation
+            self.logger.warning("🔄 OpenCV CUDA support lost during processing")
+            self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
+            self.logger.info("💡 Install opencv-python with CUDA support for better performance")
             from .metrics import calculate_comprehensive_metrics
             return calculate_comprehensive_metrics(original_path, compressed_path)
     
