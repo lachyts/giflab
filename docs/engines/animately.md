@@ -38,24 +38,30 @@ Add `-DENABLE_TESTS=OFF` to skip the C++ tests for faster builds.
 ---
 ## 3 CLI launcher usage
 
-After building you have a binary called **`animately-gif`** (or simply `animately` depending on install).  All parameters are **optional**; unspecified ones leave the corresponding property unchanged.
+After building you have a binary called **`animately`**.  All parameters are **optional**; unspecified ones leave the corresponding property unchanged.
 
-| Flag | Value type | Description |
-|------|-----------|-------------|
-| `--lossy=N` | `0–100` | Lossy compression level (0 = lossless). |
-| `--reduce=R` | `0–1` (float) | Remove the given *percentage* of frames. |
-| `--colors=C` | `1–256` | Quantize to C colors (per-GIF palette). |
-| `--crop x y w h` | ints | Crop rectangle before further ops. |
-| `--zoom x y w h` | ints | Zoom into rectangle *before* crop & scale. |
-| `--scale sx sy` | floats | Scale factors after cropping. |
-| `--delay F` | float | Multiply all frame delays by F (speed up / slow down). |
-| `--repeatedFrame` | (flag) | Detect and drop identical frames. |
-| `--trimByFrames a b` | ints | Keep frames `[a, b]` inclusive. |
-| `--trimByMs a b` | ints | Keep time-range `[a, b]` ms. |
-| `--loops N` | int | Set animation loop count (`0` = infinite). |
-| `--tone r1 g1 b1 r2 g2 b2` | ints | Apply duotone mapping. |
-| `--threads` | (flag) | Enable multithreading (must build with threads). |
-| `--advanced-lossy FILE` | JSON file | Advanced lossy compression with frame configuration. |
+**Current version:** 1.1.20.0
+
+| Flag | Short | Value type | Description |
+|------|-------|-----------|-------------|
+| `--input` | `-i` | file path | Path to input gif file |
+| `--output` | `-o` | file path | Path to output gif file |
+| `--scale` | `-s` | value | Scale |
+| `--crop` | `-c` | value | Crop |
+| `--lossy` | `-l` | `0–100` | Lossy |
+| `--advanced-lossy` | `-a` | JSON file | Advanced lossy |
+| `--delay` | `-d` | value | Delay |
+| `--trim-frames` | `-t` | value | Trim |
+| `--trim-ms` | `-m` | value | Trim in milliseconds |
+| `--reduce` | `-f` | value | Reduce frames |
+| `--colors` | `-p` | `1–256` | Reduce palette colors |
+| `--frames` | `-g` | value | Frames |
+| `--zoom` | `-z` | value | Zoom |
+| `--tone` | `-u` | value | Duotone |
+| `--repeated-frame` | `-r` | (flag) | Repeated Frame |
+| `--meta` | `-e` | value | Gif meta information |
+| `--loops` | `-y` | int | Loops in output gif |
+| `--help` | `-h` | (flag) | List of available options |
 
 **Wrapper mapping** in GifLab:
 * `AnimatelyColorReducer` → `--colors {count}`
@@ -70,7 +76,6 @@ The `--advanced-lossy` (or `-a`) flag allows for more sophisticated compression 
 
 **Usage:**
 ```bash
-animately -a config.json -o output.gif
 ```
 
 **JSON Configuration Format:**
@@ -131,7 +136,7 @@ const AnimatelyGif = require('./animately_gif');
 ## 6 Environment variables in GifLab
 | Variable | Description |
 |----------|-------------|
-| `GIFLAB_ANIMATELY_PATH` | Override auto-detected path to `animately-gif` launcher. |
+| `GIFLAB_ANIMATELY_PATH` | Override auto-detected path to `animately` launcher. |
 
 ---
 For in-depth details see the source tree and README inside the Animately repository. 

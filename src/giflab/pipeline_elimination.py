@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import defaultdict
+import traceback
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
@@ -1132,13 +1134,42 @@ class PipelineEliminator:
                         self.logger.warning(f"Pipeline failed: {job_id} - {e}")
                         failed_jobs += 1
                         
-                        # Record failure for resume
+                        # Record comprehensive failure information
                         failed_result = {
                             'gif_name': gif_path.stem,
                             'content_type': content_type,
                             'pipeline_id': pipeline.identifier(),
-                            'error': str(e),
-                            'success': False
+                            'error': str(e).replace('\n', ' ').replace('"', "'"),  # Clean error message for CSV
+                            'error_traceback': traceback.format_exc().replace('\n', ' | '),  # Preserve full traceback
+                            'error_timestamp': datetime.now().isoformat(),
+                            'success': False,
+                            'pipeline_steps': [step.name for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
+                            'tools_used': pipeline.tools_used() if hasattr(pipeline, 'tools_used') else [],
+                            'test_colors': params.get('color_count', None),
+                            'test_lossy': params.get('lossy_level', None),
+                            'test_frame_ratio': params.get('frame_ratio', None),
+                            # Add placeholders for metrics that would be in successful results
+                            'file_size_kb': None,
+                            'original_size_kb': None,
+                            'compression_ratio': None,
+                            'ssim_mean': None,
+                            'ssim_std': None,
+                            'ssim_min': None,
+                            'ssim_max': None,
+                            'ms_ssim_mean': None,
+                            'psnr_mean': None,
+                            'temporal_consistency': None,
+                            'mse_mean': None,
+                            'rmse_mean': None,
+                            'fsim_mean': None,
+                            'gmsd_mean': None,
+                            'chist_mean': None,
+                            'edge_similarity_mean': None,
+                            'texture_similarity_mean': None,
+                            'sharpness_similarity_mean': None,
+                            'composite_quality': None,
+                            'render_time_ms': None,
+                            'total_processing_time_ms': None
                         }
                         completed_jobs[job_id] = failed_result
                         results.append(failed_result)
@@ -1907,24 +1938,249 @@ class PipelineEliminator:
     
     def _save_results(self, elimination_result: EliminationResult, results_df: pd.DataFrame):
         """Save elimination analysis results."""
-        # Save detailed results
-        results_df.to_csv(self.output_dir / "elimination_test_results.csv", index=False)
         
-        # Save elimination summary
+        # Separate successful and failed results
+        failed_results = results_df[results_df['success'] == False] if 'success' in results_df.columns else pd.DataFrame()
+        successful_results = results_df[results_df['success'] == True] if 'success' in results_df.columns else results_df
+        
+        # Fix CSV output by properly escaping error messages
+        results_df_clean = results_df.copy()
+        if 'error' in results_df_clean.columns:
+            # Replace newlines and quotes in error messages to prevent CSV corruption
+            results_df_clean['error'] = results_df_clean['error'].astype(str).str.replace('\n', ' ').str.replace('"', "'")
+        
+        # Save detailed results (with cleaned error messages)
+        results_df_clean.to_csv(self.output_dir / "elimination_test_results.csv", index=False)
+        
+        # Create detailed failed pipelines log
+        if not failed_results.empty:
+            failed_pipeline_log = []
+            for _, row in failed_results.iterrows():
+                failed_entry = {
+                    'timestamp': datetime.now().isoformat(),
+                    'gif_name': row.get('gif_name', 'unknown'),
+                    'content_type': row.get('content_type', 'unknown'),
+                    'pipeline_id': row.get('pipeline_id', 'unknown'),
+                    'error_message': row.get('error', 'No error message'),
+                    'pipeline_steps': row.get('pipeline_steps', []),
+                    'tools_used': row.get('tools_used', []),
+                    'test_parameters': {
+                        'colors': row.get('test_colors', None),
+                        'lossy': row.get('test_lossy', None),
+                        'frame_ratio': row.get('test_frame_ratio', None)
+                    }
+                }
+                failed_pipeline_log.append(failed_entry)
+            
+            # Save failed pipelines log
+            with open(self.output_dir / "failed_pipelines.json", 'w') as f:
+                json.dump(failed_pipeline_log, f, indent=2)
+            
+            # Analyze error patterns
+            error_types = Counter()
+            for entry in failed_pipeline_log:
+                error_msg = entry['error_message'].lower()
+                if 'gifski' in error_msg:
+                    error_types['gifski_failures'] += 1
+                elif 'ffmpeg' in error_msg:
+                    error_types['ffmpeg_failures'] += 1
+                elif 'imagemagick' in error_msg:
+                    error_types['imagemagick_failures'] += 1
+                elif 'gifsicle' in error_msg:
+                    error_types['gifsicle_failures'] += 1
+                elif 'animately' in error_msg:
+                    error_types['animately_failures'] += 1
+                elif 'command failed' in error_msg:
+                    error_types['command_execution_failures'] += 1
+                elif 'timeout' in error_msg:
+                    error_types['timeout_failures'] += 1
+                else:
+                    error_types['other_failures'] += 1
+            
+            # Log failure statistics
+            self.logger.warning(f"Failed pipelines: {len(failed_results)}")
+            for error_type, count in error_types.most_common():
+                self.logger.warning(f"  {error_type}: {count}")
+        
+        # Enhanced elimination summary with failure information
         summary = {
+            'timestamp': datetime.now().isoformat(),
             'eliminated_count': len(elimination_result.eliminated_pipelines),
             'retained_count': len(elimination_result.retained_pipelines),
             'eliminated_pipelines': list(elimination_result.eliminated_pipelines),
             'retained_pipelines': list(elimination_result.retained_pipelines),
             'content_type_winners': elimination_result.content_type_winners,
-            'elimination_reasons': elimination_result.elimination_reasons
+            'elimination_reasons': elimination_result.elimination_reasons,
+            'failure_statistics': {
+                'total_failed': len(failed_results),
+                'total_successful': len(successful_results),
+                'total_tested': len(results_df),
+                'failure_rate': len(failed_results) / len(results_df) * 100 if len(results_df) > 0 else 0,
+                'error_types': dict(error_types) if not failed_results.empty else {}
+            }
         }
         
         with open(self.output_dir / "elimination_summary.json", 'w') as f:
             json.dump(summary, f, indent=2)
         
+        # Generate and save failure analysis report
+        failure_report = self.generate_failure_analysis_report(results_df)
+        with open(self.output_dir / "failure_analysis_report.txt", 'w') as f:
+            f.write(failure_report)
+        
+        # Log comprehensive results
         self.logger.info(f"Eliminated {len(elimination_result.eliminated_pipelines)} underperforming pipelines")
         self.logger.info(f"Retained {len(elimination_result.retained_pipelines)} competitive pipelines")
+        if not failed_results.empty:
+            self.logger.info(f"Failed pipelines log saved to: {self.output_dir / 'failed_pipelines.json'}")
+            self.logger.info(f"Failure analysis report saved to: {self.output_dir / 'failure_analysis_report.txt'}")
+            self.logger.info(f"Failure rate: {len(failed_results)}/{len(results_df)} ({len(failed_results)/len(results_df)*100:.1f}%)")
+
+    def generate_failure_analysis_report(self, results_df: pd.DataFrame) -> str:
+        """Generate a detailed failure analysis report with recommendations."""
+        from collections import Counter, defaultdict
+        
+        # Separate failed results
+        failed_results = results_df[results_df['success'] == False] if 'success' in results_df.columns else pd.DataFrame()
+        
+        if failed_results.empty:
+            return "✅ No pipeline failures detected. All pipelines executed successfully!"
+        
+        report_lines = []
+        report_lines.append("🔍 PIPELINE FAILURE ANALYSIS REPORT")
+        report_lines.append("=" * 50)
+        report_lines.append("")
+        
+        # Overall statistics
+        total_pipelines = len(results_df)
+        failed_count = len(failed_results)
+        failure_rate = (failed_count / total_pipelines) * 100
+        
+        report_lines.append(f"📊 OVERVIEW")
+        report_lines.append(f"   Total pipelines tested: {total_pipelines}")
+        report_lines.append(f"   Failed pipelines: {failed_count}")
+        report_lines.append(f"   Failure rate: {failure_rate:.1f}%")
+        report_lines.append("")
+        
+        # Error type analysis
+        error_types = Counter()
+        tool_failures = defaultdict(list)
+        content_type_failures = defaultdict(int)
+        
+        for _, row in failed_results.iterrows():
+            error_msg = str(row.get('error', '')).lower()
+            content_type = row.get('content_type', 'unknown')
+            pipeline_id = row.get('pipeline_id', 'unknown')
+            
+            content_type_failures[content_type] += 1
+            
+            # Categorize errors
+            if 'gifski' in error_msg:
+                error_types['gifski'] += 1
+                tool_failures['gifski'].append(pipeline_id)
+            elif 'ffmpeg' in error_msg:
+                error_types['ffmpeg'] += 1
+                tool_failures['ffmpeg'].append(pipeline_id)
+            elif 'imagemagick' in error_msg:
+                error_types['imagemagick'] += 1
+                tool_failures['imagemagick'].append(pipeline_id)
+            elif 'gifsicle' in error_msg:
+                error_types['gifsicle'] += 1
+                tool_failures['gifsicle'].append(pipeline_id)
+            elif 'animately' in error_msg:
+                error_types['animately'] += 1
+                tool_failures['animately'].append(pipeline_id)
+            elif 'timeout' in error_msg:
+                error_types['timeout'] += 1
+            elif 'command failed' in error_msg:
+                error_types['command_execution'] += 1
+            else:
+                error_types['other'] += 1
+        
+        report_lines.append("🔧 ERROR TYPE BREAKDOWN")
+        for error_type, count in error_types.most_common():
+            percentage = (count / failed_count) * 100
+            report_lines.append(f"   {error_type}: {count} ({percentage:.1f}%)")
+        report_lines.append("")
+        
+        # Content type analysis
+        report_lines.append("📁 FAILURES BY CONTENT TYPE")
+        for content_type, count in sorted(content_type_failures.items()):
+            report_lines.append(f"   {content_type}: {count} failures")
+        report_lines.append("")
+        
+        # Recommendations based on error patterns
+        report_lines.append("💡 RECOMMENDATIONS")
+        
+        # Tool-specific recommendations
+        if error_types['gifski'] > failed_count * 0.3:
+            report_lines.append("   🔴 HIGH GIFSKI FAILURES:")
+            report_lines.append("      - Consider updating gifski binary")
+            report_lines.append("      - Check system compatibility (some systems lack required libraries)")
+            report_lines.append("      - May need to exclude gifski from production pipelines")
+            report_lines.append("")
+        
+        if error_types['ffmpeg'] > failed_count * 0.2:
+            report_lines.append("   🟠 FFMPEG ISSUES DETECTED:")
+            report_lines.append("      - Verify FFmpeg installation and PATH configuration")
+            report_lines.append("      - Check for missing codecs or filters")
+            report_lines.append("      - Consider testing with different FFmpeg versions")
+            report_lines.append("")
+        
+        if error_types['imagemagick'] > failed_count * 0.2:
+            report_lines.append("   🟡 IMAGEMAGICK CONFIGURATION ISSUES:")
+            report_lines.append("      - Check ImageMagick security policies (/etc/ImageMagick-*/policy.xml)")
+            report_lines.append("      - Verify GIF read/write permissions are enabled")
+            report_lines.append("      - Consider increasing memory limits")
+            report_lines.append("")
+        
+        if error_types['timeout'] > 0:
+            report_lines.append("   ⏱️ TIMEOUT ISSUES:")
+            report_lines.append("      - Consider increasing timeout values for complex GIFs")
+            report_lines.append("      - Monitor system resources during testing")
+            report_lines.append("      - May indicate performance bottlenecks")
+            report_lines.append("")
+        
+        if error_types['command_execution'] > failed_count * 0.15:
+            report_lines.append("   ⚡ COMMAND EXECUTION FAILURES:")
+            report_lines.append("      - Check tool binary availability and permissions")
+            report_lines.append("      - Verify system PATH includes all required tools")
+            report_lines.append("      - Consider running system_tools.get_available_tools() for diagnostics")
+            report_lines.append("")
+        
+        # Most problematic pipelines
+        if tool_failures:
+            report_lines.append("🚨 MOST PROBLEMATIC TOOL COMBINATIONS")
+            for tool, failures in tool_failures.items():
+                if len(failures) > 5:  # Only show tools with many failures
+                    unique_pipelines = len(set(failures))
+                    report_lines.append(f"   {tool}: {unique_pipelines} unique pipeline failures")
+                    
+                    # Show most common failure patterns
+                    failure_patterns = Counter()
+                    for pipeline in failures:
+                        # Extract pattern (simplified)
+                        parts = pipeline.split('__')
+                        if len(parts) >= 2:
+                            pattern = f"{parts[0]}...{parts[-1]}"
+                            failure_patterns[pattern] += 1
+                    
+                    for pattern, count in failure_patterns.most_common(3):
+                        report_lines.append(f"      - {pattern}: {count} failures")
+            report_lines.append("")
+        
+        # General recommendations
+        report_lines.append("🔄 GENERAL RECOMMENDATIONS")
+        report_lines.append("   1. Run 'giflab view-failures elimination_results/' for detailed error analysis")
+        report_lines.append("   2. Consider excluding problematic tools from production pipelines")
+        report_lines.append("   3. Test individual tools with 'python -c \"from giflab.system_tools import get_available_tools; print(get_available_tools())\"'")
+        report_lines.append("   4. Review and update tool configurations in src/giflab/config.py")
+        report_lines.append("   5. Consider running elimination analysis with fewer tool combinations to isolate issues")
+        report_lines.append("")
+        
+        report_lines.append("📖 For detailed failure logs, see: elimination_results/failed_pipelines.json")
+        
+        return "\n".join(report_lines)
 
     def validate_research_findings(self) -> Dict[str, bool]:
         """Validate the preliminary research findings about redundant methods."""
