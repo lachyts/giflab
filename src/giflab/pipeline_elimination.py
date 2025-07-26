@@ -521,6 +521,282 @@ class EliminationResult:
     total_jobs_run: int = 0
     total_jobs_possible: int = 0
     efficiency_gain: float = 0.0
+    # Pareto frontier analysis results
+    pareto_analysis: Dict[str, Any] = field(default_factory=dict)
+    pareto_dominated_pipelines: Set[str] = field(default_factory=set)
+    quality_aligned_rankings: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)
+
+
+class ParetoAnalyzer:
+    """Advanced Pareto frontier analysis for pipeline efficiency comparison."""
+    
+    def __init__(self, results_df: pd.DataFrame, logger: logging.Logger = None):
+        """Initialize the Pareto analyzer.
+        
+        Args:
+            results_df: DataFrame with pipeline test results
+            logger: Optional logger instance
+        """
+        self.results_df = results_df
+        self.logger = logger or logging.getLogger(__name__)
+        self.quality_metrics = ['composite_quality', 'ssim_mean', 'ms_ssim_mean']
+        self.size_metrics = ['file_size_kb', 'compression_ratio']
+    
+    def generate_comprehensive_pareto_analysis(self) -> dict:
+        """Generate complete Pareto analysis across all dimensions."""
+        
+        analysis = {
+            'content_type_frontiers': {},
+            'global_frontier': None,
+            'pipeline_dominance_analysis': {},
+            'efficiency_rankings': {},
+            'trade_off_insights': {}
+        }
+        
+        try:
+            # 1. Per-content-type analysis
+            for content_type in self.results_df['content_type'].unique():
+                content_data = self.results_df[self.results_df['content_type'] == content_type]
+                analysis['content_type_frontiers'][content_type] = self._compute_pareto_frontier(
+                    content_data, quality_col='composite_quality', size_col='file_size_kb'
+                )
+            
+            # 2. Global frontier across all content types
+            analysis['global_frontier'] = self._compute_pareto_frontier(
+                self.results_df, quality_col='composite_quality', size_col='file_size_kb'
+            )
+            
+            # 3. Pipeline dominance analysis
+            analysis['pipeline_dominance_analysis'] = self._analyze_pipeline_dominance()
+            
+            # 4. Efficiency rankings at quality targets
+            analysis['efficiency_rankings'] = self._rank_pipelines_at_quality_targets()
+            
+            # 5. Trade-off insights
+            analysis['trade_off_insights'] = self._generate_trade_off_insights()
+            
+        except Exception as e:
+            self.logger.warning(f"Pareto analysis failed: {e}")
+            
+        return analysis
+    
+    def _compute_pareto_frontier(self, data: pd.DataFrame, 
+                                quality_col: str, size_col: str) -> dict:
+        """Compute Pareto frontier for quality vs size trade-off."""
+        
+        if data.empty or quality_col not in data.columns or size_col not in data.columns:
+            return {'frontier_points': [], 'dominated_pipelines': []}
+        
+        # Filter out invalid data
+        valid_data = data.dropna(subset=[quality_col, size_col])
+        if valid_data.empty:
+            return {'frontier_points': [], 'dominated_pipelines': []}
+        
+        # Step 1: For each pipeline, get its best performances
+        pipeline_best_points = {}
+        
+        for pipeline_id in valid_data['pipeline_id'].unique():
+            pipeline_data = valid_data[valid_data['pipeline_id'] == pipeline_id]
+            
+            # Get all quality-size points for this pipeline
+            points = []
+            for _, row in pipeline_data.iterrows():
+                quality = row[quality_col]
+                size = row[size_col]
+                if pd.notna(quality) and pd.notna(size):
+                    points.append((quality, size, dict(row)))
+            
+            # For this pipeline, find its own Pareto frontier
+            pipeline_frontier = self._find_pareto_optimal_points(points)
+            pipeline_best_points[pipeline_id] = pipeline_frontier
+        
+        # Step 2: Combine all pipeline best points
+        all_candidate_points = []
+        for pipeline_id, points in pipeline_best_points.items():
+            for quality, size, row_data in points:
+                all_candidate_points.append((quality, size, pipeline_id, row_data))
+        
+        # Step 3: Find global Pareto frontier
+        global_frontier = self._find_pareto_optimal_points(all_candidate_points)
+        
+        # Step 4: Identify dominated pipelines
+        frontier_pipelines = {point[2] for point in global_frontier}  # pipeline_ids in frontier
+        all_pipelines = set(valid_data['pipeline_id'].unique())
+        dominated_pipelines = all_pipelines - frontier_pipelines
+        
+        return {
+            'frontier_points': [
+                {
+                    'quality': point[0],
+                    'file_size_kb': point[1], 
+                    'pipeline_id': point[2],
+                    'efficiency_score': point[0] / point[1] if point[1] > 0 else 0,  # quality per KB
+                    'row_data': point[3] if len(point) > 3 else None
+                }
+                for point in global_frontier
+            ],
+            'dominated_pipelines': list(dominated_pipelines),
+            'pipeline_frontier_segments': pipeline_best_points
+        }
+    
+    def _find_pareto_optimal_points(self, points: list) -> list:
+        """Find Pareto optimal points from a list of (quality, size, ...) tuples.
+        
+        Higher quality is better, lower size is better.
+        """
+        if not points:
+            return []
+        
+        # Sort by quality (descending) then by size (ascending) 
+        sorted_points = sorted(points, key=lambda x: (-x[0], x[1]))
+        
+        pareto_frontier = []
+        min_size_seen = float('inf')
+        
+        for point in sorted_points:
+            quality, size = point[0], point[1]
+            
+            # This point is Pareto optimal if it has smaller size than any previous point
+            # (since we're iterating in descending quality order)
+            if size < min_size_seen:
+                pareto_frontier.append(point)
+                min_size_seen = size
+        
+        return pareto_frontier
+    
+    def _analyze_pipeline_dominance(self) -> dict:
+        """Analyze which pipelines dominate others across different scenarios."""
+        
+        dominance_analysis = {}
+        
+        for content_type in self.results_df['content_type'].unique():
+            content_data = self.results_df[self.results_df['content_type'] == content_type]
+            
+            pipeline_dominance = {}
+            
+            for pipeline_a in content_data['pipeline_id'].unique():
+                data_a = content_data[content_data['pipeline_id'] == pipeline_a]
+                dominated_by_a = []
+                
+                for pipeline_b in content_data['pipeline_id'].unique():
+                    if pipeline_a == pipeline_b:
+                        continue
+                        
+                    data_b = content_data[content_data['pipeline_id'] == pipeline_b]
+                    
+                    # Check if A dominates B (A has better/equal quality AND better/equal size)
+                    if self._pipeline_dominates(data_a, data_b):
+                        dominated_by_a.append(pipeline_b)
+                
+                pipeline_dominance[pipeline_a] = {
+                    'dominates': dominated_by_a,
+                    'dominance_count': len(dominated_by_a)
+                }
+            
+            dominance_analysis[content_type] = pipeline_dominance
+        
+        return dominance_analysis
+    
+    def _pipeline_dominates(self, data_a: pd.DataFrame, data_b: pd.DataFrame) -> bool:
+        """Check if pipeline A dominates pipeline B."""
+        
+        # Compare best performances
+        best_a_quality = data_a['composite_quality'].max() if 'composite_quality' in data_a.columns else 0
+        best_a_size = data_a['file_size_kb'].min() if 'file_size_kb' in data_a.columns else float('inf')
+        
+        best_b_quality = data_b['composite_quality'].max() if 'composite_quality' in data_b.columns else 0  
+        best_b_size = data_b['file_size_kb'].min() if 'file_size_kb' in data_b.columns else float('inf')
+        
+        # A dominates B if A is better/equal in both dimensions and strictly better in at least one
+        quality_better_or_equal = best_a_quality >= best_b_quality
+        size_better_or_equal = best_a_size <= best_b_size
+        
+        strictly_better = (best_a_quality > best_b_quality) or (best_a_size < best_b_size)
+        
+        return quality_better_or_equal and size_better_or_equal and strictly_better
+    
+    def _rank_pipelines_at_quality_targets(self) -> dict:
+        """Rank pipelines by file size at specific quality target levels."""
+        
+        target_qualities = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
+        rankings = {}
+        
+        for target_quality in target_qualities:
+            # Find pipelines that can achieve this quality level
+            capable_pipelines = {}
+            
+            for pipeline_id in self.results_df['pipeline_id'].unique():
+                pipeline_data = self.results_df[self.results_df['pipeline_id'] == pipeline_id]
+                
+                # Find results at or above target quality
+                quality_col = 'composite_quality'
+                if quality_col in pipeline_data.columns:
+                    quality_results = pipeline_data[pipeline_data[quality_col] >= target_quality]
+                    
+                    if not quality_results.empty:
+                        # Best (smallest) file size at this quality level
+                        best_size = quality_results['file_size_kb'].min()
+                        capable_pipelines[pipeline_id] = {
+                            'best_size_kb': best_size,
+                            'samples_at_quality': len(quality_results)
+                        }
+            
+            # Rank by file size
+            ranked_pipelines = sorted(
+                capable_pipelines.items(), 
+                key=lambda x: x[1]['best_size_kb']
+            )
+            
+            rankings[f"quality_{target_quality}"] = ranked_pipelines
+        
+        return rankings
+    
+    def _generate_trade_off_insights(self) -> dict:
+        """Generate insights about quality-size trade-offs."""
+        
+        insights = {}
+        
+        try:
+            # Calculate efficiency metrics
+            if 'composite_quality' in self.results_df.columns and 'file_size_kb' in self.results_df.columns:
+                # Avoid division by zero
+                valid_sizes = self.results_df['file_size_kb'] > 0
+                temp_df = self.results_df[valid_sizes].copy()
+                temp_df['efficiency_ratio'] = temp_df['composite_quality'] / temp_df['file_size_kb']
+                
+                # Top efficiency leaders
+                efficiency_leaders = temp_df.nlargest(10, 'efficiency_ratio')[
+                    ['pipeline_id', 'composite_quality', 'file_size_kb', 'efficiency_ratio']
+                ].to_dict('records')
+                
+                insights['efficiency_leaders'] = efficiency_leaders
+                
+                # Quality vs size correlation by pipeline
+                pipeline_correlations = {}
+                for pipeline_id in temp_df['pipeline_id'].unique():
+                    pipeline_data = temp_df[temp_df['pipeline_id'] == pipeline_id]
+                    if len(pipeline_data) > 2:
+                        correlation = pipeline_data['composite_quality'].corr(pipeline_data['file_size_kb'])
+                        if pd.notna(correlation):
+                            pipeline_correlations[pipeline_id] = correlation
+                
+                insights['quality_size_correlations'] = pipeline_correlations
+                
+                # Sweet spot analysis (high quality, low size)
+                quality_threshold = temp_df['composite_quality'].quantile(0.8)  # Top 20% quality
+                size_threshold = temp_df['file_size_kb'].quantile(0.2)  # Bottom 20% size
+                
+                sweet_spot_results = temp_df[
+                    (temp_df['composite_quality'] >= quality_threshold) & 
+                    (temp_df['file_size_kb'] <= size_threshold)
+                ]
+                
+                insights['sweet_spot_pipelines'] = sweet_spot_results['pipeline_id'].value_counts().to_dict()
+                
+        except Exception as e:
+            self.logger.warning(f"Trade-off insights generation failed: {e}")
+        
+        return insights
 
 
 class PipelineEliminator:
@@ -1706,7 +1982,7 @@ class PipelineEliminator:
                                 pipeline.identifier(), gif_path.stem, params, {
                                     'error': str(e),
                                     'error_traceback': traceback.format_exc(),
-                                    'pipeline_steps': [step.name for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
+                                    'pipeline_steps': [step.name() for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
                                     'tools_used': pipeline.tools_used() if hasattr(pipeline, 'tools_used') else []
                                 }
                             )
@@ -2489,6 +2765,51 @@ class PipelineEliminator:
                 else:
                     elimination_result.elimination_reasons[pipeline] = "No successful test results"
         
+        # Pareto frontier analysis for quality-aligned comparison
+        self.logger.info("Running Pareto frontier analysis...")
+        try:
+            pareto_analyzer = ParetoAnalyzer(successful_results, self.logger)
+            pareto_analysis = pareto_analyzer.generate_comprehensive_pareto_analysis()
+            elimination_result.pareto_analysis = pareto_analysis
+            
+            # Extract dominated pipelines from Pareto analysis
+            all_dominated = set()
+            for content_type, frontier_data in pareto_analysis['content_type_frontiers'].items():
+                all_dominated.update(frontier_data.get('dominated_pipelines', []))
+            
+            elimination_result.pareto_dominated_pipelines = all_dominated
+            
+            # Extract quality-aligned rankings
+            elimination_result.quality_aligned_rankings = pareto_analysis.get('efficiency_rankings', {})
+            
+            # Update elimination reasons for Pareto-dominated pipelines
+            for pipeline in all_dominated:
+                if pipeline not in elimination_result.elimination_reasons:
+                    elimination_result.elimination_reasons[pipeline] = "Pareto dominated (always better alternatives available)"
+            
+            # Log Pareto analysis statistics
+            global_frontier = pareto_analysis.get('global_frontier', {})
+            frontier_count = len(global_frontier.get('frontier_points', []))
+            dominated_count = len(all_dominated)
+            
+            self.logger.info(f"Pareto frontier analysis complete:")
+            self.logger.info(f"  - Pipelines on global frontier: {frontier_count}")
+            self.logger.info(f"  - Pareto dominated pipelines: {dominated_count}")
+            
+            # Log quality-aligned winners
+            rankings = pareto_analysis.get('efficiency_rankings', {})
+            for quality_level, ranked_list in rankings.items():
+                if ranked_list:
+                    winner = ranked_list[0]
+                    self.logger.info(f"  - Best efficiency at {quality_level}: {winner[0]} ({winner[1]['best_size_kb']:.1f}KB)")
+                    
+        except Exception as e:
+            self.logger.warning(f"Pareto frontier analysis failed: {e}")
+            # Set empty defaults if analysis fails
+            elimination_result.pareto_analysis = {}
+            elimination_result.pareto_dominated_pipelines = set()
+            elimination_result.quality_aligned_rankings = {}
+        
         # Log elimination statistics
         self.logger.info(f"Analysis complete:")
         self.logger.info(f"  - Total pipelines tested: {len(all_pipelines)}")
@@ -2507,6 +2828,7 @@ class PipelineEliminator:
             self._save_failed_pipelines_log(failed_results)
         
         self._save_elimination_summary(elimination_result, results_df, failed_results, successful_results)
+        self._save_pareto_analysis_results(elimination_result)
         self._generate_and_save_failure_report(results_df)
         self._log_results_summary(elimination_result, failed_results, results_df)
 
@@ -2855,3 +3177,201 @@ class PipelineEliminator:
         findings["gifsicle_o3_minimal_benefit"] = True  # Placeholder
         
         return findings 
+    
+    def _save_pareto_analysis_results(self, elimination_result: EliminationResult):
+        """Save Pareto frontier analysis results to files."""
+        try:
+            pareto_analysis = elimination_result.pareto_analysis
+            if not pareto_analysis:
+                self.logger.warning("No Pareto analysis data to save")
+                return
+            
+            # 1. Save global Pareto frontier points
+            global_frontier = pareto_analysis.get('global_frontier', {})
+            frontier_points = global_frontier.get('frontier_points', [])
+            
+            if frontier_points:
+                frontier_df = pd.DataFrame(frontier_points)
+                frontier_path = self.output_dir / "pareto_frontier_global.csv"
+                frontier_df.to_csv(frontier_path, index=False)
+                self.logger.info(f"Saved global Pareto frontier to: {frontier_path}")
+            
+            # 2. Save content-type specific frontiers
+            content_frontiers = pareto_analysis.get('content_type_frontiers', {})
+            for content_type, frontier_data in content_frontiers.items():
+                points = frontier_data.get('frontier_points', [])
+                if points:
+                    frontier_df = pd.DataFrame(points)
+                    frontier_path = self.output_dir / f"pareto_frontier_{content_type}.csv"
+                    frontier_df.to_csv(frontier_path, index=False)
+                    self.logger.info(f"Saved {content_type} Pareto frontier to: {frontier_path}")
+            
+            # 3. Save quality-aligned efficiency rankings
+            rankings = pareto_analysis.get('efficiency_rankings', {})
+            if rankings:
+                rankings_data = []
+                for quality_level, ranked_pipelines in rankings.items():
+                    for rank, (pipeline_id, metrics) in enumerate(ranked_pipelines, 1):
+                        rankings_data.append({
+                            'quality_level': quality_level,
+                            'rank': rank,
+                            'pipeline_id': pipeline_id,
+                            'best_size_kb': metrics['best_size_kb'],
+                            'samples_at_quality': metrics['samples_at_quality']
+                        })
+                
+                if rankings_data:
+                    rankings_df = pd.DataFrame(rankings_data)
+                    rankings_path = self.output_dir / "quality_aligned_rankings.csv"
+                    rankings_df.to_csv(rankings_path, index=False)
+                    self.logger.info(f"Saved quality-aligned rankings to: {rankings_path}")
+            
+            # 4. Save dominated pipelines list
+            dominated = elimination_result.pareto_dominated_pipelines
+            if dominated:
+                dominated_df = pd.DataFrame(list(dominated), columns=['pipeline_id'])
+                dominated_df['elimination_reason'] = 'Pareto dominated'
+                dominated_path = self.output_dir / "pareto_dominated_pipelines.csv"
+                dominated_df.to_csv(dominated_path, index=False)
+                self.logger.info(f"Saved dominated pipelines to: {dominated_path}")
+            
+            # 5. Save comprehensive analysis summary
+            summary_data = {
+                'analysis_timestamp': datetime.now().isoformat(),
+                'total_frontier_points': len(frontier_points),
+                'total_dominated_pipelines': len(dominated),
+                'content_types_analyzed': list(content_frontiers.keys()),
+                'quality_levels_analyzed': list(rankings.keys()) if rankings else [],
+                'trade_off_insights': pareto_analysis.get('trade_off_insights', {})
+            }
+            
+            summary_path = self.output_dir / "pareto_analysis_summary.json"
+            with open(summary_path, 'w') as f:
+                json.dump(summary_data, f, indent=2, default=str)
+            self.logger.info(f"Saved Pareto analysis summary to: {summary_path}")
+            
+            # 6. Generate human-readable report
+            self._generate_pareto_report(elimination_result)
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to save Pareto analysis results: {e}")
+    
+    def _generate_pareto_report(self, elimination_result: EliminationResult):
+        """Generate a human-readable Pareto analysis report."""
+        try:
+            pareto_analysis = elimination_result.pareto_analysis
+            report_lines = []
+            
+            report_lines.append("# 🎯 Pareto Frontier Analysis Report")
+            report_lines.append("")
+            report_lines.append(f"**Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            report_lines.append("")
+            
+            # Executive Summary
+            global_frontier = pareto_analysis.get('global_frontier', {})
+            frontier_count = len(global_frontier.get('frontier_points', []))
+            dominated_count = len(elimination_result.pareto_dominated_pipelines)
+            
+            report_lines.append("## Executive Summary")
+            report_lines.append("")
+            report_lines.append(f"- **Optimal Pipelines (Pareto Frontier):** {frontier_count}")
+            report_lines.append(f"- **Dominated Pipelines (Eliminatable):** {dominated_count}")
+            report_lines.append(f"- **Efficiency Gain:** {dominated_count / (frontier_count + dominated_count) * 100:.1f}% pipeline reduction")
+            report_lines.append("")
+            
+            # Quality-Aligned Winners
+            rankings = pareto_analysis.get('efficiency_rankings', {})
+            if rankings:
+                report_lines.append("## 🏆 Quality-Aligned Winners")
+                report_lines.append("")
+                report_lines.append("| Quality Level | Winner Pipeline | File Size (KB) | Samples |")
+                report_lines.append("|---------------|-----------------|----------------|---------|")
+                
+                for quality_level in sorted(rankings.keys()):
+                    ranked_list = rankings[quality_level]
+                    if ranked_list:
+                        winner_id, winner_metrics = ranked_list[0]
+                        size_kb = winner_metrics['best_size_kb']
+                        samples = winner_metrics['samples_at_quality']
+                        quality_num = quality_level.replace('quality_', '')
+                        report_lines.append(f"| {quality_num} | `{winner_id}` | {size_kb:.1f} | {samples} |")
+                
+                report_lines.append("")
+            
+            # Content-Type Analysis
+            content_frontiers = pareto_analysis.get('content_type_frontiers', {})
+            if content_frontiers:
+                report_lines.append("## 📊 Content-Type Analysis")
+                report_lines.append("")
+                
+                for content_type, frontier_data in content_frontiers.items():
+                    frontier_points = frontier_data.get('frontier_points', [])
+                    dominated = frontier_data.get('dominated_pipelines', [])
+                    
+                    report_lines.append(f"### {content_type.title()} Content")
+                    report_lines.append(f"- **Optimal pipelines:** {len(frontier_points)}")
+                    report_lines.append(f"- **Dominated pipelines:** {len(dominated)}")
+                    
+                    if frontier_points:
+                        report_lines.append("- **Pareto optimal pipelines:**")
+                        for point in frontier_points[:5]:  # Top 5
+                            pipeline = point['pipeline_id']
+                            quality = point['quality']
+                            size = point['file_size_kb']
+                            efficiency = point['efficiency_score']
+                            report_lines.append(f"  - `{pipeline}`: {quality:.3f} quality, {size:.1f}KB, {efficiency:.5f} efficiency")
+                    report_lines.append("")
+            
+            # Trade-off Insights
+            insights = pareto_analysis.get('trade_off_insights', {})
+            if insights:
+                report_lines.append("## 💡 Trade-off Insights")
+                report_lines.append("")
+                
+                # Efficiency leaders
+                efficiency_leaders = insights.get('efficiency_leaders', [])
+                if efficiency_leaders:
+                    report_lines.append("### Top Efficiency Leaders")
+                    report_lines.append("| Pipeline | Quality | Size (KB) | Efficiency |")
+                    report_lines.append("|----------|---------|-----------|------------|")
+                    
+                    for leader in efficiency_leaders[:10]:
+                        pipeline = leader['pipeline_id']
+                        quality = leader['composite_quality']
+                        size = leader['file_size_kb']
+                        efficiency = leader['efficiency_ratio']
+                        report_lines.append(f"| `{pipeline}` | {quality:.3f} | {size:.1f} | {efficiency:.5f} |")
+                    report_lines.append("")
+                
+                # Sweet spot analysis
+                sweet_spots = insights.get('sweet_spot_pipelines', {})
+                if sweet_spots:
+                    report_lines.append("### Sweet Spot Analysis (High Quality + Low Size)")
+                    total_sweet_spot = sum(sweet_spots.values())
+                    for pipeline, count in sorted(sweet_spots.items(), key=lambda x: x[1], reverse=True)[:5]:
+                        percentage = (count / total_sweet_spot) * 100
+                        report_lines.append(f"- **{pipeline}**: {count} results ({percentage:.1f}%)")
+                    report_lines.append("")
+            
+            # Methodology
+            report_lines.append("## 📋 Methodology")
+            report_lines.append("")
+            report_lines.append("**Pareto Optimality Criteria:**")
+            report_lines.append("- A pipeline is Pareto optimal if no other pipeline achieves both higher quality AND smaller file size")
+            report_lines.append("- Quality metric: Composite quality score (weighted combination of SSIM, MS-SSIM, PSNR, temporal consistency)")
+            report_lines.append("- Size metric: File size in kilobytes")
+            report_lines.append("")
+            report_lines.append("**Quality-Aligned Rankings:**")
+            report_lines.append("- Compare pipelines at specific quality levels (0.70, 0.75, 0.80, 0.85, 0.90, 0.95)")
+            report_lines.append("- Winner = smallest file size among pipelines achieving target quality")
+            report_lines.append("")
+            
+            # Save report
+            report_path = self.output_dir / "pareto_analysis_report.md"
+            with open(report_path, 'w') as f:
+                f.write('\n'.join(report_lines))
+            
+            self.logger.info(f"Generated Pareto analysis report: {report_path}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to generate Pareto report: {e}")

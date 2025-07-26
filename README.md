@@ -242,6 +242,77 @@ In addition to SSIM-based measures, GifLab now computes **eight complementary fr
 
 All metrics are exposed via `giflab.metrics.calculate_comprehensive_metrics` and exported to CSV with mean/std/min/max descriptors (plus optional raw values).
 
+## 🎯 Pareto Frontier Analysis
+
+GifLab uses **Pareto frontier analysis** to solve the fundamental challenge of comparing compression pipelines fairly when quality scores don't align. This mathematical approach identifies the optimal trade-offs between quality and file size without requiring subjective weightings.
+
+### The Problem: Comparing Unlike Pipelines
+
+Traditional pipeline comparison fails when pipelines achieve different quality levels:
+- **Pipeline A**: 0.85 quality, 200KB  
+- **Pipeline B**: 0.90 quality, 180KB
+- **Pipeline C**: 0.88 quality, 250KB
+
+*Which is better?* Simple rankings can't answer this fairly.
+
+### The Solution: Mathematical Optimality
+
+**Pareto frontier analysis** identifies pipelines that are **mathematically optimal** - where you cannot improve one metric (quality) without worsening another (file size).
+
+#### Pareto Optimal Examples:
+- **Pipeline B**: 0.90 quality, 180KB → **Optimal** (dominates A in both metrics)
+- **Pipeline A**: 0.85 quality, 200KB → **Optimal** (best quality for larger sizes)  
+- **Pipeline C**: 0.88 quality, 250KB → **Dominated** (B is better in both quality AND size)
+
+### Pipeline Elimination Benefits
+
+1. **Eliminates Subjectivity**: No need to choose quality-vs-size weights
+2. **Mathematically Rigorous**: Clear, defensible elimination decisions  
+3. **Content-Type Aware**: Different frontiers for different GIF types
+4. **Multi-Metric Support**: Works with SSIM, MS-SSIM, composite quality scores
+
+### Elimination Commands
+
+```bash
+# Run elimination tests with Pareto analysis
+poetry run python -m giflab eliminate --strategy pareto
+
+# View Pareto frontiers by content type  
+poetry run python -m giflab view-pareto elimination_results/
+
+# Compare pipelines at specific quality targets
+poetry run python -m giflab compare-quality --target 0.85 elimination_results.csv
+```
+
+### Interpretation Guide
+
+**Pareto Frontier Points:**
+- **Leftmost point**: "Best quality achievable (any file size)"
+- **Rightmost point**: "Best compression achievable (acceptable quality)"  
+- **Middle points**: "Optimal quality-size balance points"
+
+**Dominated Pipelines:** 
+- These are **never optimal** - always a better choice available
+- Safe to eliminate from production considerations
+- Identified automatically by elimination tests
+
+### Quality-Aligned Efficiency Rankings
+
+For specific quality targets, Pareto analysis provides definitive rankings:
+
+```python
+# At quality 0.85, which pipeline wins?
+quality_85_winners = [
+    ('animately_lossy40_128colors', 145KB),  # Winner
+    ('gifsicle_O2_256colors', 167KB),        # Second  
+    ('ffmpeg_floyd_steinberg', 189KB)        # Third
+]
+```
+
+This answers your key question: **"Which pipeline provides better file size for the same quality?"**
+
+📖 **For technical details, see:** [Pipeline Elimination Guide](docs/guides/elimination-results-tracking.md)
+
 ## Quick Start
 
 ```bash
