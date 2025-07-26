@@ -636,7 +636,7 @@ def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
     "-o",
     type=click.Path(path_type=Path),
     default=Path("elimination_results"),
-    help="Output directory for elimination results (default: elimination_results)",
+    help="Base directory for timestamped elimination results (default: elimination_results)",
 )
 @click.option(
     "--threshold",
@@ -682,6 +682,16 @@ def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
     is_flag=True,
     help="Enable GPU acceleration for quality metrics calculation (requires OpenCV with CUDA)",
 )
+@click.option(
+    "--no-cache",
+    is_flag=True,
+    help="Disable cache and force re-running all pipeline tests (slower but fresh results)",
+)
+@click.option(
+    "--clear-cache",
+    is_flag=True,
+    help="Clear the pipeline results cache before running (forces fresh start)",
+)
 def eliminate_pipelines(
     output_dir: Path,
     threshold: float,
@@ -692,64 +702,23 @@ def eliminate_pipelines(
     max_pipelines: int,
     sampling_strategy: str,
     use_gpu: bool,
+    no_cache: bool,
+    clear_cache: bool,
 ):
-    """🔬 Systematically eliminate underperforming pipeline combinations.
+    """
+    Eliminate underperforming pipeline combinations through competitive testing.
     
-    This command creates 25 synthetic test GIFs (expanded from 10) and runs 
-    competitive elimination analysis using COMPREHENSIVE QUALITY METRICS to 
-    identify pipeline combinations that never outperform others.
+    Results are saved in timestamped directories (run_YYYYMMDD_HHMMSS) to preserve
+    historical data. A master CSV file tracks all runs for trend analysis.
+    Use the 'latest' symlink to access the most recent results.
     
-    QUALITY METRICS USED (elaborate system from the repo):
-    • Traditional: SSIM, MS-SSIM, PSNR, temporal consistency  
-    • Extended: MSE, RMSE, FSIM, GMSD, color histogram correlation
-    • Perceptual: Edge similarity, texture similarity, sharpness similarity
-    • 🎯 COMPOSITE SCORE: Weighted combination (30% SSIM + 35% MS-SSIM + 25% PSNR + 10% temporal)
+    SMART CACHING: Results are cached in SQLite database to avoid re-running
+    identical pipeline tests. Cache is invalidated when code changes (git commit).
+    Use --no-cache to force fresh results or --clear-cache to reset.
     
-    INTELLIGENT SAMPLING STRATEGIES (reduce 935 → ~75-140 pipelines):
-    • 🧠 representative: Sample from each tool category (15% of pipelines, ~2.5 hours)
-    • 🧪 factorial: Statistical design of experiments (8% of pipelines, ~1.3 hours)  
-    • 📈 progressive: Multi-stage elimination with refinement (25% → 8%, ~2.8 hours)
-    • 🎯 targeted: Strategic expansion with high-value GIFs (12% pipelines, 17 GIFs, ~1.4 hours)
-    • ⚡ quick: Fast development testing (5% of pipelines, ~50 minutes)
-    
-    EXPANDED SYNTHETIC DATASET (25 GIFs):
-    • 📏 Size variations: 50x50 to 1000x1000 pixels (400x range)
-    • 🎬 Frame variations: 2 to 100 frames (50x range) 
-    • 🔄 New content: Mixed content, data visualization, transitions
-    • ⚡ Edge cases: Single pixel changes, static content, high-freq details
-    
-    FEATURES:
-    • ⏱️  Time estimation and progress tracking
-    • 🔄 Resume capability for long-running experiments  
-    • 📊 Comprehensive CSV output with all metrics
-    • 🎯 Multi-criteria elimination (quality + compression + efficiency)
-    • 🚀 GPU acceleration for quality metrics (Windows/CUDA)
-    
-    Examples:
-    
-        # Quick time estimate (no actual testing)
-        giflab eliminate-pipelines --estimate-time
-        
-        # Fast intelligent sampling (recommended)
-        giflab eliminate-pipelines --sampling-strategy representative --resume
-        
-        # Statistical design approach (most scientific)
-        giflab eliminate-pipelines --sampling-strategy factorial --resume
-        
-        # Strategic expansion with high-value GIFs (RECOMMENDED for expansion testing)
-        giflab eliminate-pipelines --sampling-strategy targeted --resume
-        
-        # Quick development test (~50 minutes)
-        giflab eliminate-pipelines --sampling-strategy quick
-        
-        # Validate research findings about redundant methods
-        giflab eliminate-pipelines --validate-research
-        
-        # Resume interrupted analysis
-        giflab eliminate-pipelines --resume -o previous_results/
-        
-        # GPU-accelerated analysis (Windows with CUDA GPU)
-        giflab eliminate-pipelines --sampling-strategy representative --use-gpu --resume
+    This systematically tests pipeline combinations on synthetic GIFs with diverse
+    characteristics and eliminates pipelines that consistently underperform based
+    on quality metrics like SSIM, compression ratio, and processing speed.
     """
     from giflab.external_engines.imagemagick_enhanced import (
         identify_redundant_methods,
@@ -760,7 +729,14 @@ def eliminate_pipelines(
         validate_sierra2_vs_floyd_steinberg
     )
 
-    eliminator = PipelineEliminator(output_dir, use_gpu=use_gpu)
+    # Create eliminator with cache settings
+    use_cache = not no_cache  # Invert the no_cache flag
+    eliminator = PipelineEliminator(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+    
+    # Clear cache if requested
+    if clear_cache and eliminator.cache:
+        click.echo("🗑️ Clearing pipeline results cache...")
+        eliminator.cache.clear_cache()
     
     # Get pipeline count for estimation
     from giflab.dynamic_pipeline import generate_all_pipelines
@@ -925,9 +901,26 @@ def eliminate_pipelines(
                     click.echo(f"      ... and {len(winners) - 5} more")
     
     # Show file outputs
-    click.echo(f"\n📄 Results saved to:")
+    click.echo(f"\n📄 Results saved to timestamped directory:")
+    click.echo(f"   📁 Run directory: {output_dir}")
     click.echo(f"   📊 CSV data: {output_dir}/elimination_test_results.csv")
-    click.echo(f"   📝 Summary: {output_dir}/elimination_summary.json") 
+    click.echo(f"   📊 Timestamped CSV: {output_dir}/elimination_test_results_*.csv")
+    click.echo(f"   📝 Summary: {output_dir}/elimination_summary.json")
+    click.echo(f"   📋 Run metadata: {output_dir}/run_metadata.json")
+    
+    # Show master history file info
+    master_history = output_dir.parent / "elimination_history_master.csv"
+    latest_link = output_dir.parent / "latest"
+    cache_db = output_dir.parent / "pipeline_results_cache.db"
+    
+    if master_history.exists():
+        click.echo(f"   📈 Master history: {master_history}")
+    if latest_link.exists():
+        click.echo(f"   🔗 Latest results: {latest_link}")
+    if cache_db.exists() and not no_cache:
+        cache_size_mb = cache_db.stat().st_size / (1024 * 1024)
+        click.echo(f"   💾 Cache database: {cache_db} ({cache_size_mb:.1f} MB)")
+        
     failed_pipelines_file = output_dir / "failed_pipelines.json"
     has_failed_pipelines = failed_pipelines_file.exists()
     if has_failed_pipelines:
@@ -945,13 +938,38 @@ def eliminate_pipelines(
     click.echo(f"   3. Run: giflab run data/raw --pipelines <retained_pipelines>")
     if has_failed_pipelines:
         click.echo(f"   4. Review failed pipelines: giflab view-failures {output_dir}")
+    
+    # Show historical data usage
+    click.echo(f"\n📊 Historical data usage:")
+    click.echo(f"   • Latest results: Access via {latest_link} symlink")
+    click.echo(f"   • All runs: Browse {output_dir.parent}/run_* directories")
+    if master_history.exists():
+        click.echo(f"   • Compare runs: Analyze {master_history.name}")
+        click.echo(f"   • Example: pandas.read_csv('{master_history}').groupby('run_id')")
+    
+    # Show cache usage info
+    if not no_cache:
+        click.echo(f"\n💾 Cache usage:")
+        click.echo(f"   • Future runs will be faster due to cached results")
+        click.echo(f"   • Use --no-cache to force fresh results")
+        click.echo(f"   • Use --clear-cache to reset cache database")
+        if cache_db.exists():
+            click.echo(f"   • Cache invalidates automatically on code changes")
+        
+        # Mention debug command for failures
+        if failed_pipelines_file.exists():
+            click.echo(f"\n🔍 Debugging failures:")
+            click.echo(f"   • Use 'giflab debug-failures' to analyze pipeline failures")
+            click.echo(f"   • Filter by error type: 'giflab debug-failures --error-type ffmpeg'")
+            click.echo(f"   • Get summary: 'giflab debug-failures --summary'")
+    
     if elimination_result.eliminated_pipelines:
         total_tested = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
         if total_tested > 0:
             potential_savings = len(elimination_result.eliminated_pipelines) / total_tested * 100
-            click.echo(f"   💡 Potential {potential_savings:.0f}% reduction in pipeline testing time!")
+            click.echo(f"\n💡 Potential {potential_savings:.0f}% reduction in pipeline testing time!")
         else:
-            click.echo("   💡 Potential time savings: Unable to calculate")
+            click.echo("\n💡 Potential time savings: Unable to calculate")
 
 
 @main.command()
@@ -1110,6 +1128,198 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
     
     click.echo(f"\n💡 To see more details, use --detailed flag")
     click.echo(f"💡 To filter by error type, use --error-type <type>")
+
+
+@main.command()
+@click.option(
+    "--cache-dir",
+    "-c",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    default=Path("elimination_results"),
+    help="Directory containing the cache database (default: elimination_results)",
+)
+@click.option(
+    "--error-type",
+    "-e",
+    type=str,
+    help="Filter by error type (e.g., ffmpeg, gifski, timeout, imagemagick)",
+)
+@click.option(
+    "--pipeline",
+    "-p", 
+    type=str,
+    help="Filter by specific pipeline ID",
+)
+@click.option(
+    "--recent-hours",
+    "-r",
+    type=int,
+    help="Only show failures from last N hours",
+)
+@click.option(
+    "--summary",
+    "-s",
+    is_flag=True,
+    help="Show summary statistics instead of detailed failures",
+)
+def debug_failures(
+    cache_dir: Path,
+    error_type: str,
+    pipeline: str,
+    recent_hours: int,
+    summary: bool,
+):
+    """
+    Debug pipeline failures using the cache database.
+    
+    This command queries the failure database to help troubleshoot and analyze
+    patterns in pipeline test failures. Much faster than parsing logs or CSV files.
+    
+    Examples:
+        # Show all recent failures
+        giflab debug-failures
+        
+        # Show only FFmpeg failures from last 24 hours
+        giflab debug-failures --error-type ffmpeg --recent-hours 24
+        
+        # Show failures for a specific pipeline
+        giflab debug-failures --pipeline "imagemagick_floyd_16colors"
+        
+        # Get summary statistics
+        giflab debug-failures --summary
+    """
+    from giflab.pipeline_elimination import PipelineResultsCache
+    import subprocess
+    
+    cache_db_path = cache_dir / "pipeline_results_cache.db"
+    
+    if not cache_db_path.exists():
+        click.echo(f"❌ Cache database not found: {cache_db_path}")
+        click.echo("   Run 'giflab eliminate-pipelines' first to create the cache.")
+        return
+    
+    # Get git commit for current context
+    try:
+        result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                              capture_output=True, text=True, check=True)
+        git_commit = result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        git_commit = "unknown"
+    
+    # Initialize cache for querying
+    cache = PipelineResultsCache(cache_db_path, git_commit)
+    
+    if summary:
+        # Show summary statistics
+        stats = cache.get_cache_stats()
+        
+        click.echo("🔍 Pipeline Failure Analysis Summary")
+        click.echo("=" * 40)
+        click.echo(f"📊 Database: {cache_db_path}")
+        click.echo(f"📅 Git commit: {git_commit[:8]}...")
+        click.echo(f"💾 Database size: {stats['database_size_mb']} MB")
+        click.echo("")
+        
+        click.echo(f"📈 Current Commit Statistics:")
+        click.echo(f"   ✅ Cached results: {stats['current_commit_results']}")
+        click.echo(f"   ❌ Total failures: {stats['total_failures']}")
+        
+        if stats['current_failures_by_type']:
+            click.echo(f"\n🚨 Failure breakdown by type:")
+            for error_type, count in sorted(stats['current_failures_by_type'].items(), 
+                                          key=lambda x: x[1], reverse=True):
+                click.echo(f"   {error_type:15} {count:3d} failures")
+        else:
+            click.echo("   🎉 No failures recorded for current commit!")
+        
+        # Historical data
+        if stats['results_by_commit']:
+            click.echo(f"\n📊 Historical commits in database:")
+            for commit, count in list(stats['results_by_commit'].items())[:5]:
+                commit_short = commit[:8] if commit != "unknown" else commit
+                click.echo(f"   {commit_short:10} {count:4d} results")
+    else:
+        # Show detailed failures
+        failures = cache.query_failures(
+            error_type=error_type,
+            pipeline_id=pipeline,
+            recent_hours=recent_hours
+        )
+        
+        if not failures:
+            click.echo("🎉 No failures found matching the criteria!")
+            if error_type or pipeline or recent_hours:
+                click.echo("   Try removing filters to see all failures.")
+            return
+        
+        click.echo(f"🔍 Found {len(failures)} pipeline failures")
+        
+        # Show filters applied
+        filters = []
+        if error_type:
+            filters.append(f"error_type={error_type}")
+        if pipeline:
+            filters.append(f"pipeline={pipeline}")
+        if recent_hours:
+            filters.append(f"recent_hours={recent_hours}")
+        
+        if filters:
+            click.echo(f"   Filters: {', '.join(filters)}")
+        
+        click.echo("=" * 80)
+        
+        # Group failures by error type for better display
+        from collections import defaultdict
+        failures_by_type = defaultdict(list)
+        for failure in failures:
+            failures_by_type[failure['error_type']].append(failure)
+        
+        for error_type, type_failures in failures_by_type.items():
+            click.echo(f"\n🚨 {error_type.upper()} failures ({len(type_failures)} total):")
+            click.echo("-" * 60)
+            
+            # Show up to 5 most recent failures of this type
+            for i, failure in enumerate(type_failures[:5]):
+                click.echo(f"\n   {i+1}. Pipeline: {failure['pipeline_id']}")
+                click.echo(f"      GIF: {failure['gif_name']} | Colors: {failure['test_colors']} | Lossy: {failure['test_lossy']}")
+                click.echo(f"      Time: {failure['created_at']}")
+                click.echo(f"      Error: {failure['error_message'][:100]}...")
+                
+                if failure['tools_used']:
+                    tools = ', '.join(failure['tools_used'][:3])
+                    click.echo(f"      Tools: {tools}")
+            
+            if len(type_failures) > 5:
+                click.echo(f"\n   ... and {len(type_failures) - 5} more {error_type} failures")
+        
+        # Show common patterns
+        click.echo(f"\n📊 Failure patterns:")
+        
+        # Most problematic pipelines
+        pipeline_counts = defaultdict(int)
+        gif_counts = defaultdict(int)
+        
+        for failure in failures:
+            pipeline_counts[failure['pipeline_id']] += 1
+            gif_counts[failure['gif_name']] += 1
+        
+        if pipeline_counts:
+            click.echo(f"   Most problematic pipelines:")
+            for pipeline_id, count in sorted(pipeline_counts.items(), 
+                                           key=lambda x: x[1], reverse=True)[:3]:
+                click.echo(f"     • {pipeline_id}: {count} failures")
+        
+        if gif_counts:
+            click.echo(f"   Most problematic GIFs:")
+            for gif_name, count in sorted(gif_counts.items(), 
+                                        key=lambda x: x[1], reverse=True)[:3]:
+                click.echo(f"     • {gif_name}: {count} failures")
+    
+    click.echo(f"\n💡 Next steps:")
+    click.echo(f"   • Use --error-type to focus on specific failure types")
+    click.echo(f"   • Use --pipeline to debug specific pipeline combinations")
+    click.echo(f"   • Check logs for detailed error tracebacks")
+    click.echo(f"   • Run with --no-cache to force fresh attempts on failing pipelines")
 
 
 if __name__ == "__main__":

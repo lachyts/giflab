@@ -131,4 +131,31 @@ def create_noise_gif(path, size=(100, 100), frames=5):
     images[0].save(path, save_all=True, append_images=images[1:])
 ```
 
+## Elimination Testing
+
+The elimination framework systematically tests pipeline combinations on synthetic GIFs and eliminates underperforming ones:
+
+```bash
+# Run intelligent sampling elimination
+giflab eliminate-pipelines --sampling-strategy representative
+
+# Quick development test
+giflab eliminate-pipelines --sampling-strategy quick
+
+# Resume interrupted runs
+giflab eliminate-pipelines --resume
+```
+
+**📊 Results Tracking**: As of the latest update, elimination results are now saved in timestamped directories with comprehensive historical tracking. See [Elimination Results Tracking](elimination-results-tracking.md) for details on working with historical data.
+
+Key elimination features:
+- **Smart caching**: SQLite-based result caching for 2-5x speed improvements
+- **Timestamped results**: Preserve all historical runs
+- **Master CSV tracking**: Trends across multiple runs  
+- **Latest symlink**: Easy access to most recent results
+- **GPU acceleration**: CUDA support for quality metrics
+- **Comprehensive metrics**: SSIM, MS-SSIM, PSNR, and 8+ additional quality measures
+- **Intelligent sampling**: Reduce testing time with strategic pipeline selection
+- **Cache management**: `--no-cache` and `--clear-cache` flags for control
+
 This approach keeps the repository clean while maintaining comprehensive test coverage. 

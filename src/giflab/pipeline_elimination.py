@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
+import sys
 import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple, Optional
 
 import pandas as pd
 from PIL import Image, ImageDraw
@@ -82,6 +84,411 @@ class ErrorTypes:
             return cls.TIMEOUT
         else:
             return cls.OTHER
+
+
+class PipelineResultsCache:
+    """SQLite-based cache for pipeline test results to avoid redundant testing."""
+    
+    def __init__(self, cache_db_path: Path, git_commit: Optional[str] = None):
+        """Initialize the results cache.
+        
+        Args:
+            cache_db_path: Path to SQLite database file
+            git_commit: Current git commit hash for cache invalidation
+        """
+        self.cache_db_path = cache_db_path
+        self.git_commit = git_commit or "unknown"
+        self.logger = logging.getLogger(__name__)
+        self._pending_results = []  # Batch storage
+        self._pending_failures = []  # Batch failure storage
+        self._init_database()
+        
+    def _init_database(self):
+        """Initialize the SQLite database schema."""
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                # Results table (successful tests)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS pipeline_results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        cache_key TEXT UNIQUE NOT NULL,
+                        pipeline_id TEXT NOT NULL,
+                        gif_name TEXT NOT NULL,
+                        test_colors INTEGER NOT NULL,
+                        test_lossy INTEGER NOT NULL,
+                        test_frame_ratio REAL NOT NULL,
+                        git_commit TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        result_json TEXT NOT NULL
+                    )
+                """)
+                
+                # Failures table (for debugging and analysis)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS pipeline_failures (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pipeline_id TEXT NOT NULL,
+                        gif_name TEXT NOT NULL,
+                        test_colors INTEGER NOT NULL,
+                        test_lossy INTEGER NOT NULL,
+                        test_frame_ratio REAL NOT NULL,
+                        git_commit TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        error_type TEXT NOT NULL,
+                        error_message TEXT NOT NULL,
+                        error_traceback TEXT,
+                        pipeline_steps TEXT,
+                        tools_used TEXT
+                    )
+                """)
+                
+                # Create indexes for faster lookups
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_cache_lookup 
+                    ON pipeline_results(pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio)
+                """)
+                
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_failure_lookup 
+                    ON pipeline_failures(pipeline_id, error_type, created_at)
+                """)
+                
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_failure_analysis 
+                    ON pipeline_failures(error_type, git_commit, created_at)
+                """)
+                
+                conn.commit()
+                self.logger.debug(f"📁 Initialized cache database: {self.cache_db_path}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize cache database: {e}")
+    
+    def _generate_cache_key(self, pipeline_id: str, gif_name: str, params: dict) -> str:
+        """Generate a unique cache key for a pipeline test combination."""
+        import hashlib
+        
+        # Create a deterministic key from all parameters
+        key_data = f"{pipeline_id}|{gif_name}|{params['colors']}|{params['lossy']}|{params.get('frame_ratio', 1.0)}|{self.git_commit}"
+        return hashlib.sha256(key_data.encode()).hexdigest()
+    
+    def get_cached_result(self, pipeline_id: str, gif_name: str, params: dict) -> Optional[dict]:
+        """Retrieve cached result if it exists and is valid.
+        
+        Args:
+            pipeline_id: Pipeline identifier
+            gif_name: Test GIF name
+            params: Test parameters dict
+            
+        Returns:
+            Cached result dict or None if not found/invalid
+        """
+        cache_key = self._generate_cache_key(pipeline_id, gif_name, params)
+        
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT result_json, git_commit, created_at 
+                    FROM pipeline_results 
+                    WHERE cache_key = ?
+                """, (cache_key,))
+                
+                row = cursor.fetchone()
+                if row:
+                    result_json, cached_git_commit, created_at = row
+                    
+                    # Check if cache is still valid (same git commit)
+                    if cached_git_commit == self.git_commit:
+                        self.logger.debug(f"💾 Cache hit for {pipeline_id} on {gif_name}")
+                        return json.loads(result_json)
+                    else:
+                        self.logger.debug(f"💾 Cache invalidated for {pipeline_id} on {gif_name} (git commit changed)")
+                        # Could optionally delete invalidated entries here
+                        return None
+                else:
+                    self.logger.debug(f"💾 Cache miss for {pipeline_id} on {gif_name}")
+                    return None
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to retrieve cached result: {e}")
+            return None
+    
+    def queue_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
+        """Queue a successful pipeline test result for batch storage.
+        
+        Args:
+            pipeline_id: Pipeline identifier
+            gif_name: Test GIF name  
+            params: Test parameters dict
+            result: Test result dict to cache
+        """
+        cache_key = self._generate_cache_key(pipeline_id, gif_name, params)
+        
+        self._pending_results.append({
+            'cache_key': cache_key,
+            'pipeline_id': pipeline_id,
+            'gif_name': gif_name,
+            'test_colors': params['colors'],
+            'test_lossy': params['lossy'],
+            'test_frame_ratio': params.get('frame_ratio', 1.0),
+            'git_commit': self.git_commit,
+            'created_at': datetime.now().isoformat(),
+            'result_json': json.dumps(result)
+        })
+        
+        self.logger.debug(f"💾 Queued result for {pipeline_id} on {gif_name} (batch size: {len(self._pending_results)})")
+    
+    def queue_failure(self, pipeline_id: str, gif_name: str, params: dict, error_info: dict):
+        """Queue a pipeline failure for batch storage and analysis.
+        
+        Args:
+            pipeline_id: Pipeline identifier
+            gif_name: Test GIF name
+            params: Test parameters dict
+            error_info: Error information dict with keys: error, error_traceback, pipeline_steps, tools_used
+        """
+        error_type = ErrorTypes.categorize_error(error_info.get('error', ''))
+        
+        self._pending_failures.append({
+            'pipeline_id': pipeline_id,
+            'gif_name': gif_name,
+            'test_colors': params['colors'],
+            'test_lossy': params['lossy'],
+            'test_frame_ratio': params.get('frame_ratio', 1.0),
+            'git_commit': self.git_commit,
+            'created_at': datetime.now().isoformat(),
+            'error_type': error_type,
+            'error_message': error_info.get('error', 'Unknown error'),
+            'error_traceback': error_info.get('error_traceback', ''),
+            'pipeline_steps': json.dumps(error_info.get('pipeline_steps', [])),
+            'tools_used': json.dumps(error_info.get('tools_used', []))
+        })
+        
+        self.logger.debug(f"💾 Queued failure for {pipeline_id} on {gif_name} (batch size: {len(self._pending_failures)})")
+    
+    def flush_batch(self, force: bool = False):
+        """Flush pending results and failures to database.
+        
+        Args:
+            force: If True, flush regardless of batch size
+        """
+        batch_size = 10  # Configurable batch size
+        
+        # Flush results if batch is ready or forced
+        if force or len(self._pending_results) >= batch_size:
+            self._flush_results_batch()
+            
+        # Flush failures if batch is ready or forced
+        if force or len(self._pending_failures) >= batch_size:
+            self._flush_failures_batch()
+    
+    def _flush_results_batch(self):
+        """Flush pending successful results to database."""
+        if not self._pending_results:
+            return
+            
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                conn.executemany("""
+                    INSERT OR REPLACE INTO pipeline_results 
+                    (cache_key, pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio, 
+                     git_commit, created_at, result_json)
+                    VALUES (:cache_key, :pipeline_id, :gif_name, :test_colors, :test_lossy, 
+                            :test_frame_ratio, :git_commit, :created_at, :result_json)
+                """, self._pending_results)
+                
+                conn.commit()
+                count = len(self._pending_results)
+                self.logger.debug(f"💾 Flushed {count} cached results to database")
+                self._pending_results.clear()
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to flush results batch: {e}")
+    
+    def _flush_failures_batch(self):
+        """Flush pending failures to database."""
+        if not self._pending_failures:
+            return
+            
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                conn.executemany("""
+                    INSERT INTO pipeline_failures 
+                    (pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio, 
+                     git_commit, created_at, error_type, error_message, error_traceback,
+                     pipeline_steps, tools_used)
+                    VALUES (:pipeline_id, :gif_name, :test_colors, :test_lossy, :test_frame_ratio,
+                            :git_commit, :created_at, :error_type, :error_message, :error_traceback,
+                            :pipeline_steps, :tools_used)
+                """, self._pending_failures)
+                
+                conn.commit()
+                count = len(self._pending_failures)
+                self.logger.info(f"🔍 Stored {count} failures for debugging analysis")
+                self._pending_failures.clear()
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to flush failures batch: {e}")
+    
+    def store_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
+        """Store a pipeline test result (legacy method - now uses batching).
+        
+        Args:
+            pipeline_id: Pipeline identifier
+            gif_name: Test GIF name  
+            params: Test parameters dict
+            result: Test result dict to cache
+        """
+        self.queue_result(pipeline_id, gif_name, params, result)
+        self.flush_batch()  # Auto-flush when batch is ready
+    
+    def clear_cache(self):
+        """Clear all cached results and failures."""
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_results")
+                results_count = cursor.fetchone()[0]
+                
+                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_failures")
+                failures_count = cursor.fetchone()[0]
+                
+                conn.execute("DELETE FROM pipeline_results")
+                conn.execute("DELETE FROM pipeline_failures")
+                conn.commit()
+                
+                self.logger.info(f"🗑️ Cleared {results_count} cached results and {failures_count} stored failures")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to clear cache: {e}")
+    
+    def get_cache_stats(self) -> dict:
+        """Get statistics about the current cache."""
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                # Results statistics
+                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_results")
+                total_results = cursor.fetchone()[0]
+                
+                cursor = conn.execute("""
+                    SELECT git_commit, COUNT(*) 
+                    FROM pipeline_results 
+                    GROUP BY git_commit 
+                    ORDER BY COUNT(*) DESC
+                """)
+                results_by_commit = dict(cursor.fetchall())
+                
+                cursor = conn.execute("""
+                    SELECT COUNT(*) FROM pipeline_results 
+                    WHERE git_commit = ?
+                """, (self.git_commit,))
+                current_commit_results = cursor.fetchone()[0]
+                
+                # Failures statistics
+                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_failures")
+                total_failures = cursor.fetchone()[0]
+                
+                cursor = conn.execute("""
+                    SELECT error_type, COUNT(*) 
+                    FROM pipeline_failures 
+                    WHERE git_commit = ?
+                    GROUP BY error_type 
+                    ORDER BY COUNT(*) DESC
+                """, (self.git_commit,))
+                current_failures_by_type = dict(cursor.fetchall())
+                
+                # Database file size
+                db_size_bytes = self.cache_db_path.stat().st_size if self.cache_db_path.exists() else 0
+                db_size_mb = db_size_bytes / (1024 * 1024)
+                
+                return {
+                    'total_results': total_results,
+                    'current_commit_results': current_commit_results,
+                    'results_by_commit': results_by_commit,
+                    'total_failures': total_failures,
+                    'current_failures_by_type': current_failures_by_type,
+                    'database_size_mb': round(db_size_mb, 2),
+                    'current_git_commit': self.git_commit,
+                    'pending_batch_size': len(self._pending_results),
+                    'pending_failures_size': len(self._pending_failures)
+                }
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to get cache stats: {e}")
+            return {
+                'total_results': 0,
+                'current_commit_results': 0,
+                'results_by_commit': {},
+                'total_failures': 0,
+                'current_failures_by_type': {},
+                'database_size_mb': 0,
+                'current_git_commit': self.git_commit,
+                'pending_batch_size': 0,
+                'pending_failures_size': 0
+            }
+    
+    def query_failures(self, error_type: Optional[str] = None, pipeline_id: Optional[str] = None, 
+                      recent_hours: Optional[int] = None) -> List[dict]:
+        """Query failures for debugging analysis.
+        
+        Args:
+            error_type: Filter by specific error type (e.g., 'ffmpeg', 'timeout')
+            pipeline_id: Filter by specific pipeline
+            recent_hours: Only show failures from last N hours
+            
+        Returns:
+            List of failure records
+        """
+        try:
+            with sqlite3.connect(self.cache_db_path) as conn:
+                # Build dynamic query
+                where_conditions = ["git_commit = ?"]
+                params = [self.git_commit]
+                
+                if error_type:
+                    where_conditions.append("error_type = ?")
+                    params.append(error_type)
+                    
+                if pipeline_id:
+                    where_conditions.append("pipeline_id = ?")
+                    params.append(pipeline_id)
+                    
+                if recent_hours:
+                    from datetime import datetime, timedelta
+                    cutoff_time = (datetime.now() - timedelta(hours=recent_hours)).isoformat()
+                    where_conditions.append("created_at >= ?")
+                    params.append(cutoff_time)
+                
+                where_clause = " AND ".join(where_conditions)
+                
+                cursor = conn.execute(f"""
+                    SELECT pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
+                           error_type, error_message, error_traceback, created_at,
+                           pipeline_steps, tools_used
+                    FROM pipeline_failures 
+                    WHERE {where_clause}
+                    ORDER BY created_at DESC
+                """, params)
+                
+                columns = [desc[0] for desc in cursor.description]
+                failures = []
+                
+                for row in cursor.fetchall():
+                    failure = dict(zip(columns, row))
+                    # Parse JSON fields
+                    try:
+                        failure['pipeline_steps'] = json.loads(failure['pipeline_steps'])
+                        failure['tools_used'] = json.loads(failure['tools_used'])
+                    except (json.JSONDecodeError, TypeError):
+                        failure['pipeline_steps'] = []
+                        failure['tools_used'] = []
+                    
+                    failures.append(failure)
+                
+                return failures
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to query failures: {e}")
+            return []
 
 
 @dataclass
@@ -158,15 +565,52 @@ class PipelineEliminator:
         ),
     }
     
-    def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False):
-        self.output_dir = output_dir
-        self.output_dir.mkdir(exist_ok=True)
+    def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False, use_cache: bool = True):
+        self.base_output_dir = output_dir
         self.use_gpu = use_gpu
+        self.use_cache = use_cache
         self.logger = logging.getLogger(__name__)
+        
+        # Create timestamped output directory for this run
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_dir = self.base_output_dir / f"run_{timestamp}"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Also create a "latest" symlink for easy access to most recent results
+        latest_link = self.base_output_dir / "latest"
+        try:
+            if latest_link.exists() or latest_link.is_symlink():
+                latest_link.unlink()
+            # Create relative symlink to work better across systems
+            relative_target = f"run_{timestamp}"
+            latest_link.symlink_to(relative_target)
+            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
+            self.logger.info(f"🔗 Latest results symlink: {latest_link}")
+        except (OSError, NotImplementedError) as e:
+            # Symlinks not supported on this system (e.g., Windows without admin rights)
+            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
+            self.logger.warning(f"Could not create 'latest' symlink: {e}")
+        
+        # Initialize cache system
+        if self.use_cache:
+            cache_db_path = self.base_output_dir / "pipeline_results_cache.db"
+            git_commit = self._get_git_commit()
+            self.cache = PipelineResultsCache(cache_db_path, git_commit)
+            
+            # Log cache statistics
+            cache_stats = self.cache.get_cache_stats()
+            self.logger.info(f"💾 Cache initialized: {cache_stats['current_commit_results']} entries for current commit")
+            self.logger.info(f"💾 Total cache entries: {cache_stats['total_results']} ({cache_stats['database_size_mb']} MB)")
+        else:
+            self.cache = None
+            self.logger.info("💾 Cache disabled")
         
         # Test GPU availability on initialization
         if self.use_gpu:
             self._test_gpu_availability()
+        
+        # Log elimination run metadata
+        self._log_run_metadata()
         
         # Define synthetic test cases based on research findings
         self.synthetic_specs = [
@@ -1164,6 +1608,9 @@ class PipelineEliminator:
         failed_jobs = 0
         
         # Test each combination
+        cache_hits = 0
+        cache_misses = 0
+        
         for gif_path in gif_paths:
             content_type = self._get_content_type(gif_path.stem)
             
@@ -1177,11 +1624,33 @@ class PipelineEliminator:
                         results.append(completed_jobs[job_id])
                         continue
                     
+                    # Check cache first (if enabled)
+                    cached_result = None
+                    if self.cache:
+                        cached_result = self.cache.get_cached_result(
+                            pipeline.identifier(), gif_path.stem, params
+                        )
+                        if cached_result:
+                            cache_hits += 1
+                            # Update progress tracking
+                            completed_jobs[job_id] = cached_result
+                            results.append(cached_result)
+                            progress.update(1)
+                            continue
+                        else:
+                            cache_misses += 1
+                    
                     try:
                         # Execute pipeline and measure comprehensive metrics
                         result = self._execute_pipeline_with_metrics(
                             gif_path, pipeline, params, content_type
                         )
+                        
+                        # Queue successful result for batch caching
+                        if self.cache and result.get('success', False):
+                            self.cache.queue_result(
+                                pipeline.identifier(), gif_path.stem, params, result
+                            )
                         
                         # Save progress immediately
                         completed_jobs[job_id] = result
@@ -1204,8 +1673,8 @@ class PipelineEliminator:
                             'success': False,
                             'pipeline_steps': [step.name for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
                             'tools_used': pipeline.tools_used() if hasattr(pipeline, 'tools_used') else [],
-                            'test_colors': params.get('color_count', None),
-                            'test_lossy': params.get('lossy_level', None),
+                            'test_colors': params.get('colors', None),
+                            'test_lossy': params.get('lossy', None),
                             'test_frame_ratio': params.get('frame_ratio', None),
                             # Add placeholders for metrics that would be in successful results
                             'file_size_kb': None,
@@ -1230,16 +1699,49 @@ class PipelineEliminator:
                             'render_time_ms': None,
                             'total_processing_time_ms': None
                         }
+                        
+                        # Queue failure for debugging analysis (in addition to CSV/logs)
+                        if self.cache:
+                            self.cache.queue_failure(
+                                pipeline.identifier(), gif_path.stem, params, {
+                                    'error': str(e),
+                                    'error_traceback': traceback.format_exc(),
+                                    'pipeline_steps': [step.name for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
+                                    'tools_used': pipeline.tools_used() if hasattr(pipeline, 'tools_used') else []
+                                }
+                            )
+                        
                         completed_jobs[job_id] = failed_result
                         results.append(failed_result)
                     
                     progress.update(1)
                     
-                    # Save checkpoint every 50 jobs
+                    # Save checkpoint and flush cache every 50 jobs
                     if len(results) % 50 == 0:
                         self._save_intermediate_results(results)
+                        if self.cache:
+                            self.cache.flush_batch(force=True)  # Flush accumulated batches
         
         progress.close()
+        
+        # Final flush of all pending cache data
+        if self.cache:
+            self.cache.flush_batch(force=True)
+        
+        # Log cache performance statistics
+        if self.cache:
+            total_cache_operations = cache_hits + cache_misses
+            if total_cache_operations > 0:
+                cache_hit_rate = (cache_hits / total_cache_operations) * 100
+                self.logger.info(f"💾 Cache performance: {cache_hits} hits, {cache_misses} misses ({cache_hit_rate:.1f}% hit rate)")
+                
+                # Estimate time saved
+                estimated_time_per_test = 2.5  # seconds (conservative estimate)
+                time_saved_minutes = (cache_hits * estimated_time_per_test) / 60
+                if time_saved_minutes > 1:
+                    self.logger.info(f"⏱️ Estimated time saved by cache: {time_saved_minutes:.1f} minutes")
+            else:
+                self.logger.info("💾 Cache statistics: No cache operations performed")
         
         self.logger.info(f"Testing completed: {len(results)} jobs, {failed_jobs} failures")
         return pd.DataFrame(results)
@@ -2027,15 +2529,88 @@ class PipelineEliminator:
         return failed_results, successful_results
 
     def _save_csv_results(self, results_df: pd.DataFrame):
-        """Clean and save results to CSV file."""
+        """Clean and save results to CSV file with timestamped filename."""
         # Fix CSV output by properly escaping error messages
         results_df_clean = results_df.copy()
         if 'error' in results_df_clean.columns:
             # Replace newlines and quotes in error messages to prevent CSV corruption
             results_df_clean['error'] = results_df_clean['error'].apply(clean_error_message)
         
+        # Create timestamped filename for historical tracking
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamped_filename = f"elimination_test_results_{timestamp}.csv"
+        
+        # Save with both standard and timestamped names
+        standard_path = self.output_dir / "elimination_test_results.csv"
+        timestamped_path = self.output_dir / timestamped_filename
+        
         # Save detailed results (with cleaned error messages)
-        results_df_clean.to_csv(self.output_dir / "elimination_test_results.csv", index=False)
+        results_df_clean.to_csv(standard_path, index=False)
+        results_df_clean.to_csv(timestamped_path, index=False)
+        
+        self.logger.info(f"📊 CSV results saved to:")
+        self.logger.info(f"   Standard: {standard_path}")
+        self.logger.info(f"   Timestamped: {timestamped_path}")
+        
+        # Also save a master history file in the base directory
+        self._append_to_master_history(results_df_clean, timestamp)
+    
+    def _append_to_master_history(self, results_df: pd.DataFrame, timestamp: str):
+        """Append results to a master history file that accumulates all runs."""
+        master_history_path = self.base_output_dir / "elimination_history_master.csv"
+        
+        # Add run timestamp and identification to each record
+        results_with_run_info = results_df.copy()
+        results_with_run_info['run_timestamp'] = timestamp
+        results_with_run_info['run_id'] = f"run_{timestamp}"
+        
+        try:
+            # Check if master file exists
+            if master_history_path.exists():
+                # Append to existing file
+                results_with_run_info.to_csv(master_history_path, mode='a', header=False, index=False)
+                self.logger.info(f"📈 Results appended to master history: {master_history_path}")
+            else:
+                # Create new master file
+                results_with_run_info.to_csv(master_history_path, index=False)
+                self.logger.info(f"📈 Created new master history file: {master_history_path}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to update master history file: {e}")
+    
+    def _log_run_metadata(self):
+        """Log metadata about this elimination run for tracking purposes."""
+        run_metadata = {
+            'run_id': self.output_dir.name,
+            'start_time': datetime.now().isoformat(),
+            'output_directory': str(self.output_dir),
+            'base_directory': str(self.base_output_dir),
+            'gpu_enabled': self.use_gpu,
+            'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            'git_commit': self._get_git_commit() if Path('.git').exists() else None
+        }
+        
+        # Save metadata to file
+        metadata_file = self.output_dir / "run_metadata.json"
+        try:
+            with open(metadata_file, 'w') as f:
+                json.dump(run_metadata, f, indent=2)
+            self.logger.info(f"📋 Run metadata saved: {metadata_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to save run metadata: {e}")
+        
+        return run_metadata
+    
+    def _get_git_commit(self) -> str:
+        """Get current git commit hash if available."""
+        try:
+            import subprocess
+            result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                                 capture_output=True, text=True, check=True)
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
+    
     def _save_failed_pipelines_log(self, failed_results: pd.DataFrame):
         """Create and save detailed failed pipelines log."""
         failed_pipeline_log = []
@@ -2145,7 +2720,7 @@ class PipelineEliminator:
         failed_count = len(failed_results)
         failure_rate = (failed_count / total_pipelines) * 100
         
-        report_lines.append(f"📊 OVERVIEW")
+        report_lines.append("📊 OVERVIEW")
         report_lines.append(f"   Total pipelines tested: {total_pipelines}")
         report_lines.append(f"   Failed pipelines: {failed_count}")
         report_lines.append(f"   Failure rate: {failure_rate:.1f}%")
