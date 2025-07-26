@@ -1142,11 +1142,11 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
     "--error-type",
     "-e",
     type=str,
-    help="Filter by error type (e.g., ffmpeg, gifski, timeout, imagemagick)",
+    help="Filter by specific error type (e.g., 'gifski', 'ffmpeg', 'other')",
 )
 @click.option(
     "--pipeline",
-    "-p", 
+    "-p",
     type=str,
     help="Filter by specific pipeline ID",
 )
@@ -1162,84 +1162,96 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
     is_flag=True,
     help="Show summary statistics instead of detailed failures",
 )
+@click.option(
+    "--clear-fixed",
+    is_flag=True,
+    help="Clear failures that should be fixed by recent code changes",
+)
 def debug_failures(
     cache_dir: Path,
-    error_type: str,
-    pipeline: str,
-    recent_hours: int,
+    error_type: str | None,
+    pipeline: str | None,
+    recent_hours: int | None,
     summary: bool,
-):
-    """
-    Debug pipeline failures using the cache database.
+    clear_fixed: bool,
+) -> None:
+    """Debug pipeline elimination failures using the cached failure database.
     
-    This command queries the failure database to help troubleshoot and analyze
-    patterns in pipeline test failures. Much faster than parsing logs or CSV files.
+    This command helps analyze and fix pipeline failures by providing detailed
+    information about what's failing and why. Use the various filter options
+    to narrow down to specific issues.
     
     Examples:
-        # Show all recent failures
-        giflab debug-failures
-        
-        # Show only FFmpeg failures from last 24 hours
-        giflab debug-failures --error-type ffmpeg --recent-hours 24
-        
-        # Show failures for a specific pipeline
-        giflab debug-failures --pipeline "imagemagick_floyd_16colors"
-        
-        # Get summary statistics
+    \b
+        # Show summary of all failures
         giflab debug-failures --summary
+        
+        # Show detailed gifski failures
+        giflab debug-failures --error-type gifski
+        
+        # Show recent failures (last 24 hours)
+        giflab debug-failures --recent-hours 24
+        
+        # Clear failures that should be fixed
+        giflab debug-failures --clear-fixed
     """
-    from giflab.pipeline_elimination import PipelineResultsCache
-    import subprocess
-    
     cache_db_path = cache_dir / "pipeline_results_cache.db"
     
     if not cache_db_path.exists():
-        click.echo(f"❌ Cache database not found: {cache_db_path}")
-        click.echo("   Run 'giflab eliminate-pipelines' first to create the cache.")
+        click.echo(f"❌ Cache database not found at {cache_db_path}")
+        click.echo("   Run pipeline elimination to generate failure data")
         return
     
-    # Get git commit for current context
     try:
-        result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
-                              capture_output=True, text=True, check=True)
-        git_commit = result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        git_commit = "unknown"
-    
-    # Initialize cache for querying
-    cache = PipelineResultsCache(cache_db_path, git_commit)
-    
-    if summary:
-        # Show summary statistics
-        stats = cache.get_cache_stats()
+        from .pipeline_elimination import PipelineResultsCache, ErrorTypes
+        import git
         
-        click.echo("🔍 Pipeline Failure Analysis Summary")
-        click.echo("=" * 40)
-        click.echo(f"📊 Database: {cache_db_path}")
-        click.echo(f"📅 Git commit: {git_commit[:8]}...")
-        click.echo(f"💾 Database size: {stats['database_size_mb']} MB")
-        click.echo("")
+        # Get current git commit
+        try:
+            repo = git.Repo(".")
+            git_commit = repo.head.commit.hexsha[:8]
+        except Exception:
+            git_commit = "unknown"
         
-        click.echo(f"📈 Current Commit Statistics:")
-        click.echo(f"   ✅ Cached results: {stats['current_commit_results']}")
-        click.echo(f"   ❌ Total failures: {stats['total_failures']}")
+        # Initialize cache connection
+        cache = PipelineResultsCache(cache_db_path, git_commit)
         
-        if stats['current_failures_by_type']:
-            click.echo(f"\n🚨 Failure breakdown by type:")
-            for error_type, count in sorted(stats['current_failures_by_type'].items(), 
-                                          key=lambda x: x[1], reverse=True):
-                click.echo(f"   {error_type:15} {count:3d} failures")
-        else:
-            click.echo("   🎉 No failures recorded for current commit!")
+        if clear_fixed:
+            # Clear specific failure types that should be fixed by recent code changes
+            import sqlite3
+            
+            with sqlite3.connect(cache_db_path) as conn:
+                # Clear lossy level range errors (fixed by lossy_extended.py update)
+                cursor = conn.execute("""
+                    DELETE FROM pipeline_failures 
+                    WHERE error_message LIKE '%between 0 and 200%'
+                       OR error_message LIKE '%between 0 and 300%'
+                """)
+                lossy_cleared = cursor.rowcount
+                
+                # Clear frame size inconsistency errors (fixed by gifski.py update)
+                cursor = conn.execute("""
+                    DELETE FROM pipeline_failures 
+                    WHERE error_message LIKE '%wrong size%'
+                       OR error_message LIKE '%Frame % has wrong size%'
+                """)
+                frame_cleared = cursor.rowcount
+                
+                conn.commit()
+                
+                total_cleared = lossy_cleared + frame_cleared
+                click.echo(f"✅ Cleared {total_cleared} fixed failures:")
+                click.echo(f"   📊 Lossy level range errors: {lossy_cleared}")
+                click.echo(f"   📐 Frame size errors: {frame_cleared}")
+                
+                if total_cleared > 0:
+                    click.echo("   These failures should no longer occur with the recent fixes")
+                else:
+                    click.echo("   No fixed failures found to clear")
+                    
+                return
         
-        # Historical data
-        if stats['results_by_commit']:
-            click.echo(f"\n📊 Historical commits in database:")
-            for commit, count in list(stats['results_by_commit'].items())[:5]:
-                commit_short = commit[:8] if commit != "unknown" else commit
-                click.echo(f"   {commit_short:10} {count:4d} results")
-    else:
-        # Show detailed failures
+        # Query failures
         failures = cache.query_failures(
             error_type=error_type,
             pipeline_id=pipeline,
@@ -1247,79 +1259,68 @@ def debug_failures(
         )
         
         if not failures:
-            click.echo("🎉 No failures found matching the criteria!")
-            if error_type or pipeline or recent_hours:
-                click.echo("   Try removing filters to see all failures.")
+            click.echo("✅ No pipeline failures found with the specified criteria")
             return
         
-        click.echo(f"🔍 Found {len(failures)} pipeline failures")
-        
-        # Show filters applied
-        filters = []
-        if error_type:
-            filters.append(f"error_type={error_type}")
-        if pipeline:
-            filters.append(f"pipeline={pipeline}")
-        if recent_hours:
-            filters.append(f"recent_hours={recent_hours}")
-        
-        if filters:
-            click.echo(f"   Filters: {', '.join(filters)}")
-        
-        click.echo("=" * 80)
-        
-        # Group failures by error type for better display
-        from collections import defaultdict
-        failures_by_type = defaultdict(list)
-        for failure in failures:
-            failures_by_type[failure['error_type']].append(failure)
-        
-        for error_type, type_failures in failures_by_type.items():
-            click.echo(f"\n🚨 {error_type.upper()} failures ({len(type_failures)} total):")
-            click.echo("-" * 60)
+        if summary:
+            # Show summary statistics
+            from collections import Counter
             
-            # Show up to 5 most recent failures of this type
-            for i, failure in enumerate(type_failures[:5]):
-                click.echo(f"\n   {i+1}. Pipeline: {failure['pipeline_id']}")
-                click.echo(f"      GIF: {failure['gif_name']} | Colors: {failure['test_colors']} | Lossy: {failure['test_lossy']}")
-                click.echo(f"      Time: {failure['created_at']}")
-                click.echo(f"      Error: {failure['error_message'][:100]}...")
+            click.echo(f"🔍 Pipeline Failure Summary ({len(failures)} total failures)")
+            click.echo("=" * 60)
+            
+            # Error type breakdown
+            error_types = Counter(f['error_type'] for f in failures)
+            click.echo(f"\n📊 Failure Types:")
+            for error_type, count in error_types.most_common():
+                percentage = (count / len(failures)) * 100
+                click.echo(f"   {error_type}: {count} ({percentage:.1f}%)")
+            
+            # Most problematic pipelines
+            pipeline_failures = Counter(f['pipeline_id'] for f in failures)
+            click.echo(f"\n🔧 Most Problematic Pipelines:")
+            for pipeline_id, count in pipeline_failures.most_common(5):
+                click.echo(f"   {pipeline_id}: {count} failures")
+            
+            # Most problematic GIFs
+            gif_failures = Counter(f['gif_name'] for f in failures)
+            click.echo(f"\n🎬 Most Problematic GIFs:")
+            for gif_name, count in gif_failures.most_common(5):
+                click.echo(f"   {gif_name}: {count} failures")
+            
+            # Common error messages
+            error_messages = Counter(f['error_message'][:100] for f in failures)  # Truncate long messages
+            click.echo(f"\n⚠️  Most Common Error Messages:")
+            for error_msg, count in error_messages.most_common(3):
+                click.echo(f"   {error_msg}... : {count} occurrences")
+        
+        else:
+            # Show detailed failures
+            click.echo(f"🔍 Pipeline Failures ({len(failures)} found)")
+            click.echo("=" * 80)
+            
+            for i, failure in enumerate(failures[:20]):  # Limit to first 20 for readability
+                click.echo(f"\n[{i+1}] {failure['error_type'].upper()} | {failure['gif_name']} | {failure['pipeline_id']}")
+                click.echo(f"    Error: {failure['error_message']}")
+                click.echo(f"    Time: {failure['created_at']}")
+                click.echo(f"    Params: colors={failure['test_colors']}, lossy={failure['test_lossy']}, frames={failure['test_frame_ratio']}")
                 
                 if failure['tools_used']:
-                    tools = ', '.join(failure['tools_used'][:3])
-                    click.echo(f"      Tools: {tools}")
+                    try:
+                        import json
+                        tools = json.loads(failure['tools_used']) if isinstance(failure['tools_used'], str) else failure['tools_used']
+                        click.echo(f"    Tools: {' → '.join(tools)}")
+                    except:
+                        click.echo(f"    Tools: {failure['tools_used']}")
             
-            if len(type_failures) > 5:
-                click.echo(f"\n   ... and {len(type_failures) - 5} more {error_type} failures")
-        
-        # Show common patterns
-        click.echo(f"\n📊 Failure patterns:")
-        
-        # Most problematic pipelines
-        pipeline_counts = defaultdict(int)
-        gif_counts = defaultdict(int)
-        
-        for failure in failures:
-            pipeline_counts[failure['pipeline_id']] += 1
-            gif_counts[failure['gif_name']] += 1
-        
-        if pipeline_counts:
-            click.echo(f"   Most problematic pipelines:")
-            for pipeline_id, count in sorted(pipeline_counts.items(), 
-                                           key=lambda x: x[1], reverse=True)[:3]:
-                click.echo(f"     • {pipeline_id}: {count} failures")
-        
-        if gif_counts:
-            click.echo(f"   Most problematic GIFs:")
-            for gif_name, count in sorted(gif_counts.items(), 
-                                        key=lambda x: x[1], reverse=True)[:3]:
-                click.echo(f"     • {gif_name}: {count} failures")
+            if len(failures) > 20:
+                click.echo(f"\n... and {len(failures) - 20} more failures")
+                click.echo("Use --summary for an overview or add filters to narrow results")
     
-    click.echo(f"\n💡 Next steps:")
-    click.echo(f"   • Use --error-type to focus on specific failure types")
-    click.echo(f"   • Use --pipeline to debug specific pipeline combinations")
-    click.echo(f"   • Check logs for detailed error tracebacks")
-    click.echo(f"   • Run with --no-cache to force fresh attempts on failing pipelines")
+    except Exception as e:
+        click.echo(f"❌ Error analyzing failures: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

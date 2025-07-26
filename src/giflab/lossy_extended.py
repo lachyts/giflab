@@ -150,9 +150,9 @@ def compress_with_gifsicle_extended(
         RuntimeError: If gifsicle command fails
         ValueError: If parameters are invalid
     """
-    # Validate parameters
-    if lossy_level < 0 or lossy_level > 200:
-        raise ValueError(f"lossy_level must be between 0 and 200, got {lossy_level}")
+    # Validate parameters  
+    if lossy_level < 0 or lossy_level > 300:
+        raise ValueError(f"lossy_level must be between 0 and 300, got {lossy_level}")
 
     validate_frame_keep_ratio(frame_keep_ratio)
     # Allow *None* to preserve existing palette (no validation or color args)

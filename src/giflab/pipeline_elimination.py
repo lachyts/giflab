@@ -1917,6 +1917,43 @@ class PipelineEliminator:
                             cache_misses += 1
                     
                     try:
+                        # Validate pipeline doesn't contain invalid tools
+                        if any("external-tool" in str(step) for step in pipeline.steps):
+                            error_msg = f"Invalid pipeline contains 'external-tool' base class: {pipeline.identifier()}"
+                            self.logger.error(error_msg)
+                            self.cache.queue_failure(
+                                pipeline_id=pipeline.identifier(),
+                                gif_name=gif_path.name,
+                                test_colors=params.get("colors", 0),
+                                test_lossy=params.get("lossy_level", 0),
+                                test_frame_ratio=params.get("ratio", 1.0),
+                                error_type="validation",
+                                error_message=error_msg,
+                                error_traceback="",
+                                pipeline_steps=str([step.name() for step in pipeline.steps]),
+                                tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
+                            )
+                            return {"success": False, "error": error_msg}
+
+                        # Validate individual tool names
+                        for step in pipeline.steps:
+                            if step.tool_cls.NAME == "external-tool":
+                                error_msg = f"Invalid tool with external-tool NAME in step: {step.name()}"
+                                self.logger.error(error_msg)
+                                self.cache.queue_failure(
+                                    pipeline_id=pipeline.identifier(),
+                                    gif_name=gif_path.name,
+                                    test_colors=params.get("colors", 0),
+                                    test_lossy=params.get("lossy_level", 0),
+                                    test_frame_ratio=params.get("ratio", 1.0),
+                                    error_type="validation",
+                                    error_message=error_msg,
+                                    error_traceback="",
+                                    pipeline_steps=str([step.name() for step in pipeline.steps]),
+                                    tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
+                                )
+                                return {"success": False, "error": error_msg}
+
                         # Execute pipeline and measure comprehensive metrics
                         result = self._execute_pipeline_with_metrics(
                             gif_path, pipeline, params, content_type
@@ -2051,7 +2088,12 @@ class PipelineEliminator:
                 elif step.variable == "frame_reduction":
                     step_params["ratio"] = params.get("frame_ratio", 1.0)
                 elif step.variable == "lossy_compression":
-                    step_params["lossy_level"] = params["lossy"]
+                    # Map lossy percentage to engine-specific range
+                    engine_specific_lossy = self._map_lossy_percentage_to_engine(
+                        params["lossy"], 
+                        wrapper.__class__.__name__
+                    )
+                    step_params["lossy_level"] = engine_specific_lossy
                 
                 step_result = wrapper.apply(current_input, step_output, params=step_params)
                 pipeline_metadata.update(step_result)
@@ -2491,15 +2533,59 @@ class PipelineEliminator:
         
         return float(consistency)
     
+    def _map_lossy_percentage_to_engine(self, lossy_percentage: int, wrapper_class_name: str) -> int:
+        """Map lossy percentage (0-100) to engine-specific range.
+        
+        Engine ranges:
+        - Gifsicle: 0-300 (lossy=60% -> 180, lossy=100% -> 300)
+        - Animately: 0-100 (lossy=60% -> 60, lossy=100% -> 100)
+        - FFmpeg: 0-100 (lossy=60% -> 60, lossy=100% -> 100)
+        - Gifski: 0-100 (lossy=60% -> 60, lossy=100% -> 100)
+        """
+        if lossy_percentage < 0 or lossy_percentage > 100:
+            self.logger.warning(f"Invalid lossy percentage: {lossy_percentage}%, clamping to 0-100%")
+            lossy_percentage = max(0, min(100, lossy_percentage))
+        
+        # Identify engine from wrapper class name
+        wrapper_name = wrapper_class_name.lower()
+        
+        if "gifsicle" in wrapper_name:
+            # Gifsicle: 0-300 range
+            mapped_value = int(lossy_percentage * 3.0)  # 60% -> 180, 100% -> 300
+            
+            # Additional validation for Gifsicle to ensure we don't exceed its limits
+            if mapped_value > 300:
+                self.logger.warning(f"Gifsicle lossy level {mapped_value} exceeds maximum 300, clamping")
+                mapped_value = 300
+                
+            self.logger.debug(f"Mapped {lossy_percentage}% to Gifsicle lossy level {mapped_value}")
+            return mapped_value
+        else:
+            # Animately, FFmpeg, Gifski, etc.: 0-100 range
+            mapped_value = lossy_percentage  # 60% -> 60, 100% -> 100
+            
+            # Additional validation for other engines
+            if mapped_value > 100:
+                self.logger.warning(f"Engine {wrapper_class_name} lossy level {mapped_value} exceeds maximum 100, clamping")
+                mapped_value = 100
+                
+            self.logger.debug(f"Mapped {lossy_percentage}% to {wrapper_class_name} lossy level {mapped_value}")
+            return mapped_value
+    
     @property
     def test_params(self) -> List[dict]:
-        """Test parameter combinations for comprehensive evaluation."""
+        """Test parameter combinations for comprehensive evaluation.
+        
+        FOCUSED: Consistent 50% frame reduction with systematic testing of:
+        - Lossy: 60%, 100% compression levels (engine-specific mapping)
+        - Colors: 32, 128 palette sizes
+        """
         params = [
-            {"colors": 16, "lossy": 0, "frame_ratio": 1.0},
-            {"colors": 32, "lossy": 0, "frame_ratio": 1.0},
-            {"colors": 16, "lossy": 40, "frame_ratio": 1.0},
-            {"colors": 8, "lossy": 0, "frame_ratio": 1.0},    # Extreme compression
-            {"colors": 64, "lossy": 0, "frame_ratio": 1.0},   # Higher quality
+            # === 2x2 MATRIX: LOSSY × COLORS ===
+            {"colors": 32, "lossy": 60, "frame_ratio": 0.5},   # Mid colors + moderate lossy
+            {"colors": 128, "lossy": 60, "frame_ratio": 0.5},  # High colors + moderate lossy
+            {"colors": 32, "lossy": 100, "frame_ratio": 0.5},  # Mid colors + high lossy
+            {"colors": 128, "lossy": 100, "frame_ratio": 0.5}, # High colors + high lossy
         ]
         
         # Validate parameter ranges
@@ -2508,8 +2594,9 @@ class PipelineEliminator:
                 self.logger.warning(f"Invalid color count: {param_set['colors']}, clamping to valid range")
                 param_set["colors"] = max(2, min(256, param_set["colors"]))
             
+            # Lossy is now percentage (0-100%), will be mapped to engine-specific ranges
             if param_set["lossy"] < 0 or param_set["lossy"] > 100:
-                self.logger.warning(f"Invalid lossy level: {param_set['lossy']}, clamping to valid range")
+                self.logger.warning(f"Invalid lossy percentage: {param_set['lossy']}%, clamping to valid range")
                 param_set["lossy"] = max(0, min(100, param_set["lossy"]))
                 
             if param_set["frame_ratio"] <= 0 or param_set["frame_ratio"] > 1.0:
