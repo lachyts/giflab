@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from giflab.system_tools import discover_tool
+from ..system_tools import discover_tool
 
 from .common import run_command
 

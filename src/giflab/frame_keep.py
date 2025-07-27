@@ -10,7 +10,7 @@ Engine Documentation:
 
 Frame Selection Best Practices:
 - Gifsicle uses frame selection syntax: #0 #2 #4 (frames to keep)
-- Anamely uses --reduce flag with ratio: --reduce 0.5 (keep 50% of frames)
+- Animately uses --reduce flag with ratio: --reduce 0.5 (keep 50% of frames)
 - Both engines support even distribution of kept frames across the animation
 """
 
@@ -172,7 +172,7 @@ def build_animately_frame_args(keep_ratio: float, total_frames: int) -> list[str
     if keep_ratio == 1.0:
         return []  # No frame reduction needed
 
-    # Anamely uses --reduce flag for frame reduction
+    # Animately uses --reduce flag for frame reduction
     # The value should be the ratio of frames to keep
     target_frames = calculate_target_frame_count(total_frames, keep_ratio)
 

@@ -61,8 +61,9 @@ def _is_base_class(cls: type) -> bool:
     if getattr(cls, '__abstractmethods__', None):
         return True
     
-    # 3. Classes that explicitly inherit from ABC
-    if issubclass(cls, ABC):
+    # 3. Classes that directly inherit from ABC (not through tool interfaces)
+    # Only filter classes that directly inherit from ABC, not through tool interfaces
+    if ABC in cls.__bases__:
         return True
     
     # 4. Classes with underscore prefix (naming convention for base classes)

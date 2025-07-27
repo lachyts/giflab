@@ -490,20 +490,21 @@ class FFmpegLossyCompressor(LossyCompressionTool):
         return discover_tool("ffmpeg").version or "unknown"
 
     def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        qv = 30  # default quantiser value
-        fps = 15.0  # default fps
+        q_scale = 4  # default quantiser value (1-31 range)
         
         if params:
-            if "qv" in params:
-                qv = int(params["qv"])
-            if "fps" in params:
-                fps = float(params["fps"])
+            # Map lossy_level (0-100) to q_scale (1-31)
+            if "lossy_level" in params:
+                lossy_level = int(params["lossy_level"])
+                # Map 0-100 to 31-1 (lower q_scale = higher quality)
+                q_scale = max(1, min(31, 31 - int(lossy_level * 30 / 100)))
+            elif "q_scale" in params:
+                q_scale = int(params["q_scale"])
         
         return ffmpeg_lossy_compress(
             input_path,
             output_path,
-            qv=qv,
-            fps=fps,
+            q_scale=q_scale,
         )
 
 # ---------------------------------------------------------------------------

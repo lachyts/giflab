@@ -89,6 +89,26 @@ def estimate_processing_rate(completed_jobs: int, progress_data: dict):
         return 250.0  # Optimized rate for bulk processing
 
 
+def _read_progress_file_safely(progress_file):
+    """Safely read progress file with retry mechanism."""
+    import json
+    import time
+    
+    for attempt in range(3):
+        try:
+            with open(progress_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {}
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(0.1)  # Brief retry delay
+            else:
+                print(f"⚠️  Failed to read progress file: {e}")
+                return {}
+    return {}
+
+
 def monitor_progress():
     """Monitor the elimination progress and display stats."""
     results_dir = Path("elimination_results")

@@ -55,7 +55,7 @@ _LOSSY_WRAPPERS = [
     (GifsicleLossyCompressor, {"lossy_level": 40}),
     (AnimatelyLossyCompressor, {"lossy_level": 40}),
     (ImageMagickLossyCompressor, {"quality": 75}),  # ImageMagick uses quality 1-100
-    (FFmpegLossyCompressor, {"qv": 25, "fps": 15.0}),  # FFmpeg uses qv + fps
+    (FFmpegLossyCompressor, {"lossy_level": 50}),  # FFmpeg now uses lossy_level 0-100
     (GifskiLossyCompressor, {"quality": 70}),  # gifski uses quality 0-100
 ]
 

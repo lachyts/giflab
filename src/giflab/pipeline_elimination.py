@@ -1934,7 +1934,7 @@ class PipelineEliminator:
                         progress.update(1)
                         # Add to buffer if data is available for streaming
                         if job_id in completed_jobs_data_for_streaming:
-                            self._add_result_to_buffer(completed_jobs_data_for_streaming[job_id], results_buffer, csv_writer, buffer_size)
+                            self._add_result_to_buffer(completed_jobs_data_for_streaming[job_id], results_buffer, csv_writer, csv_file, buffer_size)
                             # Remove from memory after adding to buffer to save memory
                             del completed_jobs_data_for_streaming[job_id]
                         continue
@@ -1949,7 +1949,7 @@ class PipelineEliminator:
                             cache_hits += 1
                             # Update progress tracking
                             completed_job_ids.add(job_id)
-                            self._add_result_to_buffer(cached_result, results_buffer, csv_writer, buffer_size)
+                            self._add_result_to_buffer(cached_result, results_buffer, csv_writer, csv_file, buffer_size)
                             progress.update(1)
                             continue
                         else:
@@ -1984,7 +1984,7 @@ class PipelineEliminator:
                                 'test_frame_ratio': params.get("frame_ratio", 1.0),
                             }
                             completed_job_ids.add(job_id)
-                            self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
+                            self._add_result_to_buffer(failed_result, results_buffer, csv_writer, csv_file, buffer_size)
                             progress.update(1)
                             continue
 
@@ -2018,7 +2018,7 @@ class PipelineEliminator:
                                     'test_frame_ratio': params.get("frame_ratio", 1.0),
                                 }
                                 completed_job_ids.add(job_id)
-                                self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
+                                self._add_result_to_buffer(failed_result, results_buffer, csv_writer, csv_file, buffer_size)
                                 progress.update(1)
                                 validation_failed = True
                                 break  # Exit the step validation loop
@@ -2044,7 +2044,7 @@ class PipelineEliminator:
                         if len(completed_job_ids) % self.PROGRESS_SAVE_INTERVAL == 0:
                             self._save_resume_data_minimal(resume_file, completed_job_ids)
                         
-                        self._add_result_to_buffer(result, results_buffer, csv_writer, buffer_size)
+                        self._add_result_to_buffer(result, results_buffer, csv_writer, csv_file, buffer_size)
                         
                     except Exception as e:
                         self.logger.warning(f"Pipeline failed: {job_id} - {e}")
@@ -2100,14 +2100,14 @@ class PipelineEliminator:
                             )
                         
                         completed_job_ids.add(job_id)
-                        self._add_result_to_buffer(failed_result, results_buffer, csv_writer, buffer_size)
+                        self._add_result_to_buffer(failed_result, results_buffer, csv_writer, csv_file, buffer_size)
                     
                     progress.update(1)
                     
                     # Flush buffer and cache periodically for performance
                     total_processed = len(completed_job_ids)
                     if total_processed % self.BUFFER_FLUSH_INTERVAL == 0:
-                        self._flush_results_buffer(results_buffer, csv_writer)
+                        self._flush_results_buffer(results_buffer, csv_writer, csv_file)
                         if self.cache:
                             self.cache.flush_batch(force=True)  # Flush accumulated batches
         
@@ -2133,7 +2133,7 @@ class PipelineEliminator:
                 self.logger.info("💾 Cache statistics: No cache operations performed")
         
         # Final flush of any remaining results in buffer
-        self._flush_results_buffer(results_buffer, csv_writer, force=True)
+        self._flush_results_buffer(results_buffer, csv_writer, csv_file, force=True)
         csv_file.close()
         
         # Final save of all completed job IDs for resume functionality
@@ -2154,7 +2154,7 @@ class PipelineEliminator:
             # Fallback to empty DataFrame
             return pd.DataFrame()
     
-    def _add_result_to_buffer(self, result: dict, buffer: list, csv_writer, buffer_size: int):
+    def _add_result_to_buffer(self, result: dict, buffer: list, csv_writer, csv_file, buffer_size: int):
         """Add a result to the memory buffer and flush to CSV if buffer is full.
         
         Args:
@@ -2166,9 +2166,9 @@ class PipelineEliminator:
         buffer.append(result)
         
         if len(buffer) >= buffer_size:
-            self._flush_results_buffer(buffer, csv_writer)
+            self._flush_results_buffer(buffer, csv_writer, csv_file)
     
-    def _flush_results_buffer(self, buffer: list, csv_writer, force: bool = False):
+    def _flush_results_buffer(self, buffer: list, csv_writer, csv_file=None, force: bool = False):
         """Flush results buffer to CSV file and clear memory.
         
         Args:
@@ -2221,8 +2221,9 @@ class PipelineEliminator:
                     }
                     csv_writer.writerow(safe_result)
                 
-                # Force write to disk
-                csv_writer._f.flush()
+                # Force write to disk by flushing the underlying file
+                if csv_file is not None:
+                    csv_file.flush()
                 
                 self.logger.debug(f"💾 Flushed {len(buffer)} results to streaming CSV")
                 

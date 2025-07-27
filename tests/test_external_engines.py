@@ -178,8 +178,7 @@ class TestFFmpegHelpers:
             result = ffmpeg_lossy_compress(
                 test_gif,
                 output_path,
-                qv=25,
-                fps=12.0
+                q_scale=25
             )
             
             assert result["engine"] == "ffmpeg"
