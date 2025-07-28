@@ -508,6 +508,33 @@ When you create or extend a GifLab dataset for ML tasks, **follow the checklist 
 
 For implementation details, see `giflab/data_prep.py` (to be added) and the ML checklist in the plan document.
 
+## 🧪 Testing & Development
+
+GifLab maintains strict testing standards to ensure code quality and project cleanliness:
+
+### Testing Guidelines
+- **Unit/Integration Tests**: Use `tests/` directory with pytest
+- **Manual Testing**: Use `test-workspace/` structure (never root directory!)
+- **Debug Sessions**: Create organized sessions in `test-workspace/debug/`
+- **Cleanup Protocols**: Regular cleanup prevents project pollution
+
+### Quick Commands
+```bash
+# Run tests
+pytest
+
+# Create test workspace
+make test-workspace
+
+# Emergency cleanup of root directory mess
+make clean-testing-mess
+
+# Clean temporary files
+make clean-temp
+```
+
+**📋 Full Guidelines**: See [Testing Best Practices](docs/guides/testing-best-practices.md) for comprehensive testing standards and protocols.
+
 ## 📚 Documentation
 
 ### Core
@@ -521,7 +548,7 @@ For implementation details, see `giflab/data_prep.py` (to be added) and the ML c
 - **[Metrics System](docs/technical/metrics-system.md)** - Comprehensive quality assessment framework
 - **[EDA Framework](docs/technical/eda-framework.md)** - Data analysis and visualization tools
 - **[ML Best Practices](docs/technical/ml-best-practices.md)** - Machine learning dataset preparation
-- **[Testing Strategy](docs/technical/testing-strategy.md)** - Quality assurance and testing approaches
+- **[Testing Best Practices](docs/guides/testing-best-practices.md)** - Quality assurance and testing approaches
 - **[Content Classification](docs/technical/content-classification.md)** - AI-powered content tagging system
 
 ### Research & Analysis

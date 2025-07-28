@@ -2274,36 +2274,38 @@ class PipelineEliminator:
                     if png_sequence_dir and "Gifski" in wrapper.__class__.__name__:
                         step_params["png_sequence_dir"] = str(png_sequence_dir)
                 
-                # Check if next step is gifski and current tool can export PNG sequences
+                # Check if next step is gifski 
                 next_step_is_gifski = False
                 if i + 1 < len(pipeline.steps):
                     next_wrapper_name = pipeline.steps[i + 1].tool_cls.__name__
                     next_step_is_gifski = "Gifski" in next_wrapper_name
                 
-                # Export PNG sequence if next step is gifski and current tool supports it
+                # Always run the current step first
+                step_result = wrapper.apply(current_input, step_output, params=step_params)
+                pipeline_metadata.update(step_result)
+                
+                # Export PNG sequence AFTER step is applied if next step is gifski
                 # Also verify gifski tool is actually available to prevent race conditions
-                if (next_step_is_gifski and 
-                    wrapper.__class__.__name__ in ["FFmpegFrameReducer", "FFmpegColorReducer", "ImageMagickFrameReducer", "ImageMagickColorReducer"] and
-                    self._is_gifski_available()):
+                wrapper_name = wrapper.__class__.__name__
+                supports_png_export = (
+                    "FFmpegFrameReducer" in wrapper_name or "FFmpegColorReducer" in wrapper_name or
+                    "ImageMagickFrameReducer" in wrapper_name or "ImageMagickColorReducer" in wrapper_name
+                )
+                if (next_step_is_gifski and supports_png_export and self._is_gifski_available()):
                     png_sequence_dir = tmpdir_path / f"png_sequence_{step.variable}"
                     
                     # Use appropriate export function based on tool
+                    # Export from step_output (processed result) not current_input (raw input)
                     if "FFmpeg" in wrapper.__class__.__name__:
                         from .external_engines.ffmpeg import export_png_sequence
-                        png_result = export_png_sequence(current_input, png_sequence_dir)
+                        png_result = export_png_sequence(step_output, png_sequence_dir)
                     else:  # ImageMagick
                         from .external_engines.imagemagick import export_png_sequence
-                        png_result = export_png_sequence(current_input, png_sequence_dir)
+                        png_result = export_png_sequence(step_output, png_sequence_dir)
                     
-                    # Still run the normal step for color/frame processing
-                    step_result = wrapper.apply(current_input, step_output, params=step_params)
-                    
-                    # Merge metadata from both operations
-                    pipeline_metadata.update(step_result)
+                    # Merge PNG export metadata
                     pipeline_metadata.update({f"png_export_{step.variable}": png_result})
                 else:
-                    step_result = wrapper.apply(current_input, step_output, params=step_params)
-                    pipeline_metadata.update(step_result)
                     png_sequence_dir = None  # Reset if not using PNG sequence optimization
                 
                 current_input = step_output

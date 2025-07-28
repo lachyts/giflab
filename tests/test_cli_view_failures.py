@@ -71,7 +71,7 @@ class TestViewFailuresCommand:
         result = runner.invoke(main, ['view-failures', str(results_dir)])
         
         assert result.exit_code == 0
-        assert '3 failed pipelines found' in result.output
+        assert 'Total failures: 3' in result.output
         assert 'test_pipeline_1' in result.output
         assert 'gifski frame size mismatch' in result.output
 
@@ -95,7 +95,7 @@ class TestViewFailuresCommand:
         result = runner.invoke(main, ['view-failures', str(results_dir), '--limit', '2'])
         
         assert result.exit_code == 0
-        assert '3 failed pipelines found' in result.output  # Total count
+        assert 'Total failures: 3' in result.output  # Total count
         # Should only show first 2 failures in detail
 
     def test_view_failures_detailed(self, sample_failed_pipelines):
@@ -118,7 +118,7 @@ class TestViewFailuresCommand:
         result = runner.invoke(main, ['view-failures', str(empty_dir)])
         
         assert result.exit_code == 0
-        assert 'No failed pipelines found' in result.output
+        assert 'No failed pipelines file found at:' in result.output
 
     def test_view_failures_invalid_directory(self):
         """Test handling of non-existent directory."""

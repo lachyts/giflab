@@ -150,6 +150,10 @@ def export_png_sequence(
         
     Returns:
         Metadata dict with execution info and PNG sequence details
+        
+    Note:
+        ImageMagick uses -coalesce which properly handles frame timing and prevents
+        the over-extraction issues that can occur with FFmpeg on animately-processed GIFs.
     """
     magick = _magick_binary()
     
@@ -162,7 +166,7 @@ def export_png_sequence(
     cmd = [
         magick,
         str(input_path),
-        "-coalesce",  # Ensure frames are properly separated
+        "-coalesce",  # Ensure frames are properly separated and handle timing correctly
         str(output_pattern),
     ]
     

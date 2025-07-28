@@ -149,15 +149,51 @@ def export_png_sequence(
     # Build output path with pattern
     output_pattern = output_dir / frame_pattern
     
-    cmd = [
-        ffmpeg,
-        "-y",
-        "-v",
-        "error", 
-        "-i",
-        str(input_path),
-        str(output_pattern),
-    ]
+    # Get proper frame rate to avoid over-extraction with animately-processed GIFs
+    # Some tools (like animately) create timing metadata that confuses FFmpeg
+    import subprocess
+    try:
+        probe_cmd = [
+            "ffprobe", "-v", "error", "-select_streams", "v:0", 
+            "-show_entries", "stream=avg_frame_rate", "-of", "csv=p=0", str(input_path)
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+        avg_frame_rate = result.stdout.strip()
+        
+        # Use explicit frame rate if we got a valid one
+        if avg_frame_rate and avg_frame_rate != "0/0":
+            cmd = [
+                ffmpeg,
+                "-y",
+                "-v",
+                "error",
+                "-r", avg_frame_rate,  # Use detected frame rate
+                "-i",
+                str(input_path),
+                str(output_pattern),
+            ]
+        else:
+            # Fallback to original method if frame rate detection fails
+            cmd = [
+                ffmpeg,
+                "-y",
+                "-v",
+                "error", 
+                "-i",
+                str(input_path),
+                str(output_pattern),
+            ]
+    except Exception:
+        # Fallback to original method if frame rate detection fails
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-v",
+            "error", 
+            "-i",
+            str(input_path),
+            str(output_pattern),
+        ]
     
     metadata = run_command(cmd, engine="ffmpeg", output_path=output_pattern)
     

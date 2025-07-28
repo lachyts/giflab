@@ -115,3 +115,31 @@ debug_*.gif
 # Additional temporary files
 *.log
 temp_*
+
+# Test workspace (keep structure, ignore temporary content)
+test-workspace/temp/
+test-workspace/manual/*/
+test-workspace/debug/*/
+!test-workspace/manual/.gitkeep
+!test-workspace/debug/.gitkeep
+!test-workspace/temp/.gitkeep
+
+# Root directory testing pollution (should not exist, but just in case)
+debug_*
+test_*
+final_*
+verification_*
+comprehensive_*
+deep_*
+gpu_*
+clean_test_*
+*_test.gif
+*test*.gif
+debug_*.png
+step*.gif
+pipeline_*.gif
+*png_export*
+*png_frames*
+*png_sequence*
+*png_from_*
+*png_fix*
