@@ -2289,7 +2289,8 @@ class PipelineEliminator:
                 wrapper_name = wrapper.__class__.__name__
                 supports_png_export = (
                     "FFmpegFrameReducer" in wrapper_name or "FFmpegColorReducer" in wrapper_name or
-                    "ImageMagickFrameReducer" in wrapper_name or "ImageMagickColorReducer" in wrapper_name
+                    "ImageMagickFrameReducer" in wrapper_name or "ImageMagickColorReducer" in wrapper_name or
+                    "AnimatelyFrameReducer" in wrapper_name or "AnimatelyColorReducer" in wrapper_name
                 )
                 if (next_step_is_gifski and supports_png_export and self._is_gifski_available()):
                     png_sequence_dir = tmpdir_path / f"png_sequence_{step.variable}"
@@ -2299,12 +2300,26 @@ class PipelineEliminator:
                     if "FFmpeg" in wrapper.__class__.__name__:
                         from .external_engines.ffmpeg import export_png_sequence
                         png_result = export_png_sequence(step_output, png_sequence_dir)
+                    elif "Animately" in wrapper.__class__.__name__:
+                        from .external_engines.animately import export_png_sequence
+                        png_result = export_png_sequence(step_output, png_sequence_dir)
                     else:  # ImageMagick
                         from .external_engines.imagemagick import export_png_sequence
                         png_result = export_png_sequence(step_output, png_sequence_dir)
                     
                     # Merge PNG export metadata
                     pipeline_metadata.update({f"png_export_{step.variable}": png_result})
+                    
+                    # CRITICAL: Validate frame count for gifski compatibility
+                    # gifski requires at least 2 frames to create an animation
+                    frame_count = png_result.get("frame_count", 0)
+                    if frame_count < 2:
+                        self.logger.warning(
+                            f"PNG sequence has only {frame_count} frame(s), but gifski requires at least 2. "
+                            f"Disabling PNG sequence optimization for this pipeline step. "
+                            f"gifski will fall back to processing the GIF directly."
+                        )
+                        png_sequence_dir = None  # Disable optimization, use fallback GIF processing
                 else:
                     png_sequence_dir = None  # Reset if not using PNG sequence optimization
                 

@@ -180,6 +180,14 @@ def _validate_and_prepare_frames(
             f"This indicates a fundamental issue in earlier pipeline steps."
         )
     
+    # CRITICAL: gifski requires at least 2 frames to create an animation
+    if len(valid_frames) < 2:
+        raise RuntimeError(
+            f"gifski: Only {len(valid_frames)} valid frame(s) found, but gifski requires at least 2 frames to create an animation. "
+            f"This usually occurs when frame reduction reduces the input to a single frame. "
+            f"Consider using a different compression tool for single-frame outputs."
+        )
+    
     # Check if we have enough valid frames using configurable threshold
     required_valid_frames = len(frame_files) * min_valid_frame_ratio
     if len(valid_frames) < required_valid_frames:

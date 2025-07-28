@@ -240,7 +240,7 @@ class TestParameterValidation:
         with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
             output_path = Path(tmp.name)
             
-            with pytest.raises(ValueError, match="quality must be in 1–100"):
+            with pytest.raises(ValueError, match="quality must be in 0–100 range"):
                 imagemagick_lossy_compress(test_gif, output_path, quality=150)
     
     def test_gifski_lossy_compress_invalid_quality(self, test_gif):
