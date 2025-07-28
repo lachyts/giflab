@@ -260,8 +260,8 @@ class TestFFmpegWrapperIntegration:
         with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
             output_path = Path(tmp.name)
             
-            # Should raise ValueError for missing fps parameter
-            with pytest.raises(ValueError, match="params must include 'fps'"):
+            # Should raise ValueError for missing ratio parameter
+            with pytest.raises(ValueError, match="params must include 'ratio'"):
                 wrapper.apply(test_gif, output_path, params={})
 
 

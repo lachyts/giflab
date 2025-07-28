@@ -149,7 +149,7 @@ class TestExpandedSyntheticSpecs:
         # Frame variation specs should be present
         assert "minimal_frames" in spec_names
         assert "long_animation" in spec_names
-        assert "very_long_animation" in spec_names
+        assert "extended_animation" in spec_names
     
     def test_expanded_spec_count(self, tmp_path):
         """Test that we have the expected number of specs."""

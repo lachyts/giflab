@@ -335,7 +335,7 @@ poetry run python -m giflab run data/raw --workers 8 --resume
 
 - **Beginner Guide**: [docs/guides/beginner.md](beginner.md)
 - **Engine Documentation**: [docs/engines/](../engines/)
-- **CI Setup**: [docs/ci-setup.md](../ci-setup.md)
+- **CI Setup**: [docs/technical/ci-setup.md](../technical/ci-setup.md)
 - **Project Overview**: [README.md](../../README.md)
 
 ## 💡 Pro Tips

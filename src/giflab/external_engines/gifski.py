@@ -58,8 +58,19 @@ def lossy_compress(
         if not frame_files:
             raise RuntimeError(f"gifski failed: no PNG frames found in {png_sequence_dir}")
         
+        # 3️⃣ Runtime frame count guard - count actual PNG files
+        if len(frame_files) < 2:
+            raise RuntimeError(
+                f"gifski: Found only {len(frame_files)} PNG frame file(s), but gifski requires at least 2 frames. "
+                f"This occurs when frame reduction reduces the input to too few frames. "
+                f"Consider using a different compression tool for single-frame outputs."
+            )
+        
+        # 3️⃣ Normalize frame dimensions before validation
+        normalized_frame_files = _normalize_frame_dimensions(frame_files)
+        
         # 3️⃣ Validate frames with fail-fast approach
-        valid_frame_files = _validate_and_prepare_frames(frame_files)
+        valid_frame_files = _validate_and_prepare_frames(normalized_frame_files)
 
         # 5️⃣ encode with gifski using processed frames
         encode_cmd = [
@@ -102,8 +113,19 @@ def lossy_compress(
             if not frame_files:
                 raise RuntimeError(f"gifski failed: no PNG frames found in {tmpdir}")
 
+            # 3️⃣ Runtime frame count guard - count actual PNG files
+            if len(frame_files) < 2:
+                raise RuntimeError(
+                    f"gifski: Found only {len(frame_files)} PNG frame file(s), but gifski requires at least 2 frames. "
+                    f"This occurs when frame reduction reduces the input to too few frames. "
+                    f"Consider using a different compression tool for single-frame outputs."
+                )
+
+            # 3️⃣ Normalize frame dimensions before validation
+            normalized_frame_files = _normalize_frame_dimensions(frame_files)
+            
             # 3️⃣ Validate frames with fail-fast approach
-            valid_frame_files = _validate_and_prepare_frames(frame_files)
+            valid_frame_files = _validate_and_prepare_frames(normalized_frame_files)
 
             # 5️⃣ encode with gifski using processed frames
             encode_cmd = [
@@ -128,6 +150,92 @@ def lossy_compress(
                 else:
                     # Re-raise other errors unchanged
                     raise
+
+
+def _normalize_frame_dimensions(frame_files: list) -> list:
+    """Normalize frame dimensions to prevent gifski dimension inconsistency errors.
+    
+    All frames will be padded to the most common dimension using center alignment
+    to avoid quality degradation from content shifting.
+    
+    Args:
+        frame_files: List of PNG frame file paths
+        
+    Returns:
+        List of normalized frame files (may be new files if padding was needed)
+        
+    Raises:
+        RuntimeError: If frame normalization fails
+    """
+    import tempfile
+    from collections import Counter
+    from PIL import ImageOps
+    
+    logger = logging.getLogger(__name__)
+    
+    if not frame_files:
+        return frame_files
+    
+    # First pass: collect all frame dimensions
+    frame_dimensions = []
+    for frame_file in frame_files:
+        try:
+            with Image.open(frame_file) as img:
+                frame_dimensions.append(img.size)
+        except Exception as e:
+            logger.warning(f"Could not read frame {frame_file} for dimension analysis: {e}")
+            # Keep original file if we can't read it
+            frame_dimensions.append(None)
+    
+    # Check if normalization is needed
+    valid_dimensions = [d for d in frame_dimensions if d is not None]
+    if not valid_dimensions:
+        return frame_files
+    
+    unique_dimensions = set(valid_dimensions)
+    if len(unique_dimensions) <= 1:
+        # All frames have same dimensions, no normalization needed
+        return frame_files
+    
+    # Find most common dimension
+    dimension_counts = Counter(valid_dimensions)
+    target_dimension, count = dimension_counts.most_common(1)[0]
+    
+    logger.info(f"gifski: Normalizing frame dimensions to {target_dimension} "
+               f"(most common size, {count}/{len(valid_dimensions)} frames)")
+    
+    # Second pass: normalize frames that need it
+    normalized_files = []
+    temp_dir = None
+    
+    for i, (frame_file, dimension) in enumerate(zip(frame_files, frame_dimensions)):
+        if dimension == target_dimension or dimension is None:
+            # Frame already has target dimension or couldn't be read
+            normalized_files.append(frame_file)
+        else:
+            # Need to normalize this frame
+            if temp_dir is None:
+                temp_dir = tempfile.mkdtemp(prefix="gifski_normalized_")
+            
+            try:
+                with Image.open(frame_file) as img:
+                    # Use center-aligned padding to avoid content shifting
+                    normalized_img = ImageOps.pad(img, target_dimension, method=Image.LANCZOS, centering=(0.5, 0.5))
+                    
+                    # Save normalized frame
+                    normalized_path = Path(temp_dir) / f"normalized_{i:04d}.png"
+                    normalized_img.save(normalized_path, format='PNG')
+                    normalized_files.append(str(normalized_path))
+                    
+            except Exception as e:
+                logger.warning(f"Failed to normalize frame {frame_file}: {e}")
+                # Keep original if normalization fails
+                normalized_files.append(frame_file)
+    
+    if temp_dir:
+        logger.debug(f"gifski: Created {len([f for f in normalized_files if temp_dir in str(f)])} normalized frames in {temp_dir}")
+    
+    return normalized_files
 
 
 def _validate_and_prepare_frames(

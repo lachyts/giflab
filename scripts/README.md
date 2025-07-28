@@ -7,8 +7,8 @@ This directory contains utility scripts organized by category to keep the projec
 ```
 scripts/
 ├── experimental/           # Experimental testing utilities
-│   ├── monitor_elimination.py              # Core pipeline elimination monitor
-│   └── monitor_elimination_enhanced.py     # Enhanced monitor with status info
+│   ├── simple_monitor.py              # Pipeline elimination monitor
+│   └── README.md                      # Experimental scripts documentation
 └── README.md              # This file
 ```
 
@@ -18,26 +18,34 @@ Scripts related to the experimental testing framework and pipeline elimination p
 
 ### Pipeline Elimination Monitoring
 
-- **`monitor_elimination.py`**: Core monitoring script for pipeline elimination progress
-- **`monitor_elimination_enhanced.py`**: Enhanced monitoring with detailed status and configuration info
+- **`simple_monitor.py`**: Pipeline elimination progress monitor with real-time updates and configurable options
 
 #### Usage
 
 ```bash
-# Run basic monitoring
-poetry run python scripts/experimental/monitor_elimination.py
+# Run basic monitoring (30s refresh, 3 recent failures, auto-detect file)
+python scripts/experimental/simple_monitor.py
 
-# Run enhanced monitoring (recommended)
-poetry run python scripts/experimental/monitor_elimination_enhanced.py
+# Custom refresh interval and failure count
+python scripts/experimental/simple_monitor.py --refresh 10 --failures 5
+
+# Custom results file location
+python scripts/experimental/simple_monitor.py --file my_results.csv
+
+# Quick monitoring for active development
+python scripts/experimental/simple_monitor.py -r 5 -f 2
 ```
 
 #### Features
 
-- Real-time progress tracking with completion estimates
-- Universal percentage display for lossy levels (60%, 100%)
-- Engine-specific mapping visualization (Gifsicle: 0-300, Others: 0-100)
-- Failure detection and status reporting
-- Recent results display with SSIM quality metrics
+- **Real-time progress tracking** with completion estimates and success rates
+- **Dynamic job estimation** based on actual pipeline configuration  
+- **Configurable refresh intervals** (1-60 seconds) and failure display count
+- **Universal percentage display** for lossy levels (60%, 100%)
+- **Engine-specific mapping** visualization (Gifsicle: 0-300, Others: 0-100)
+- **Recent failure analysis** with pipeline and GIF name details
+- **Robust CSV parsing** with proper error handling and auto-detection
+- **Auto-detection of results files** - searches multiple common locations
 
 ## 🎯 Why This Organization?
 

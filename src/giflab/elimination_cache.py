@@ -1,7 +1,7 @@
-"""Pipeline Results Cache System
+"""Pipeline results caching system for elimination framework.
 
-SQLite-based caching system for pipeline test results to avoid redundant testing.
-Extracted from pipeline_elimination.py for better modularity.
+This module provides SQLite-based caching for pipeline test results
+to avoid redundant testing and improve performance.
 """
 
 from __future__ import annotations
@@ -11,54 +11,9 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Any, Dict, List, Optional
 
-
-class ErrorTypes:
-    """Constants for error type categorization."""
-    GIFSKI = 'gifski'
-    FFMPEG = 'ffmpeg'
-    IMAGEMAGICK = 'imagemagick'
-    GIFSICLE = 'gifsicle'
-    ANIMATELY = 'animately'
-    TIMEOUT = 'timeout'
-    COMMAND_EXECUTION = 'command_execution'
-    OTHER = 'other'
-    
-    @classmethod
-    def all_types(cls) -> list[str]:
-        """Return all error type constants."""
-        return [cls.GIFSKI, cls.FFMPEG, cls.IMAGEMAGICK, cls.GIFSICLE, 
-                cls.ANIMATELY, cls.TIMEOUT, cls.COMMAND_EXECUTION, cls.OTHER]
-    
-    @classmethod
-    def categorize_error(cls, error_msg: str) -> str:
-        """Categorize an error message into error type constants.
-        
-        Args:
-            error_msg: Error message string to categorize
-            
-        Returns:
-            Error type constant string
-        """
-        error_msg_lower = error_msg.lower()
-        
-        if cls.GIFSKI in error_msg_lower:
-            return cls.GIFSKI
-        elif cls.FFMPEG in error_msg_lower:
-            return cls.FFMPEG
-        elif cls.IMAGEMAGICK in error_msg_lower:
-            return cls.IMAGEMAGICK
-        elif cls.GIFSICLE in error_msg_lower:
-            return cls.GIFSICLE
-        elif cls.ANIMATELY in error_msg_lower:
-            return cls.ANIMATELY
-        elif 'command failed' in error_msg_lower:
-            return cls.COMMAND_EXECUTION
-        elif 'timeout' in error_msg_lower:
-            return cls.TIMEOUT
-        else:
-            return cls.OTHER
+from .elimination_errors import ErrorTypes
 
 
 class PipelineResultsCache:
@@ -212,6 +167,9 @@ class PipelineResultsCache:
         })
         
         self.logger.debug(f"💾 Queued result for {pipeline_id} on {gif_name} (batch size: {len(self._pending_results)})")
+        
+        # Auto-flush when batch size is reached
+        self.flush_batch()
     
     def queue_failure(self, pipeline_id: str, gif_name: str, params: dict, error_info: dict):
         """Queue a pipeline failure for batch storage and analysis.
@@ -240,6 +198,9 @@ class PipelineResultsCache:
         })
         
         self.logger.debug(f"💾 Queued failure for {pipeline_id} on {gif_name} (batch size: {len(self._pending_failures)})")
+        
+        # Auto-flush when batch size is reached
+        self.flush_batch()
     
     def flush_batch(self, force: bool = False):
         """Flush pending results and failures to database.
@@ -466,5 +427,22 @@ class PipelineResultsCache:
             return []
 
 
-# Import enhanced error message cleaning from the centralized error_handling module
-from .error_handling import clean_error_message 
+def get_git_commit() -> str:
+    """Get current git commit hash for cache invalidation.
+    
+    Returns:
+        Git commit hash or 'unknown' if not available
+    """
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:12]  # Short hash
+    except Exception:
+        pass
+    return "unknown" 

@@ -63,17 +63,26 @@ The caching system stores results using a composite key:
 - Automatic invalidation prevents stale results
 
 ### Cache Management
+
+#### 🗑️ Clear All Cache Data
+To completely reset all cached pipeline results:
+```bash
+poetry run python -m giflab eliminate-pipelines --clear-cache --estimate-time
+```
+**What this clears:**
+- All successful pipeline test results
+- All failed pipeline test results  
+- Stored in: `elimination_results/pipeline_results_cache.db`
+
+#### Other Cache Commands
 ```bash
 # Normal run with cache (default)
-giflab eliminate-pipelines --sampling-strategy representative
+poetry run python -m giflab eliminate-pipelines --sampling-strategy representative
 
-# Force fresh results (ignore cache)
-giflab eliminate-pipelines --no-cache
+# Force fresh results (ignore cache, but keep cached data)
+poetry run python -m giflab eliminate-pipelines --no-cache
 
-# Clear cache and start fresh
-giflab eliminate-pipelines --clear-cache
-
-# Check cache statistics in output logs
+# Check cache statistics in output logs (automatically shown)
 ```
 
 ### Cache Benefits

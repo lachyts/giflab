@@ -555,6 +555,32 @@ make clean-temp
 - **[Compression Research](docs/analysis/compression-research.md)** - Engine comparison and optimization strategies
 - **[Implementation Lessons](docs/analysis/implementation-lessons.md)** - Development insights and best practices
 
+## Common Commands & Troubleshooting
+
+### 🗑️ Clear All Cached Data
+If you need to reset all cached pipeline results (SQLite database):
+```bash
+poetry run python -m giflab eliminate-pipelines --clear-cache --estimate-time
+```
+This clears all cached test results from `elimination_results/pipeline_results_cache.db`.
+
+### 🔄 Force Fresh Results (Without Clearing Cache)
+To run fresh tests while keeping cached data intact:
+```bash
+poetry run python -m giflab eliminate-pipelines --no-cache
+```
+
+### 📊 Check Cache Performance
+Cache statistics are automatically shown in pipeline elimination output.
+
+### 🔍 Debug Pipeline Failures
+View detailed failure information:
+```bash
+poetry run python -m giflab debug-failures --summary
+```
+
+**📚 For more details:** See [Elimination Results Tracking Guide](docs/guides/elimination-results-tracking.md)
+
 ## License
 
 MIT License – see LICENSE file for details.

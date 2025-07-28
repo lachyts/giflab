@@ -146,6 +146,8 @@ giflab eliminate-pipelines --sampling-strategy quick
 giflab eliminate-pipelines --resume
 ```
 
+**📖 Sampling Strategies**: The elimination pipeline supports 6 different sampling strategies (full, representative, factorial, progressive, targeted, quick) that control coverage vs speed trade-offs. See the comprehensive [Sampling Strategies Guide](sampling-strategies.md) for detailed descriptions and usage recommendations.
+
 **📊 Results Tracking**: As of the latest update, elimination results are now saved in timestamped directories with comprehensive historical tracking. See [Elimination Results Tracking](elimination-results-tracking.md) for details on working with historical data.
 
 Key elimination features:

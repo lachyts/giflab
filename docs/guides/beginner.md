@@ -6,7 +6,7 @@
 
 This guide will walk you through everything you need to know to get started with GifLab, even if you've never done this before.
 
-**🔧 Looking for technical details?** Check out the [**README.md**](README.md) for developer information, performance benchmarks, and configuration options.
+**🔧 Looking for technical details?** Check out the [**README.md**](../../README.md) for developer information, performance benchmarks, and configuration options.
 
 ---
 
@@ -571,6 +571,32 @@ python -m giflab run data/test data/ --workers 2
 - **SSIM thresholds**: Set minimum quality requirements
 - **Use case specific**: Different applications have different quality needs
 - **A/B testing**: Compare different settings side-by-side
+
+---
+
+## 🔧 Common Issues & Troubleshooting
+
+### Pipeline Tests Running Slowly or Giving Stale Results?
+**Clear the cache** to start fresh:
+```bash
+poetry run python -m giflab eliminate-pipelines --clear-cache --estimate-time
+```
+This resets all cached test results in `elimination_results/pipeline_results_cache.db`.
+
+### Engine Installation Issues?
+Make sure all required engines are properly installed:
+```bash
+# Check if engines are available
+which gifsicle ffmpeg magick gifski
+ls bin/darwin/arm64/animately  # Check Animately binary
+```
+
+### Getting Strange Error Messages?
+1. **Check the logs** in `elimination_results/` for detailed error information
+2. **Try clearing the cache** (command above)
+3. **Run with fresh results**: Add `--no-cache` flag to bypass cache temporarily
+
+**📚 For more advanced troubleshooting:** See [Elimination Results Tracking Guide](elimination-results-tracking.md)
 
 ---
 

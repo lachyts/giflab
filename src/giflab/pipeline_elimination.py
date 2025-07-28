@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import sys
 import traceback
 from collections import Counter, defaultdict
@@ -18,83 +17,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple, Optional
 
 import pandas as pd
-from PIL import Image, ImageDraw
 import numpy as np
+from PIL import Image, ImageDraw
 
 from .dynamic_pipeline import generate_all_pipelines, Pipeline
 from .experiment import ExperimentalPipeline
 from .metrics import calculate_comprehensive_metrics
 from .meta import extract_gif_metadata
 
-
-# Use enhanced error message cleaning from error_handling module
+# Import modularized components
+from .elimination_errors import ErrorTypes, clean_error_for_analysis
+from .elimination_cache import PipelineResultsCache, get_git_commit
+from .synthetic_gifs import SyntheticGifGenerator, SyntheticGifSpec
 from .error_handling import clean_error_message
 
-
-class ErrorTypes:
-    """Constants for error type categorization."""
-    GIFSKI = 'gifski'
-    FFMPEG = 'ffmpeg'
-    IMAGEMAGICK = 'imagemagick'
-    GIFSICLE = 'gifsicle'
-    ANIMATELY = 'animately'
-    TIMEOUT = 'timeout'
-    COMMAND_EXECUTION = 'command_execution'
-    OTHER = 'other'
-    
-    @classmethod
-    def all_types(cls) -> list[str]:
-        """Return all error type constants."""
-        return [cls.GIFSKI, cls.FFMPEG, cls.IMAGEMAGICK, cls.GIFSICLE, 
-                cls.ANIMATELY, cls.TIMEOUT, cls.COMMAND_EXECUTION, cls.OTHER]
-    
-    @classmethod
-    def categorize_error(cls, error_msg: str) -> str:
-        """Categorize an error message into error type constants.
-        
-        Args:
-            error_msg: Error message string to categorize
-            
-        Returns:
-            Error type constant string
-        """
-        error_msg_lower = error_msg.lower()
-        
-        if cls.GIFSKI in error_msg_lower:
-            return cls.GIFSKI
-        elif cls.FFMPEG in error_msg_lower:
-            return cls.FFMPEG
-        elif cls.IMAGEMAGICK in error_msg_lower:
-            return cls.IMAGEMAGICK
-        elif cls.GIFSICLE in error_msg_lower:
-            return cls.GIFSICLE
-        elif cls.ANIMATELY in error_msg_lower:
-            return cls.ANIMATELY
-        elif 'command failed' in error_msg_lower:
-            return cls.COMMAND_EXECUTION
-        elif 'timeout' in error_msg_lower:
-            return cls.TIMEOUT
-        else:
-            return cls.OTHER
-
-
-class PipelineResultsCache:
-    """SQLite-based cache for pipeline test results to avoid redundant testing."""
-    
-    def __init__(self, cache_db_path: Path, git_commit: Optional[str] = None):
-        """Initialize the results cache.
-        
-        Args:
-            cache_db_path: Path to SQLite database file
-            git_commit: Current git commit hash for cache invalidation
-        """
-        self.cache_db_path = cache_db_path
-        self.git_commit = git_commit or "unknown"
-        self.logger = logging.getLogger(__name__)
-        self._pending_results = []  # Batch storage
-        self._pending_failures = []  # Batch failure storage
-        self._init_database()
-        
+# ---------------------------------------------------------------------------
+# Deprecated helper functions (wrapped in always-false block to avoid runtime
+# execution and indentation errors).
+# ---------------------------------------------------------------------------
+if False:
     def _init_database(self):
         """Initialize the SQLite database schema."""
         try:
@@ -483,16 +424,6 @@ class PipelineResultsCache:
             return []
 
 
-@dataclass
-class SyntheticGifSpec:
-    """Specification for a synthetic test GIF."""
-    name: str
-    frames: int
-    size: Tuple[int, int]
-    content_type: str
-    description: str
-    
-
 @dataclass 
 class SamplingStrategy:
     """Configuration for intelligent sampling strategies."""
@@ -866,7 +797,7 @@ class PipelineEliminator:
         # Initialize cache system
         if self.use_cache:
             cache_db_path = self.base_output_dir / "pipeline_results_cache.db"
-            git_commit = self._get_git_commit()
+            git_commit = get_git_commit()
             self.cache = PipelineResultsCache(cache_db_path, git_commit)
             
             # Log cache statistics
@@ -884,127 +815,11 @@ class PipelineEliminator:
         # Log elimination run metadata
         self._log_run_metadata()
         
-        # Define synthetic test cases based on research findings
-        self.synthetic_specs = [
-            # ORIGINAL RESEARCH-BASED CONTENT TYPES
-            # From research: gradients benefit from dithering
-            SyntheticGifSpec(
-                "smooth_gradient", 8, (120, 120), "gradient",
-                "Smooth color transitions - should benefit from Riemersma dithering"
-            ),
-            SyntheticGifSpec(
-                "complex_gradient", 12, (150, 150), "complex_gradient", 
-                "Multi-directional gradients with multiple hues"
-            ),
-            
-            # From research: solid colors should NOT use dithering
-            SyntheticGifSpec(
-                "solid_blocks", 6, (100, 100), "solid",
-                "Flat color blocks - dithering should provide no benefit"
-            ),
-            SyntheticGifSpec(
-                "high_contrast", 10, (120, 120), "contrast",
-                "Sharp edges and high contrast - no dithering benefit expected"
-            ),
-            
-            # From research: complex/noise content where Bayer scales 4-5 excel
-            SyntheticGifSpec(
-                "photographic_noise", 8, (140, 140), "noise",
-                "Photo-realistic with noise - good for testing Bayer dithering"
-            ),
-            SyntheticGifSpec(
-                "texture_complex", 15, (130, 130), "texture",
-                "Complex textures where dithering patterns can blend naturally"
-            ),
-            
-            # Geometric patterns from research
-            SyntheticGifSpec(
-                "geometric_patterns", 10, (110, 110), "geometric",
-                "Structured geometric shapes - test ordered dithering methods"
-            ),
-            
-            # Edge cases for comprehensive testing
-            SyntheticGifSpec(
-                "few_colors", 6, (100, 100), "minimal",
-                "Very few distinct colors - test edge behavior"
-            ),
-            SyntheticGifSpec(
-                "many_colors", 20, (160, 160), "spectrum",
-                "Full color spectrum - stress test palette reduction"
-            ),
-            SyntheticGifSpec(
-                "animation_heavy", 30, (100, 100), "motion",
-                "Rapid animation with temporal coherence requirements"
-            ),
-            
-            # SIZE VARIATIONS - Test if dimensions affect pipeline performance
-            SyntheticGifSpec(
-                "gradient_small", 8, (50, 50), "gradient",
-                "Small gradient - test compression behavior at minimum realistic size"
-            ),
-            SyntheticGifSpec(
-                "gradient_medium", 8, (200, 200), "gradient", 
-                "Medium gradient - standard web size testing"
-            ),
-            SyntheticGifSpec(
-                "gradient_large", 8, (500, 500), "gradient",
-                "Large gradient - test performance on bigger files"
-            ),
-            SyntheticGifSpec(
-                "gradient_xlarge", 8, (1000, 1000), "gradient",
-                "Extra large gradient - maximum realistic size testing"
-            ),
-            SyntheticGifSpec(
-                "noise_small", 8, (50, 50), "noise",
-                "Small noisy content - test Bayer dithering on small dimensions"
-            ),
-            SyntheticGifSpec(
-                "noise_large", 8, (500, 500), "noise",
-                "Large noisy content - test Bayer scale performance on large files"
-            ),
-            
-            # FRAME COUNT VARIATIONS - Test temporal processing differences
-            SyntheticGifSpec(
-                "minimal_frames", 2, (120, 120), "gradient",
-                "Minimal animation - test behavior with very few frames"
-            ),
-            SyntheticGifSpec(
-                "long_animation", 50, (120, 120), "motion",
-                "Long animation - test frame processing efficiency"
-            ),
-            SyntheticGifSpec(
-                "very_long_animation", 100, (120, 120), "motion",
-                "Very long animation - stress test temporal optimization"
-            ),
-            
-            # MISSING CONTENT TYPES - Real-world patterns not covered
-            SyntheticGifSpec(
-                "mixed_content", 12, (200, 150), "mixed",
-                "Text + graphics + photo elements - common real-world combination"
-            ),
-            SyntheticGifSpec(
-                "data_visualization", 8, (300, 200), "charts",
-                "Charts and graphs - technical/scientific content"
-            ),
-            SyntheticGifSpec(
-                "transitions", 15, (150, 150), "morph",
-                "Complex transitions and morphing - advanced animation patterns"
-            ),
-            
-            # EDGE CASES - Extreme but realistic scenarios
-            SyntheticGifSpec(
-                "single_pixel_anim", 10, (100, 100), "micro_detail",
-                "Single pixel changes - minimal motion detection"
-            ),
-            SyntheticGifSpec(
-                "static_minimal_change", 20, (150, 150), "static_plus",
-                "Mostly static with tiny changes - frame reduction opportunities"
-            ),
-            SyntheticGifSpec(
-                "high_frequency_detail", 12, (200, 200), "detail",
-                "High frequency details - test aliasing and quality preservation"
-            )
-        ]
+        # Initialize synthetic GIF generator
+        self.gif_generator = SyntheticGifGenerator(self.output_dir)
+        
+        # Get synthetic GIF specifications from generator (no duplication)
+        self.synthetic_specs = self.gif_generator.synthetic_specs
     
     def generate_synthetic_gifs(self) -> List[Path]:
         """Generate all synthetic test GIFs."""
@@ -1961,16 +1776,16 @@ class PipelineEliminator:
                             error_msg = f"Invalid pipeline contains 'external-tool' base class: {pipeline.identifier()}"
                             self.logger.error(error_msg)
                             self.cache.queue_failure(
-                                pipeline_id=pipeline.identifier(),
-                                gif_name=gif_path.name,
-                                test_colors=params.get("colors", 0),
-                                test_lossy=params.get("lossy", 0),
-                                test_frame_ratio=params.get("frame_ratio", 1.0),
-                                error_type="validation",
-                                error_message=error_msg,
-                                error_traceback="",
-                                pipeline_steps=str([step.name() for step in pipeline.steps]),
-                                tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
+                                pipeline.identifier(),
+                                gif_path.stem,
+                                params,
+                                {
+                                    "error": error_msg,
+                                    "error_traceback": "",
+                                    "pipeline_steps": [step.name() for step in pipeline.steps],
+                                    "tools_used": [step.tool_cls.NAME for step in pipeline.steps],
+                                    "error_type": "validation"
+                                }
                             )
                             # Add validation failure to completed jobs and continue
                             failed_result = {
@@ -1995,16 +1810,16 @@ class PipelineEliminator:
                                 error_msg = f"Invalid tool with external-tool NAME in step: {step.name()}"
                                 self.logger.error(error_msg)
                                 self.cache.queue_failure(
-                                    pipeline_id=pipeline.identifier(),
-                                    gif_name=gif_path.name,
-                                    test_colors=params.get("colors", 0),
-                                    test_lossy=params.get("lossy", 0),
-                                    test_frame_ratio=params.get("frame_ratio", 1.0),
-                                    error_type="validation",
-                                    error_message=error_msg,
-                                    error_traceback="",
-                                    pipeline_steps=str([step.name() for step in pipeline.steps]),
-                                    tools_used=str([step.tool_cls.NAME for step in pipeline.steps])
+                                    pipeline.identifier(),
+                                    gif_path.stem,
+                                    params,
+                                    {
+                                        "error": error_msg,
+                                        "error_traceback": "",
+                                        "pipeline_steps": [step.name() for step in pipeline.steps],
+                                        "tools_used": [step.tool_cls.NAME for step in pipeline.steps],
+                                        "error_type": "validation"
+                                    }
                                 )
                                 # Add validation failure to completed jobs and skip this pipeline
                                 failed_result = {
