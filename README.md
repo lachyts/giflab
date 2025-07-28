@@ -16,7 +16,7 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 - **Frame keep ratios**: 1.00, 0.90, 0.80, 0.70, 0.50
 - **Palette sizes**: 256, 128, 64 colors  
-- **Lossy levels**: 0, 40, 120
+- **Lossy levels**: 0%, 60%, 100% (universal percentages, mapped to engine-specific ranges)
 - **Production Engines**: **gifsicle**, **Animately** (main pipeline)
 - **Experimental Engines**: **ImageMagick**, **FFmpeg**, **gifski** (experimental pipeline)
 

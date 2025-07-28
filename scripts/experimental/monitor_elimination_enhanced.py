@@ -22,7 +22,9 @@ def run_monitor():
         
         # Run the base monitoring
         try:
-            result = subprocess.run(['poetry', 'run', 'python', 'monitor_elimination.py'], 
+            # Use the correct path to the monitoring script
+            script_path = Path(__file__).parent / "monitor_elimination.py"
+            result = subprocess.run(['poetry', 'run', 'python', str(script_path)], 
                                   capture_output=True, text=True, timeout=10)
             if result.stdout:
                 print(result.stdout)
@@ -39,12 +41,13 @@ def run_monitor():
         print("🎯 CURRENT CONFIGURATION:")
         print("   • Frame reduction: 50% (0.5 ratio)")
         print("   • Color testing: 32, 128 colors")
-        print("   • Lossy testing: 60%, 100%")
+        print("   • Lossy testing: 60%, 100% (universal percentages)")
         print("   • Full synthetic GIF suite (25+ test cases)")
         print()
         
         print("🔧 RECENT FIXES APPLIED:")
         print("   ✅ Engine-specific lossy mapping (Gifsicle 0-300, others 0-100)")
+        print("   ✅ Universal percentage representation for lossy levels")
         print("   ✅ Frame dimension normalization for Gifski compatibility")
         print("   ✅ Enhanced failure tracking and automatic error recovery")
         print("   ✅ Cleared 159 stale failures from database")
@@ -54,6 +57,8 @@ def run_monitor():
         print("   • 2×2 parameter combinations (colors × lossy)")
         print("   • Systematic engine comparison")
         print("   • Content-type specific analysis")
+        print("   • Universal percentage mapping: 60% → Gifsicle:180, Others:60")
+        print("   • Universal percentage mapping: 100% → Gifsicle:300, Others:100")
         print()
         
         # Check for any new failures
