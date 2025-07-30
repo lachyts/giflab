@@ -2161,29 +2161,33 @@ class PipelineEliminator:
                     )
                     step_params["lossy_level"] = engine_specific_lossy
                     
-                    # Pass PNG sequence to gifski if available from previous step
-                    if png_sequence_dir and "Gifski" in wrapper.__class__.__name__:
+                    # Pass PNG sequence to tools that support it (gifski or animately advanced)
+                    if png_sequence_dir and ("Gifski" in wrapper.__class__.__name__ or 
+                                           "AnimatelyAdvancedLossyCompressor" == wrapper.__class__.__name__):
                         step_params["png_sequence_dir"] = str(png_sequence_dir)
                 
-                # Check if next step is gifski 
+                # Check if next step supports PNG sequence input (gifski or animately advanced)
                 next_step_is_gifski = False
+                next_step_is_animately_advanced = False
                 if i + 1 < len(pipeline.steps):
                     next_wrapper_name = pipeline.steps[i + 1].tool_cls.__name__
                     next_step_is_gifski = "Gifski" in next_wrapper_name
+                    next_step_is_animately_advanced = "AnimatelyAdvancedLossyCompressor" == next_wrapper_name
                 
                 # Always run the current step first
                 step_result = wrapper.apply(current_input, step_output, params=step_params)
                 pipeline_metadata.update(step_result)
                 
-                # Export PNG sequence AFTER step is applied if next step is gifski
-                # Also verify gifski tool is actually available to prevent race conditions
+                # Export PNG sequence AFTER step is applied if next step supports PNG input
+                # (gifski or animately advanced lossy). Verify tool availability to prevent race conditions
                 wrapper_name = wrapper.__class__.__name__
                 supports_png_export = (
                     "FFmpegFrameReducer" in wrapper_name or "FFmpegColorReducer" in wrapper_name or
                     "ImageMagickFrameReducer" in wrapper_name or "ImageMagickColorReducer" in wrapper_name or
                     "AnimatelyFrameReducer" in wrapper_name or "AnimatelyColorReducer" in wrapper_name
                 )
-                if (next_step_is_gifski and supports_png_export and self._is_gifski_available()):
+                next_step_supports_png = (next_step_is_gifski and self._is_gifski_available()) or next_step_is_animately_advanced
+                if (next_step_supports_png and supports_png_export):
                     png_sequence_dir = tmpdir_path / f"png_sequence_{step.variable}"
                     
                     # Use appropriate export function based on tool
@@ -2201,14 +2205,15 @@ class PipelineEliminator:
                     # Merge PNG export metadata
                     pipeline_metadata.update({f"png_export_{step.variable}": png_result})
                     
-                    # CRITICAL: Validate frame count for gifski compatibility
-                    # gifski requires at least 2 frames to create an animation
+                    # CRITICAL: Validate frame count for PNG sequence tools compatibility
+                    # Both gifski and animately advanced require at least 2 frames to create an animation
                     frame_count = png_result.get("frame_count", 0)
                     if frame_count < 2:
+                        next_tool_name = "gifski" if next_step_is_gifski else "animately-advanced"
                         self.logger.warning(
-                            f"PNG sequence has only {frame_count} frame(s), but gifski requires at least 2. "
+                            f"PNG sequence has only {frame_count} frame(s), but {next_tool_name} requires at least 2. "
                             f"Disabling PNG sequence optimization for this pipeline step. "
-                            f"gifski will fall back to processing the GIF directly."
+                            f"Tool will fall back to processing the GIF directly."
                         )
                         png_sequence_dir = None  # Disable optimization, use fallback GIF processing
                 else:

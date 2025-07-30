@@ -138,6 +138,7 @@ from .tool_wrappers import (
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     AnimatelyLossyCompressor,
+    AnimatelyAdvancedLossyCompressor,
     FFmpegColorReducer,
     FFmpegFrameReducer,
     FFmpegLossyCompressor,

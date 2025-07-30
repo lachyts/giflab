@@ -321,6 +321,62 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
+
+class AnimatelyAdvancedLossyCompressor(LossyCompressionTool):
+    NAME = "animately-advanced-lossy"
+    COMBINE_GROUP = "animately"
+
+    @classmethod
+    def available(cls) -> bool:
+        return _is_executable(DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH)
+
+    @classmethod
+    def version(cls) -> str:
+        try:
+            return get_animately_version()
+        except Exception:
+            return "unknown"
+
+    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Apply Animately's advanced lossy compression with PNG sequence input.
+        
+        This uses the PNG sequence pipeline for superior compression quality,
+        particularly effective for gradients and mixed content types.
+        
+        Args:
+            input_path: Path to input GIF file
+            output_path: Path to save compressed GIF
+            params: Dict containing 'lossy_level', optionally 'colors' and 'png_sequence_dir'
+            
+        Returns:
+            Dictionary with compression metadata
+        """
+        from .lossy import compress_with_animately_advanced_lossy
+        
+        if params is None or "lossy_level" not in params:
+            raise ValueError("params must include 'lossy_level' for lossy compression")
+        
+        lossy_level = int(params["lossy_level"])
+        color_keep_count = params.get("colors", None)
+        if color_keep_count is not None:
+            color_keep_count = int(color_keep_count)
+        
+        # Check if PNG sequence directory was provided by previous pipeline step
+        png_sequence_dir = params.get("png_sequence_dir", None)
+        if png_sequence_dir is not None:
+            png_sequence_dir = Path(png_sequence_dir)
+        
+        return compress_with_animately_advanced_lossy(
+            input_path,
+            output_path,
+            lossy_level=lossy_level,
+            color_keep_count=color_keep_count,
+            png_sequence_dir=png_sequence_dir,
+        )
+
+    def combines_with(self, other: ExternalTool) -> bool:
+        return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 # ---------------------------------------------------------------------------
 # ImageMagick (stub)
 # ---------------------------------------------------------------------------
