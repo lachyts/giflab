@@ -1,109 +1,105 @@
-# 🧪 Experimental Scripts
+# Experimental Scripts
 
-Utility scripts for the experimental testing framework and pipeline elimination process.
+This directory contains experimental and utility scripts for the Animately[[memory:3631063]] GIF compression project.
 
-# Run pipeline elimination
+## Scripts
 
+### `simple_monitor.py` - Enhanced Pipeline Elimination Monitor
+
+A real-time monitoring tool for pipeline elimination runs with enhanced batching awareness and configuration support.
+
+**Key Features:**
+- ✅ **Real-time progress tracking** with batching-aware updates
+- 📈 **Processing rate calculation** and trend analysis  
+- ⏱️ **ETA estimates** when actively processing
+- 🔍 **Failure analysis** with recent error examples
+- 💡 **Batching status detection** (explains when updates pause)
+- ⚙️ **Configuration support** with JSON config files and environment variables
+- 🧠 **Dynamic job estimation** from logs and metadata
+- 📊 **Enhanced cache performance tracking**
+
+**Why Updates Come in Batches:**
+The pipeline elimination system uses performance-optimized batching:
+- Results are written every 15-25 completed tests (not individually)
+- This is **normal behavior** - not a monitoring bug!
+- Large jumps (e.g., +25 results) are expected and healthy
+
+**Usage:**
 ```bash
-python -m giflab eliminate-pipelines --sampling-strategy full
-```
-
-
-## 📊 Pipeline Elimination Monitoring
-
-### Monitor Script
-
-**`simple_monitor.py`** - Pipeline elimination progress monitor with real-time updates
-
-### Usage
-
-```bash
-# From project root directory
-
-# Basic monitoring with default settings (30s refresh, auto-detect file)
+# Basic monitoring (uses default config)
 python scripts/experimental/simple_monitor.py
 
-# Custom refresh interval (10 seconds)
-python scripts/experimental/simple_monitor.py --refresh 10
+# Create sample configuration file
+python scripts/experimental/simple_monitor.py --create-config
 
-# Show more recent failures (5 instead of default 3)
-python scripts/experimental/simple_monitor.py --failures 5
+# Use custom configuration file
+python scripts/experimental/simple_monitor.py --config monitor_config.json
 
-# Custom results file location
-python scripts/experimental/simple_monitor.py --file custom_results.csv
+# Override specific settings (command line overrides config)
+python scripts/experimental/simple_monitor.py --refresh 10 --failures 5
 
-# Combine all options
-python scripts/experimental/simple_monitor.py --refresh 15 --failures 2 --file my_results.csv
+# Monitor custom results file
+python scripts/experimental/simple_monitor.py --file path/to/custom_results.csv
+
+# Environment variable configuration
+MONITOR_REFRESH_INTERVAL=15 python scripts/experimental/simple_monitor.py
 ```
 
-### Features
+**Configuration Support:**
+The monitor now supports flexible configuration through:
+- **JSON config files** (`--config path/to/config.json`)
+- **Environment variables** (e.g., `MONITOR_REFRESH_INTERVAL=15`)
+- **Command line overrides** (highest priority)
 
-- **Real-time progress tracking** - Live updates of test completion status
-- **Dynamic job estimation** - Calculates remaining work based on actual pipeline configuration
-- **Configurable refresh intervals** - Set update frequency from 1-60 seconds
-- **Recent failure analysis** - Shows recent failed pipeline combinations
-- **Success rate monitoring** - Tracks overall elimination success percentage
-- **Robust CSV parsing** - Uses Python's csv module for reliable data parsing
-- **Auto-detection of results files** - Searches multiple common locations for results
-- **Configurable results file path** - Specify custom location for results CSV
+Generate a sample config file with `--create-config` to see all available options.
 
-## 🎯 Current Configuration
+**Sample Output:**
+```
+🕐 14:23:45 - Pipeline Elimination Monitor (Enhanced)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The monitoring script displays the current pipeline elimination configuration:
+🔬 Pipeline Elimination Progress - 🔄 RUNNING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Total Tests Completed: 1,247
+✅ Successful: 1,089
+❌ Failed: 158
+📈 Success Rate: 87.3%
+⚡ Processing Rate: 18.5 results/min 📈 Accelerating
+🎯 Currently testing: complex_gradient
+📁 Results file: elimination_results/latest/streaming_results.csv
+📋 Estimated Progress: 13.4% (8,253 remaining, ETA: 447min)
+📊 Estimate based on: ~9,500 total jobs
 
-- **Frame reduction**: 50% (0.5 ratio) - consistent across all tests
-- **Color testing**: 32, 128 colors - two palette sizes
-- **Lossy testing**: 60%, 100% - universal percentages mapped to engine ranges
-- **Test matrix**: 2×2 combinations (colors × lossy) = 4 parameter sets
-- **Synthetic GIFs**: 25+ diverse test cases covering different content types
-
-## 🔧 Engine-Specific Lossy Mapping
-
-The system uses universal percentages that are automatically mapped to engine-specific ranges:
-
-| Engine | Range | 60% Maps To | 100% Maps To |
-|--------|-------|-------------|--------------|
-| Gifsicle | 0-300 | 180 | 300 |
-| Animately | 0-100 | 60 | 100 |
-| FFmpeg | 0-100 | 60 | 100 |
-| Gifski | 0-100 | 60 | 100 |
-| ImageMagick | 0-100 | 60 | 100 |
-
-This ensures consistent percentage-based representation while respecting each engine's native parameter ranges.
-
-## 🚀 Integration with Pipeline Elimination
-
-The monitoring script works seamlessly with the main pipeline elimination process:
-
-```bash
-# Start pipeline elimination in one terminal
-poetry run python -m giflab eliminate-pipelines
-
-# Monitor progress in another terminal
-python scripts/experimental/simple_monitor.py
-
-# Or use custom settings
-python scripts/experimental/simple_monitor.py --refresh 5 --failures 10
+🔄 BATCHING INFO:
+• Results are batched every 15-25 tests for performance
+• Large jumps in counts are normal and expected  
+• Processing rate shows actual progress between batches
 ```
 
-The monitor automatically detects the active elimination process and provides real-time updates without interfering with the main process.
+**Command Line Options:**
+- `--refresh, -r`: Update interval in seconds (uses config default if not specified)
+- `--failures, -f`: Number of recent failures to show (uses config default if not specified)  
+- `--file, -F`: Custom path to results CSV file (auto-detects by default)
+- `--config, -c`: Path to JSON configuration file
+- `--create-config`: Create a sample configuration file and exit
 
-## 📋 Command Line Options
+**Environment Variables:**
+- `MONITOR_REFRESH_INTERVAL`: Set refresh interval (seconds)
+- `MONITOR_FAILURES_TO_SHOW`: Set number of failures to display
+- `MONITOR_BUFFER_SIZE`: Set internal buffer size
+- `MONITOR_ESTIMATED_TOTAL_JOBS`: Set estimated total jobs for progress
+- `MONITOR_BASE_TIME_PER_JOB`: Set estimated seconds per job for ETA
+- `MONITOR_MIN_PROCESSING_RATE`: Set minimum rate for "actively processing" status
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--refresh` | `-r` | 30 | Refresh interval in seconds |
-| `--failures` | `-f` | 3 | Number of recent failures to display |
+**Monitoring Tips:**
+- **Batch Updates**: Don't worry about pauses - results come in batches every 15-25 tests
+- **Processing Rate**: Shows actual work being done between updates
+- **Trend Analysis**: 📈 Accelerating, ➡️ Steady, 📉 Slowing, ⏸️ Batching
+- **ETA Estimates**: Only shown when actively processing with measurable rate
 
-### Examples
-
-```bash
-# Quick updates every 5 seconds
-python scripts/experimental/simple_monitor.py -r 5
-
-# Show 10 recent failures with 20s refresh
-python scripts/experimental/simple_monitor.py -r 20 -f 10
-
-# Minimal updates for long-running jobs
-python scripts/experimental/simple_monitor.py --refresh 60 --failures 1
-``` 
+**File Detection:**
+Automatically searches these locations:
+- `elimination_results/latest/streaming_results.csv` (most common)
+- `elimination_results/streaming_results.csv`
+- `streaming_results.csv` 
+- `latest/streaming_results.csv` 

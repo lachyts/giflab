@@ -824,7 +824,7 @@ class PipelineEliminator:
     
     # Constants for progress tracking and memory management
     PROGRESS_SAVE_INTERVAL = 100  # Save resume data every N jobs to prevent memory buildup
-    BUFFER_FLUSH_INTERVAL = 50    # Flush results buffer every N jobs for performance
+    BUFFER_FLUSH_INTERVAL = 15    # Reduced from 50 for more frequent monitoring updates
     
     def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False, use_cache: bool = True):
         self.base_output_dir = output_dir
@@ -1719,23 +1719,36 @@ class PipelineEliminator:
         except ImportError:
             # Fallback if tqdm is not available
             class tqdm:
-                def __init__(self, total=None, initial=0, desc="", unit="", bar_format=""):
+                def __init__(self, total=None, initial=0, desc="", unit="", bar_format="", **kwargs):
                     self.total = total
                     self.n = initial
                     self.desc = desc
+                    self._last_line_length = 0
                 
                 def update(self, n=1):
                     self.n += n
                     if hasattr(self, 'total') and self.total:
                         percentage = (self.n / self.total) * 100
-                        print(f"\r{self.desc}: {self.n}/{self.total} ({percentage:.1f}%)", end="", flush=True)
+                        # Create progress line
+                        progress_line = f"{self.desc}: {self.n}/{self.total} ({percentage:.1f}%)"
+                        # Clear previous line completely by overwriting with spaces
+                        clear_line = "\r" + " " * self._last_line_length + "\r"
+                        print(clear_line + progress_line, end="", flush=True)
+                        self._last_line_length = len(progress_line)
                 
                 def close(self):
+                    # Clear the progress line and add newline
+                    if hasattr(self, '_last_line_length'):
+                        clear_line = "\r" + " " * self._last_line_length + "\r"
+                        print(clear_line, end="")
                     print()  # New line after progress
         
         # Calculate total jobs for progress tracking
         total_jobs = len(gif_paths) * len(pipelines) * len(self.test_params)
         self.logger.info(f"Starting comprehensive testing: {total_jobs:,} total pipeline combinations")
+        
+        # Save total jobs count to metadata for monitor to pick up
+        self._save_total_jobs_to_metadata(total_jobs)
         
         # Load or create resume file - optimize memory by tracking only job IDs
         resume_file = self.output_dir / "elimination_progress.json"
@@ -1782,14 +1795,15 @@ class PipelineEliminator:
         estimated_time = self._estimate_execution_time(remaining_jobs)
         self.logger.info(f"Estimated completion time: {estimated_time}")
         
-        # Setup progress bar
+        # Setup progress bar with proper line management
         progress = tqdm(total=total_jobs, initial=len(completed_job_ids), 
                        desc="Testing pipelines", unit="jobs",
-                       bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+                       bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                       ncols=100, leave=True)
         
         # Use small memory buffer for batching, not unlimited accumulation
         results_buffer = []
-        buffer_size = 100  # Process in batches of 100 results
+        buffer_size = 25  # Reduced from 100 for more frequent monitoring updates
         failed_jobs = 0
         
         # Test each combination
@@ -1833,7 +1847,8 @@ class PipelineEliminator:
                         # Validate pipeline doesn't contain invalid tools
                         if any("external-tool" in str(step) for step in pipeline.steps):
                             error_msg = f"Invalid pipeline contains 'external-tool' base class: {pipeline.identifier()}"
-                            self.logger.error(error_msg)
+                            self.logger.warning(f"🚨 Pipeline validation failed: {error_msg}")
+                            self.logger.info("💡 This prevents the external-tool registration bug from causing invalid results")
                             self.cache.queue_failure(
                                 pipeline.identifier(),
                                 gif_path.stem,
@@ -1867,7 +1882,8 @@ class PipelineEliminator:
                         for step in pipeline.steps:
                             if step.tool_cls.NAME == "external-tool":
                                 error_msg = f"Invalid tool with external-tool NAME in step: {step.name()}"
-                                self.logger.error(error_msg)
+                                self.logger.warning(f"🚨 Tool validation failed: {error_msg}")
+                                self.logger.info("💡 Filtering out base class tools that shouldn't be directly used")
                                 self.cache.queue_failure(
                                     pipeline.identifier(),
                                     gif_path.stem,
@@ -1993,20 +2009,26 @@ class PipelineEliminator:
         if self.cache:
             self.cache.flush_batch(force=True)
         
-        # Log cache performance statistics
+        # Log cache performance statistics with enhanced visibility
         if self.cache:
             total_cache_operations = cache_hits + cache_misses
             if total_cache_operations > 0:
                 cache_hit_rate = (cache_hits / total_cache_operations) * 100
-                self.logger.info(f"💾 Cache performance: {cache_hits} hits, {cache_misses} misses ({cache_hit_rate:.1f}% hit rate)")
+                self.logger.info(f"💾 Cache Performance Summary:")
+                self.logger.info(f"   📈 Cache hits: {cache_hits:,}")
+                self.logger.info(f"   📉 Cache misses: {cache_misses:,}")
+                self.logger.info(f"   🎯 Hit rate: {cache_hit_rate:.1f}%")
                 
                 # Estimate time saved
                 estimated_time_per_test = 2.5  # seconds (conservative estimate)
                 time_saved_minutes = (cache_hits * estimated_time_per_test) / 60
                 if time_saved_minutes > 1:
-                    self.logger.info(f"⏱️ Estimated time saved by cache: {time_saved_minutes:.1f} minutes")
+                    self.logger.info(f"   ⏱️ Estimated time saved: {time_saved_minutes:.1f} minutes")
+                    if time_saved_minutes > 60:
+                        time_saved_hours = time_saved_minutes / 60
+                        self.logger.info(f"   ⏱️ Time saved (hours): {time_saved_hours:.1f}h")
             else:
-                self.logger.info("💾 Cache statistics: No cache operations performed")
+                self.logger.info("💾 Cache statistics: No cache operations performed (all results were new)")
         
         # Final flush of any remaining results in buffer
         self._flush_results_buffer(results_buffer, csv_writer, csv_file, force=True)
@@ -2069,7 +2091,7 @@ class PipelineEliminator:
         if not buffer:
             return
             
-        if force or len(buffer) >= 50:  # Configurable flush threshold
+        if force or len(buffer) >= 15:  # Reduced from 50 for more frequent monitoring updates
             try:
                 # Write all buffered results to CSV
                 for result in buffer:
@@ -2373,15 +2395,15 @@ class PipelineEliminator:
             # Check if CUDA is available
             cuda_available = cv2.cuda.getCudaEnabledDeviceCount() > 0
             
-            if not cuda_available:
-                # Fall back to regular CPU calculation with clear communication
-                self.logger.warning("🔄 CUDA devices became unavailable during processing")
-                self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
-                self.logger.info("💡 Performance may be slower than expected")
-                from .metrics import calculate_comprehensive_metrics
-                return calculate_comprehensive_metrics(original_path, compressed_path)
-            
-            self.logger.debug("🚀 Computing quality metrics using GPU acceleration")
+                    if not cuda_available:
+            # Fall back to regular CPU calculation with clear communication
+            self.logger.warning("🔄 CUDA devices became unavailable during processing")
+            self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
+            self.logger.info("💡 Performance may be slower than expected")
+            from .metrics import calculate_comprehensive_metrics
+            return calculate_comprehensive_metrics(original_path, compressed_path)
+        
+        self.logger.info("🚀 Computing quality metrics using GPU acceleration")
             
             # Use GPU-accelerated version
             return self._calculate_cuda_metrics(original_path, compressed_path)
@@ -2528,12 +2550,20 @@ class PipelineEliminator:
         return result
     
     def _gpu_ssim(self, gpu_img1: 'cv2.cuda_GpuMat', gpu_img2: 'cv2.cuda_GpuMat') -> float:
-        """GPU-accelerated SSIM calculation (simplified version)."""
+        """GPU-accelerated SSIM calculation (simplified version).
+        
+        This implements a simplified version of SSIM (Structural Similarity Index) 
+        using CUDA operations for better performance on large datasets.
+        
+        SSIM Formula: SSIM(x,y) = (2μxμy + C1)(2σxy + C2) / (μx² + μy² + C1)(σx² + σy² + C2)
+        Where μ = mean, σ = standard deviation, σxy = covariance, C1,C2 = stability constants
+        """
         import cv2
         import numpy as np
         
         try:
-            # Convert to grayscale on GPU if needed
+            # Convert to grayscale on GPU if needed (reduces computational complexity)
+            # Most quality metrics work better on luminance rather than individual color channels
             if gpu_img1.channels() == 3:
                 gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)
                 gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
@@ -2545,35 +2575,42 @@ class PipelineEliminator:
             return 0.0
         
         try:
-            # Convert to float32 for calculations
+            # Convert to float32 for calculations (higher precision than uint8)
             gpu_float1 = cv2.cuda.convertTo(gpu_gray1, cv2.CV_32F)
             gpu_float2 = cv2.cuda.convertTo(gpu_gray2, cv2.CV_32F)
             
-            # SSIM constants
-            C1 = (0.01 * 255) ** 2
-            C2 = (0.03 * 255) ** 2
+            # SSIM constants for numerical stability (Wang et al. 2004)
+            # C1 = (K1 * L)^2, C2 = (K2 * L)^2 where L=255 (dynamic range), K1=0.01, K2=0.03
+            C1 = (0.01 * 255) ** 2  # ~6.5 - prevents division by zero for mean calculations
+            C2 = (0.03 * 255) ** 2  # ~58.5 - prevents division by zero for variance calculations
             
-            # Mean calculations using GPU blur
+            # Mean calculations using Gaussian blur (approximates local mean in SSIM window)
+            # 11x11 kernel with σ=1.5 is standard for SSIM implementation
             kernel_size = (11, 11)
             sigma = 1.5
             
+            # μ1, μ2 = local means computed via Gaussian blur
             mu1 = cv2.cuda.GaussianBlur(gpu_float1, kernel_size, sigma)
             mu2 = cv2.cuda.GaussianBlur(gpu_float2, kernel_size, sigma)
         except Exception as e:
             self.logger.warning(f"GPU SSIM calculation failed: {e}")
             return 0.0
         
-        mu1_sq = cv2.cuda.multiply(mu1, mu1)
-        mu2_sq = cv2.cuda.multiply(mu2, mu2)
-        mu1_mu2 = cv2.cuda.multiply(mu1, mu2)
+        # Pre-compute squared means and cross-terms for SSIM formula
+        mu1_sq = cv2.cuda.multiply(mu1, mu1)    # μ1²
+        mu2_sq = cv2.cuda.multiply(mu2, mu2)    # μ2² 
+        mu1_mu2 = cv2.cuda.multiply(mu1, mu2)   # μ1μ2
         
-        # Variance calculations
+        # Variance calculations using GPU operations
+        # σ1² = E[X1²] - μ1² (variance = mean of squares minus square of mean)
         sigma1_sq = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float1, gpu_float1), kernel_size, sigma)
         sigma1_sq = cv2.cuda.subtract(sigma1_sq, mu1_sq)
         
+        # σ2² = E[X2²] - μ2²
         sigma2_sq = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float2, gpu_float2), kernel_size, sigma)
         sigma2_sq = cv2.cuda.subtract(sigma2_sq, mu2_sq)
         
+        # σ12 = E[X1X2] - μ1μ2 (covariance between images)
         sigma12 = cv2.cuda.GaussianBlur(cv2.cuda.multiply(gpu_float1, gpu_float2), kernel_size, sigma)
         sigma12 = cv2.cuda.subtract(sigma12, mu1_mu2)
         
@@ -3218,22 +3255,60 @@ class PipelineEliminator:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
     
+    def _save_total_jobs_to_metadata(self, total_jobs: int):
+        """Save total jobs count to metadata file for monitor to pick up.
+        
+        Args:
+            total_jobs: Total number of jobs in this elimination run
+        """
+        try:
+            metadata_file = self.output_dir / "run_metadata.json"
+            
+            # Load existing metadata if it exists
+            metadata = {}
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                except Exception:
+                    pass  # Start with empty metadata if loading fails
+            
+            # Update with total jobs count
+            metadata['total_jobs'] = total_jobs
+            metadata['jobs_updated_at'] = datetime.now().isoformat()
+            
+            # Save updated metadata
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            self.logger.info(f"📊 Saved total jobs count ({total_jobs:,}) to metadata for monitor")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to save total jobs to metadata: {e}")
+            # Non-critical error, continue execution
+    
     def _save_failed_pipelines_log(self, failed_results: pd.DataFrame):
         """Create and save detailed failed pipelines log."""
+        def _sanitize_for_json(value):
+            """Convert pandas NA values to None for JSON serialization."""
+            if pd.isna(value):
+                return None
+            return value
+        
         failed_pipeline_log = []
         for _, row in failed_results.iterrows():
             failed_entry = {
                 'timestamp': datetime.now().isoformat(),
-                'gif_name': row.get('gif_name', 'unknown'),
-                'content_type': row.get('content_type', 'unknown'),
-                'pipeline_id': row.get('pipeline_id', 'unknown'),
-                'error_message': row.get('error', 'No error message'),
-                'pipeline_steps': row.get('pipeline_steps', []),
-                'tools_used': row.get('tools_used', []),
+                'gif_name': _sanitize_for_json(row.get('gif_name', 'unknown')),
+                'content_type': _sanitize_for_json(row.get('content_type', 'unknown')),
+                'pipeline_id': _sanitize_for_json(row.get('pipeline_id', 'unknown')),
+                'error_message': _sanitize_for_json(row.get('error', 'No error message')),
+                'pipeline_steps': _sanitize_for_json(row.get('pipeline_steps', [])),
+                'tools_used': _sanitize_for_json(row.get('tools_used', [])),
                 'test_parameters': {
-                    'colors': row.get('applied_colors', row.get('test_colors', None)),
-                    'lossy': row.get('applied_lossy', row.get('test_lossy', None)),
-                    'frame_ratio': row.get('applied_frame_ratio', row.get('test_frame_ratio', None))
+                    'colors': _sanitize_for_json(row.get('applied_colors', row.get('test_colors', None))),
+                    'lossy': _sanitize_for_json(row.get('applied_lossy', row.get('test_lossy', None))),
+                    'frame_ratio': _sanitize_for_json(row.get('applied_frame_ratio', row.get('test_frame_ratio', None)))
                 }
             }
             failed_pipeline_log.append(failed_entry)
