@@ -1321,7 +1321,11 @@ def debug_failures(
                 click.echo(f"\n[{i+1}] {failure['error_type'].upper()} | {failure['gif_name']} | {failure['pipeline_id']}")
                 click.echo(f"    Error: {failure['error_message']}")
                 click.echo(f"    Time: {failure['created_at']}")
-                click.echo(f"    Params: colors={failure['test_colors']}, lossy={failure['test_lossy']}, frames={failure['test_frame_ratio']}")
+                # Use semantic applied_* parameters if available, fallback to test_* for backward compatibility  
+                colors = failure.get('applied_colors', failure.get('test_colors', 'N/A'))
+                lossy = failure.get('applied_lossy', failure.get('test_lossy', 'N/A'))
+                frames = failure.get('applied_frame_ratio', failure.get('test_frame_ratio', 'N/A'))
+                click.echo(f"    Applied: colors={colors}, lossy={lossy}, frames={frames}")
                 
                 if failure['tools_used']:
                     try:

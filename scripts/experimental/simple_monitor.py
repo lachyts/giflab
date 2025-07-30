@@ -43,7 +43,7 @@ def find_results_file(custom_path: str = None) -> Path:
 
 
 def calculate_estimated_total_jobs():
-    """Calculate estimated total jobs dynamically instead of hard-coded value."""
+    """Calculate estimated total jobs dynamically instead of hard-coded."""
     try:
         # Try to read from pipeline configuration or progress file
         progress_locations = [
@@ -57,13 +57,14 @@ def calculate_estimated_total_jobs():
                 import json
                 with open(progress_file, 'r') as f:
                     progress_data = json.load(f)
-                    # Look for total job estimate in progress data
-                    if 'estimated_total_jobs' in progress_data:
-                        return progress_data['estimated_total_jobs']
+                    # The total number of jobs is the number of entries in the JSON
+                    total_jobs = len(progress_data)
+                    if total_jobs > 0:
+                        return total_jobs
         
-        # Try to estimate from running process or configuration
+        # If no progress file found, try to estimate from running process or configuration
         # This is a rough estimate based on typical elimination runs
-        # Default synthetic GIFs: 25, typical pipelines: ~200-500, test params: ~4
+        # Default synthetic GIFs: 25, typical pipelines: ~200-500, params: ~4
         return 25 * 300 * 4  # Conservative middle estimate
         
     except Exception:
@@ -71,7 +72,9 @@ def calculate_estimated_total_jobs():
         return 10000
 
 
-def monitor_elimination(refresh_interval=30, show_recent_failures=3, results_file_path=None):
+def monitor_elimination(
+    refresh_interval=30, show_recent_failures=3, results_file_path=None
+):
     """Monitor pipeline elimination by reading CSV files directly.
     
     Args:
@@ -92,10 +95,14 @@ def monitor_elimination(refresh_interval=30, show_recent_failures=3, results_fil
         try:
             results_file = find_results_file(results_file_path)
         except FileNotFoundError:
-            results_file = Path("elimination_results/latest/streaming_results.csv")
+            results_file = Path(
+                "elimination_results/latest/streaming_results.csv"
+            )
         
         if not results_file.exists():
-            print("❌ No streaming results file found. Is the elimination running?")
+            print(
+                "❌ No streaming results file found. Is the elimination running?"
+            )
             print(f"   Expected: {results_file}")
             print("   Searched locations:")
             search_locations = [
@@ -134,49 +141,90 @@ def monitor_elimination(refresh_interval=30, show_recent_failures=3, results_fil
                         (successful / total * 100) if total > 0 else 0
                     )
                     
-                    # Get most recent test
+                    # Get most recent test and check if running
                     recent_gif = "unknown"
+                    is_likely_complete = False
                     if len(lines) > 1:
                         last_row = lines[-1]
                         if len(last_row) > 0:
                             recent_gif = last_row[0]
+                        
+                        # Check if run seems complete by looking at recent activity
+                        # If last several entries are all the same GIF, likely done with that test set
+                        recent_gifs = set()
+                        for row in lines[-10:]:  # Check last 10 entries
+                            if len(row) > 0:
+                                recent_gifs.add(row[0])
+                        is_likely_complete = len(recent_gifs) <= 2  # Very few unique GIFs recently
                     
-                    print("🔬 Pipeline Elimination Progress")
+                    status_emoji = "🏁" if is_likely_complete else "🔄"
+                    status_text = "COMPLETED" if is_likely_complete else "RUNNING"
+                    
+                    print(f"🔬 Pipeline Elimination Progress - {status_emoji} {status_text}")
                     print("━" * 40)
                     print(f"📊 Total Tests Completed: {total:,}")
                     print(f"✅ Successful: {successful:,}")
                     print(f"❌ Failed: {failed:,}")
                     print(f"📈 Success Rate: {success_rate:.1f}%")
-                    print(f"🎯 Currently testing: {recent_gif}")
+                    if not is_likely_complete:
+                        print(f"🎯 Currently testing: {recent_gif}")
+                    else:
+                        print(f"🎯 Last tested: {recent_gif}")
                     print(f"📁 Results file: {results_file}")
                     
                     # Progress estimate (dynamically calculated)
                     estimated_total = calculate_estimated_total_jobs()
                     progress_pct = (
-                        (total / estimated_total * 100) if estimated_total > 0 else 0
+                        (total / estimated_total * 100) 
+                        if estimated_total > 0 else 0
                     )
                     remaining = estimated_total - total
                     
-                    print(f"📋 Estimated Progress: {progress_pct:.1f}% "
-                          f"({remaining:,} remaining)")
-                    print(f"📊 Estimate based on: ~{estimated_total:,} total jobs")
+                    if not is_likely_complete:
+                        print(f"📋 Estimated Progress: {progress_pct:.1f}% "
+                              f"({remaining:,} remaining)")
+                    else:
+                        print(f"📋 Final Results: {total:,} total tests completed")
+                    print(
+                        f"📊 Estimate based on: ~{estimated_total:,} total jobs"
+                    )
                     
-                    # Show recent failures if any
+                    # Show failure patterns 
                     if failed > 0:
-                        print("\n🔍 Recent Failure Patterns:")
+                        print(f"\n🔍 Failure Analysis ({failed} total failures):")
+                        
+                        # First try to find recent failures (last 50 entries)
                         failure_rows = [
                             row for row in lines[-50:] 
                             if len(row) > 3 and row[3].strip() == 'False'
                         ]
+                        
                         if failure_rows:
-                            # Last N failures
+                            print("   Recent failures:")
                             for row in failure_rows[-show_recent_failures:]:
-                                if len(row) > 2:
+                                if len(row) >= 3:
                                     gif_name = row[0]
                                     pipeline = (
                                         row[2].replace('_', ' ')[:50] + "..."
+                                        if len(row[2]) > 50 else row[2].replace('_', ' ')
                                     )
                                     print(f"   ❌ {gif_name} | {pipeline}")
+                        else:
+                            # No recent failures, show some earlier ones
+                            all_failure_rows = [
+                                row for row in lines[1:] 
+                                if len(row) > 3 and row[3].strip() == 'False'
+                            ]
+                            if all_failure_rows:
+                                print("   Example failures (from earlier in run):")
+                                for row in all_failure_rows[-show_recent_failures:]:
+                                    if len(row) >= 3:
+                                        gif_name = row[0]
+                                        pipeline = (
+                                            row[2].replace('_', ' ')[:50] + "..."
+                                            if len(row[2]) > 50 else row[2].replace('_', ' ')
+                                        )
+                                        print(f"   ❌ {gif_name} | {pipeline}")
                     
             except Exception as e:
                 print(f"❌ Error reading results: {e}")

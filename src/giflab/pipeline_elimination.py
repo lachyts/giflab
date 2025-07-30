@@ -50,6 +50,10 @@ if False:
                         test_colors INTEGER NOT NULL,
                         test_lossy INTEGER NOT NULL,
                         test_frame_ratio REAL NOT NULL,
+                        applied_colors INTEGER,
+                        applied_lossy INTEGER,
+                        applied_frame_ratio REAL,
+                        actual_pipeline_steps INTEGER,
                         git_commit TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         result_json TEXT NOT NULL
@@ -65,6 +69,10 @@ if False:
                         test_colors INTEGER NOT NULL,
                         test_lossy INTEGER NOT NULL,
                         test_frame_ratio REAL NOT NULL,
+                        applied_colors INTEGER,
+                        applied_lossy INTEGER,
+                        applied_frame_ratio REAL,
+                        actual_pipeline_steps INTEGER,
                         git_commit TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         error_type TEXT NOT NULL,
@@ -76,9 +84,16 @@ if False:
                 """)
                 
                 # Create indexes for faster lookups
+                # Legacy index for backward compatibility
                 conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_cache_lookup 
                     ON pipeline_results(pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio)
+                """)
+                
+                # New index for semantic parameters
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_semantic_lookup 
+                    ON pipeline_results(pipeline_id, gif_name, applied_colors, applied_lossy, applied_frame_ratio)
                 """)
                 
                 conn.execute("""
@@ -91,11 +106,41 @@ if False:
                     ON pipeline_failures(error_type, git_commit, created_at)
                 """)
                 
+                # Add migration logic for existing databases
+                self._migrate_database_schema(conn)
+                
                 conn.commit()
                 self.logger.debug(f"📁 Initialized cache database: {self.cache_db_path}")
                 
         except Exception as e:
             self.logger.warning(f"Failed to initialize cache database: {e}")
+    
+    def _migrate_database_schema(self, conn):
+        """Add new semantic columns to existing databases."""
+        try:
+            # Check if new columns exist, add them if not
+            cursor = conn.execute("PRAGMA table_info(pipeline_results)")
+            columns = {row[1] for row in cursor.fetchall()}
+            
+            if 'applied_colors' not in columns:
+                self.logger.info("🔄 Migrating cache database schema to semantic parameters")
+                
+                # Add new columns to pipeline_results
+                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_colors INTEGER")
+                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_lossy INTEGER") 
+                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_frame_ratio REAL")
+                conn.execute("ALTER TABLE pipeline_results ADD COLUMN actual_pipeline_steps INTEGER")
+                
+                # Add new columns to pipeline_failures
+                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_colors INTEGER")
+                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_lossy INTEGER")
+                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_frame_ratio REAL") 
+                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN actual_pipeline_steps INTEGER")
+                
+                self.logger.info("✅ Database schema migration completed")
+                
+        except Exception as e:
+            self.logger.warning(f"Database migration failed (non-critical): {e}")
     
     def _generate_cache_key(self, pipeline_id: str, gif_name: str, params: dict) -> str:
         """Generate a unique cache key for a pipeline test combination."""
@@ -164,6 +209,10 @@ if False:
             'test_colors': params['colors'],
             'test_lossy': params['lossy'],
             'test_frame_ratio': params.get('frame_ratio', 1.0),
+            'applied_colors': result.get('applied_colors'),
+            'applied_lossy': result.get('applied_lossy'),
+            'applied_frame_ratio': result.get('applied_frame_ratio'),
+            'actual_pipeline_steps': result.get('actual_pipeline_steps'),
             'git_commit': self.git_commit,
             'created_at': datetime.now().isoformat(),
             'result_json': json.dumps(result)
@@ -188,6 +237,10 @@ if False:
             'test_colors': params['colors'],
             'test_lossy': params['lossy'],
             'test_frame_ratio': params.get('frame_ratio', 1.0),
+            'applied_colors': None,  # Always None for failures since pipeline failed
+            'applied_lossy': None,   # Always None for failures since pipeline failed
+            'applied_frame_ratio': None,  # Always None for failures since pipeline failed
+            'actual_pipeline_steps': None,  # Always None for failures since pipeline failed
             'git_commit': self.git_commit,
             'created_at': datetime.now().isoformat(),
             'error_type': error_type,
@@ -224,10 +277,12 @@ if False:
             with sqlite3.connect(self.cache_db_path) as conn:
                 conn.executemany("""
                     INSERT OR REPLACE INTO pipeline_results 
-                    (cache_key, pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio, 
+                    (cache_key, pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
+                     applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
                      git_commit, created_at, result_json)
                     VALUES (:cache_key, :pipeline_id, :gif_name, :test_colors, :test_lossy, 
-                            :test_frame_ratio, :git_commit, :created_at, :result_json)
+                            :test_frame_ratio, :applied_colors, :applied_lossy, :applied_frame_ratio,
+                            :actual_pipeline_steps, :git_commit, :created_at, :result_json)
                 """, self._pending_results)
                 
                 conn.commit()
@@ -247,10 +302,12 @@ if False:
             with sqlite3.connect(self.cache_db_path) as conn:
                 conn.executemany("""
                     INSERT INTO pipeline_failures 
-                    (pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio, 
+                    (pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
+                     applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
                      git_commit, created_at, error_type, error_message, error_traceback,
                      pipeline_steps, tools_used)
                     VALUES (:pipeline_id, :gif_name, :test_colors, :test_lossy, :test_frame_ratio,
+                            :applied_colors, :applied_lossy, :applied_frame_ratio, :actual_pipeline_steps,
                             :git_commit, :created_at, :error_type, :error_message, :error_traceback,
                             :pipeline_steps, :tools_used)
                 """, self._pending_failures)
@@ -395,6 +452,7 @@ if False:
                 
                 cursor = conn.execute(f"""
                     SELECT pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
+                           applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
                            error_type, error_message, error_traceback, created_at,
                            pipeline_steps, tools_used
                     FROM pipeline_failures 
@@ -1707,7 +1765,8 @@ class PipelineEliminator:
             'chist_mean', 'edge_similarity_mean', 'texture_similarity_mean',
             'sharpness_similarity_mean', 'composite_quality',
             'render_time_ms', 'total_processing_time_ms',
-            'pipeline_steps', 'tools_used', 'test_colors', 'test_lossy', 'test_frame_ratio',
+            'pipeline_steps', 'tools_used', 
+            'applied_colors', 'applied_lossy', 'applied_frame_ratio', 'actual_pipeline_steps',
             'error', 'error_traceback', 'error_timestamp'
         ]
         
@@ -1876,9 +1935,11 @@ class PipelineEliminator:
                             'success': False,
                             'pipeline_steps': [step.name for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
                             'tools_used': pipeline.tools_used() if hasattr(pipeline, 'tools_used') else [],
-                            'test_colors': params.get('colors', None),
-                            'test_lossy': params.get('lossy', None),
-                            'test_frame_ratio': params.get('frame_ratio', None),
+                            # For failed pipelines, applied parameters are always None since pipeline failed
+                            'applied_colors': None,
+                            'applied_lossy': None, 
+                            'applied_frame_ratio': None,
+                            'actual_pipeline_steps': None,
                             # Add placeholders for metrics that would be in successful results
                             'file_size_kb': None,
                             'original_size_kb': None,
@@ -1961,7 +2022,21 @@ class PipelineEliminator:
         
         # Load results from streaming CSV file
         try:
-            results_df = pd.read_csv(streaming_csv_path)
+            # IMPORTANT: Semantic correctness for ML/analysis
+            # - applied_* parameters only contain values when that processing step actually executed
+            # - None/NaN when step was no-op or pipeline failed
+            # - Never use 0 as default - would create false patterns in ML models
+            # Use nullable integer types to properly handle None values 
+            dtype_spec = {
+                # Semantically correct columns - only contain values when actually applied
+                'applied_colors': 'Int64',     # Nullable - None when color step was no-op or failed
+                'applied_lossy': 'Int64',      # Nullable - None when lossy step was no-op or failed
+                'applied_frame_ratio': 'float64', # Nullable - NaN when frame step was no-op or failed
+                'actual_pipeline_steps': 'Int64', # Count of actual processing steps
+                'error': 'string',             # String type for error messages
+                'success': 'boolean'           # Boolean type for success flag
+            }
+            results_df = pd.read_csv(streaming_csv_path, dtype=dtype_spec, low_memory=False)
             self.logger.info(f"📊 Loaded {len(results_df)} results from streaming CSV")
             return results_df
         except Exception as e:
@@ -2027,9 +2102,10 @@ class PipelineEliminator:
                         'total_processing_time_ms': result.get('total_processing_time_ms', 0),
                         'pipeline_steps': str(result.get('pipeline_steps', [])),
                         'tools_used': str(result.get('tools_used', [])),
-                        'test_colors': result.get('test_colors', 0),
-                        'test_lossy': result.get('test_lossy', 0),
-                        'test_frame_ratio': result.get('test_frame_ratio', 1.0),
+                        'applied_colors': result.get('applied_colors', None),
+                        'applied_lossy': result.get('applied_lossy', None),
+                        'applied_frame_ratio': result.get('applied_frame_ratio', None),
+                        'actual_pipeline_steps': result.get('actual_pipeline_steps', 0),
                         'error': result.get('error', ''),
                         'error_traceback': result.get('error_traceback', ''),
                         'error_timestamp': result.get('error_timestamp', '')
@@ -2198,13 +2274,53 @@ class PipelineEliminator:
                 'pipeline_steps': len(pipeline.steps),
                 'tools_used': [step.tool_cls.NAME for step in pipeline.steps],
                 
-                # Test parameters
-                'test_colors': params["colors"],
-                'test_lossy': params["lossy"],
-                'test_frame_ratio': params.get("frame_ratio", 1.0),
+                # Semantically correct parameters: only record values when actually applied
+                'applied_colors': params["colors"] if self._pipeline_uses_color_reduction(pipeline) else None,
+                'applied_lossy': params["lossy"] if self._pipeline_uses_lossy_compression(pipeline) else None,
+                'applied_frame_ratio': params.get("frame_ratio", 1.0) if self._pipeline_uses_frame_reduction(pipeline) else None,
+                
+                # Actual processing steps (exclude no-ops)
+                'actual_pipeline_steps': self._count_actual_steps(pipeline),
             }
             
             return result
+    
+    def _pipeline_uses_color_reduction(self, pipeline) -> bool:
+        """Check if pipeline actually applies color reduction (not no-op)."""
+        for step in pipeline.steps:
+            if (step.variable == "color_reduction" and 
+                hasattr(step.tool_cls, 'NAME') and 
+                step.tool_cls.NAME != "none-color"):
+                return True
+        return False
+    
+    def _pipeline_uses_frame_reduction(self, pipeline) -> bool:
+        """Check if pipeline actually applies frame reduction (not no-op)."""
+        for step in pipeline.steps:
+            if (step.variable == "frame_reduction" and 
+                hasattr(step.tool_cls, 'NAME') and 
+                step.tool_cls.NAME != "none-frame"):
+                return True
+        return False
+    
+    def _pipeline_uses_lossy_compression(self, pipeline) -> bool:
+        """Check if pipeline actually applies lossy compression (not no-op)."""
+        for step in pipeline.steps:
+            if (step.variable == "lossy_compression" and 
+                hasattr(step.tool_cls, 'NAME') and 
+                step.tool_cls.NAME != "none-lossy"):
+                return True
+        return False
+    
+    def _count_actual_steps(self, pipeline) -> int:
+        """Count only non-no-op processing steps."""
+        actual_steps = 0
+        for step in pipeline.steps:
+            if hasattr(step.tool_cls, 'NAME'):
+                tool_name = step.tool_cls.NAME
+                if not tool_name.startswith("none-"):
+                    actual_steps += 1
+        return actual_steps
     
     def _test_gpu_availability(self):
         """Test GPU availability and log status."""
@@ -3110,9 +3226,9 @@ class PipelineEliminator:
                 'pipeline_steps': row.get('pipeline_steps', []),
                 'tools_used': row.get('tools_used', []),
                 'test_parameters': {
-                    'colors': row.get('test_colors', None),
-                    'lossy': row.get('test_lossy', None),
-                    'frame_ratio': row.get('test_frame_ratio', None)
+                    'colors': row.get('applied_colors', row.get('test_colors', None)),
+                    'lossy': row.get('applied_lossy', row.get('test_lossy', None)),
+                    'frame_ratio': row.get('applied_frame_ratio', row.get('test_frame_ratio', None))
                 }
             }
             failed_pipeline_log.append(failed_entry)

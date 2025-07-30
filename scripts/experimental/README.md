@@ -2,6 +2,13 @@
 
 Utility scripts for the experimental testing framework and pipeline elimination process.
 
+# Run pipeline elimination
+
+```bash
+python -m giflab eliminate-pipelines --sampling-strategy full
+```
+
+
 ## 📊 Pipeline Elimination Monitoring
 
 ### Monitor Script

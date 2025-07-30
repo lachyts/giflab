@@ -116,6 +116,10 @@ debug_*.gif
 *.log
 temp_*
 
+# Pipeline cache databases
+pipeline_results_cache.db
+**/pipeline_results_cache.db
+
 # Test workspace (keep structure, ignore temporary content)
 test-workspace/temp/
 test-workspace/manual/*/
