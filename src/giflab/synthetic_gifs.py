@@ -227,12 +227,32 @@ class SyntheticGifGenerator:
         """
         specs = self.get_targeted_specs() if use_targeted_set else self.synthetic_specs
         
+        from importlib import import_module
+        try:
+            tqdm = import_module('tqdm').tqdm  # type: ignore[attr-defined]
+        except ModuleNotFoundError:  # pragma: no cover – fallback when tqdm missing
+            class tqdm:  # noqa: WPS430 – simple stub
+                def __init__(self, iterable, **kwargs):
+                    self.iterable = iterable
+                def __iter__(self):
+                    return iter(self.iterable)
+                def update(self, _n: int = 1):
+                    pass
+                def close(self):
+                    pass
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    self.close()
+        
         gif_paths = []
-        for spec in specs:
-            gif_path = self.output_dir / f"{spec.name}.gif"
-            if not gif_path.exists():
-                self._create_synthetic_gif(gif_path, spec)
-            gif_paths.append(gif_path)
+        with tqdm(specs, desc='🖼️  Generating GIFs', unit='gif') as progress:
+            for spec in progress:
+                gif_path = self.output_dir / f"{spec.name}.gif"
+                if not gif_path.exists():
+                    self._create_synthetic_gif(gif_path, spec)
+                gif_paths.append(gif_path)
+                progress.update(0)
             
         return gif_paths
     

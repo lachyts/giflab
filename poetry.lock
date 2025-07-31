@@ -3091,6 +3091,20 @@ pytest = ">=4.6"
 testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtualenv"]
 
 [[package]]
+name = "pytest-progress"
+version = "1.3.0"
+description = "pytest plugin for instant test progress status"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "pytest_progress-1.3.0.tar.gz", hash = "sha256:b2a6cd0b0cd8b50b19f56777402835e546dc8404eb7fa77ac2ace9dc719ec50e"},
+]
+
+[package.dependencies]
+pytest = ">=2.7"
+
+[[package]]
 name = "pytest-xdist"
 version = "3.8.0"
 description = "pytest xdist plugin for distributed testing, most importantly across multiple CPUs"
@@ -4458,4 +4472,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "7db6ee38ea8bfd04f4e63b3728e592e91ae72cc94e791e24f45a544819256f8c"
+content-hash = "10a3ec6a48ea24b6ded61a3796222d1d9dc03cb777f8a2d3ff76ddc109658c2a"

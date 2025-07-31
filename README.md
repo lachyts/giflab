@@ -33,8 +33,8 @@ GifLab uses a **two-pipeline approach** to balance stability and innovation:
 
 #### 🧪 **Experimental Pipeline** (`experiment` command)  
 - **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
-- **Purpose**: Testing, comparison, finding optimal engines
-- **Usage**: `python -m giflab experiment --matrix`
+- **Purpose**: Comprehensive testing, pipeline elimination, finding optimal combinations
+- **Usage**: `python -m giflab experiment --sampling representative`
 
 | Engine | Pipeline | Color | Frame | Lossy | Best For |
 |--------|----------|-------|-------|--------|----------|
@@ -55,8 +55,8 @@ Workflow summary:
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| 1. Explore | `giflab experiment` | Builds sample GIFs, enumerates pipelines via matrix generator, benchmarks them, writes `experiment_results.csv`. |
-| 2. Analyse | Use notebooks / `giflab.analysis_tools` | Plot performance matrices, call `recommend_tools()` to pick winners. |
+| 1. Explore | `giflab experiment --sampling representative` | Tests pipeline combinations on synthetic GIFs, eliminates underperformers, writes `experiment_results.csv`. |
+| 2. Analyse | Use notebooks / `giflab select-pipelines` | Analyze results and select top performing pipelines for production. |
 | 3. Run | `giflab run data/raw/` | Executes chosen pipelines at scale, writing results and renders. |
 
 The **Experiment → Analyse → Run** loop keeps production runs fast and data-driven.
@@ -102,13 +102,13 @@ GifLab's experimental framework tests multiple algorithmic combinations to:
 After experimental validation, apply findings to your main compression pipeline:
 ```bash
 # 1. Run experiments to identify optimal strategy
-poetry run python -m giflab experiment
+poetry run python -m giflab experiment --sampling representative
 
-# 2. Review results and update configuration
-# (modify src/giflab/config.py based on findings)
+# 2. Select top performing pipelines
+poetry run python -m giflab select-pipelines experiment_results/latest/results.csv --top 3 -o winners.yaml
 
 # 3. Run full pipeline with optimized settings
-poetry run python -m giflab run data/raw data/
+poetry run python -m giflab run data/raw --pipelines winners.yaml
 ```
 
 📖 **For detailed documentation, see:** [Experimental Testing Guide](docs/guides/experimental-testing.md)
@@ -271,17 +271,17 @@ Traditional pipeline comparison fails when pipelines achieve different quality l
 3. **Content-Type Aware**: Different frontiers for different GIF types
 4. **Multi-Metric Support**: Works with SSIM, MS-SSIM, composite quality scores
 
-### Elimination Commands
+### Experimental Commands
 
 ```bash
-# Run elimination tests with Pareto analysis
-poetry run python -m giflab eliminate --strategy pareto
+# Run comprehensive experiments with Pareto analysis
+poetry run python -m giflab experiment --sampling representative
 
-# View Pareto frontiers by content type  
-poetry run python -m giflab view-pareto elimination_results/
+# View experiment results and top performers
+poetry run python -m giflab select-pipelines experiment_results/latest/results.csv --top 5
 
-# Compare pipelines at specific quality targets
-poetry run python -m giflab compare-quality --target 0.85 elimination_results.csv
+# Use quick sampling for faster testing during development
+poetry run python -m giflab experiment --sampling quick
 ```
 
 ### Interpretation Guide
@@ -319,11 +319,11 @@ This answers your key question: **"Which pipeline provides better file size for 
 # Install dependencies (requires Poetry)
 poetry install
 
-# Test all compression strategies with default settings
-poetry run python -m giflab experiment --matrix
+# Test all compression strategies with intelligent sampling
+poetry run python -m giflab experiment --sampling representative
 
 # Pick top 3 pipelines by SSIM
-poetry run python -m giflab select-pipelines experiment_results.csv --top 3 -o winners.yaml
+poetry run python -m giflab select-pipelines experiment_results/latest/results.csv --top 3 -o winners.yaml
 
 # Run production compression on full dataset with chosen pipelines
 poetry run python -m giflab run data/raw --pipelines winners.yaml
@@ -348,17 +348,17 @@ poetry run python -m giflab run data/raw --pipelines custom_pipelines.yaml
 
 ### 🧪 Experimental Pipeline (All 5 Engines)
 ```bash
-# Test all 5 engines with comprehensive matrix
-poetry run python -m giflab experiment --matrix
+# Test all 5 engines with comprehensive sampling
+poetry run python -m giflab experiment --sampling representative
 
-# Quick experimental test with fewer variants  
-poetry run python -m giflab experiment --matrix --gifs 5
+# Quick experimental test for development
+poetry run python -m giflab experiment --sampling quick
 
-# Experimental with custom sample GIFs
-poetry run python -m giflab experiment --matrix --sample-gifs-dir my_test_gifs/
+# Full comprehensive testing (slower but thorough)
+poetry run python -m giflab experiment --sampling full
 
-# Legacy strategy mode (gifsicle + Animately only)
-poetry run python -m giflab experiment --no-matrix --strategies all
+# Targeted testing with strategic synthetic GIFs
+poetry run python -m giflab experiment --sampling targeted
 ```
 
 ### 🔬 Engine-Specific Testing
@@ -380,14 +380,14 @@ poetry run python -m giflab run data/raw --workers 8 --resume
 **For Engine Comparison:**
 ```bash  
 # Compare all engines to find the best for your content
-poetry run python -m giflab experiment --matrix --gifs 10
-poetry run python -m giflab select-pipelines experiment_results.csv --top 3
+poetry run python -m giflab experiment --sampling representative
+poetry run python -m giflab select-pipelines experiment_results/latest/results.csv --top 3
 ```
 
 **For Research & Development:**
 ```bash
-# Full experimental matrix with comprehensive analysis
-poetry run python -m giflab experiment --matrix --gifs 20 --workers 6
+# Full experimental testing with comprehensive analysis
+poetry run python -m giflab experiment --sampling full --use-gpu
 ```
 
 ## Project Structure
@@ -560,14 +560,14 @@ make clean-temp
 ### 🗑️ Clear All Cached Data
 If you need to reset all cached pipeline results (SQLite database):
 ```bash
-poetry run python -m giflab eliminate-pipelines --clear-cache --estimate-time
+poetry run python -m giflab experiment --clear-cache --estimate-time
 ```
-This clears all cached test results from `elimination_results/pipeline_results_cache.db`.
+This clears all cached test results from `experiment_results/pipeline_results_cache.db`.
 
 ### 🔄 Force Fresh Results (Without Clearing Cache)
 To run fresh tests while keeping cached data intact:
 ```bash
-poetry run python -m giflab eliminate-pipelines --no-cache
+poetry run python -m giflab experiment --no-cache --sampling quick
 ```
 
 ### 📊 Check Cache Performance
@@ -579,7 +579,7 @@ View detailed failure information:
 poetry run python -m giflab debug-failures --summary
 ```
 
-**📚 For more details:** See [Elimination Results Tracking Guide](docs/guides/elimination-results-tracking.md)
+**📚 For more details:** See [Experimental Testing Guide](docs/guides/experimental-testing.md)
 
 ## License
 

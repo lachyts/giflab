@@ -1,6 +1,6 @@
-"""Pipeline Elimination Framework
+"""Experimental Pipeline Framework
 
-Systematically eliminates underperforming pipeline combinations through
+Systematically tests and analyzes pipeline combinations through
 competitive testing on synthetic GIFs with diverse characteristics.
 """
 
@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import sys
 import traceback
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -21,12 +22,9 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from .dynamic_pipeline import generate_all_pipelines, Pipeline
-from .experiment import ExperimentalPipeline
-from .metrics import calculate_comprehensive_metrics
-from .meta import extract_gif_metadata
 
 # Import modularized components
-from .elimination_errors import ErrorTypes, clean_error_for_analysis
+from .elimination_errors import ErrorTypes
 from .elimination_cache import PipelineResultsCache, get_git_commit
 from .synthetic_gifs import SyntheticGifGenerator, SyntheticGifSpec
 from .error_handling import clean_error_message
@@ -491,8 +489,8 @@ class SamplingStrategy:
     min_samples_per_tool: int = 3  # Minimum samples per tool type
 
 @dataclass
-class EliminationResult:
-    """Result of pipeline elimination analysis."""
+class ExperimentResult:
+    """Result of experimental pipeline analysis."""
     eliminated_pipelines: Set[str] = field(default_factory=set)
     retained_pipelines: Set[str] = field(default_factory=set)
     performance_matrix: Dict[str, Dict[str, float]] = field(default_factory=dict)
@@ -780,8 +778,8 @@ class ParetoAnalyzer:
         return insights
 
 
-class PipelineEliminator:
-    """Systematic pipeline elimination through competitive testing."""
+class ExperimentalRunner:
+    """Systematic experimental pipeline testing through competitive analysis."""
     
     # Available sampling strategies for efficient testing
     SAMPLING_STRATEGIES = {
@@ -826,7 +824,7 @@ class PipelineEliminator:
     PROGRESS_SAVE_INTERVAL = 100  # Save resume data every N jobs to prevent memory buildup
     BUFFER_FLUSH_INTERVAL = 15    # Reduced from 50 for more frequent monitoring updates
     
-    def __init__(self, output_dir: Path = Path("elimination_results"), use_gpu: bool = False, use_cache: bool = True):
+    def __init__(self, output_dir: Path = Path("experiment_results"), use_gpu: bool = False, use_cache: bool = True):
         self.base_output_dir = output_dir
         self.use_gpu = use_gpu
         self.use_cache = use_cache
@@ -883,12 +881,32 @@ class PipelineEliminator:
         """Generate all synthetic test GIFs."""
         self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
         
+        from importlib import import_module
+        try:
+            tqdm = import_module('tqdm').tqdm  # type: ignore[attr-defined]
+        except ModuleNotFoundError:  # pragma: no cover – fallback if tqdm not installed
+            class tqdm:  # noqa: WPS430 – simple fallback
+                def __init__(self, iterable, **kwargs):
+                    self.iterable = iterable
+                def __iter__(self):
+                    return iter(self.iterable)
+                def update(self, _n: int = 1):
+                    pass
+                def close(self):
+                    pass
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    self.close()
+        
         gif_paths = []
-        for spec in self.synthetic_specs:
-            gif_path = self.output_dir / f"{spec.name}.gif"
-            if not gif_path.exists():
-                self._create_synthetic_gif(gif_path, spec)
-            gif_paths.append(gif_path)
+        with tqdm(self.synthetic_specs, desc='🖼️  Synthetic GIFs', unit='gif') as progress:
+            for spec in progress:
+                gif_path = self.output_dir / f"{spec.name}.gif"
+                if not gif_path.exists():
+                    self._create_synthetic_gif(gif_path, spec)
+                gif_paths.append(gif_path)
+                progress.update(0)  # refresh display
             
         return gif_paths
     
@@ -1672,18 +1690,18 @@ class PipelineEliminator:
             
         return gif_paths
 
-    def run_elimination_analysis(self, 
+    def run_experimental_analysis(self, 
                                 test_pipelines: List[Pipeline] = None,
-                                elimination_threshold: float = 0.05,
-                                use_targeted_gifs: bool = False) -> EliminationResult:
+                                quality_threshold: float = 0.05,
+                                use_targeted_gifs: bool = False) -> ExperimentResult:
         """Run competitive elimination analysis on synthetic GIFs.
         
         Args:
             test_pipelines: Specific pipelines to test (None = all pipelines)
-            elimination_threshold: SSIM threshold for elimination (lower = stricter)
+            quality_threshold: SSIM threshold for elimination (lower = stricter)
             
         Returns:
-            EliminationResult with eliminated and retained pipelines
+            ExperimentResult with eliminated and retained pipelines
         """
         if test_pipelines is None:
             test_pipelines = generate_all_pipelines()
@@ -1700,12 +1718,12 @@ class PipelineEliminator:
         results_df = self._run_comprehensive_testing(synthetic_gifs, test_pipelines)
         
         # Analyze results and eliminate underperformers
-        elimination_result = self._analyze_and_eliminate(results_df, elimination_threshold)
+        experiment_result = self._analyze_and_eliminate(results_df, quality_threshold)
         
         # Save results
-        self._save_results(elimination_result, results_df)
+        self._save_results(experiment_result, results_df)
         
-        return elimination_result
+        return experiment_result
     
     def _run_comprehensive_testing(self, gif_paths: List[Path], pipelines: List[Pipeline]) -> pd.DataFrame:
         """Run comprehensive testing of all pipeline combinations with streaming results to disk."""
@@ -2395,15 +2413,15 @@ class PipelineEliminator:
             # Check if CUDA is available
             cuda_available = cv2.cuda.getCudaEnabledDeviceCount() > 0
             
-                    if not cuda_available:
+            if not cuda_available:
             # Fall back to regular CPU calculation with clear communication
-            self.logger.warning("🔄 CUDA devices became unavailable during processing")
-            self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
-            self.logger.info("💡 Performance may be slower than expected")
-            from .metrics import calculate_comprehensive_metrics
-            return calculate_comprehensive_metrics(original_path, compressed_path)
+                self.logger.warning("🔄 CUDA devices became unavailable during processing")
+                self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
+                self.logger.info("💡 Performance may be slower than expected")
+                from .metrics import calculate_comprehensive_metrics
+                return calculate_comprehensive_metrics(original_path, compressed_path)
         
-        self.logger.info("🚀 Computing quality metrics using GPU acceleration")
+            self.logger.info("🚀 Computing quality metrics using GPU acceleration")
             
             # Use GPU-accelerated version
             return self._calculate_cuda_metrics(original_path, compressed_path)
@@ -2923,9 +2941,9 @@ class PipelineEliminator:
                 return spec.content_type
         return "unknown"
     
-    def _analyze_and_eliminate(self, results_df: pd.DataFrame, threshold: float) -> EliminationResult:
-        """Analyze results using comprehensive quality metrics and eliminate underperforming pipelines."""
-        elimination_result = EliminationResult()
+    def _analyze_and_experiment(self, results_df: pd.DataFrame, threshold: float) -> ExperimentResult:
+        """Analyze results using comprehensive quality metrics and identify underperforming pipelines."""
+        experiment_result = ExperimentResult()
         
         # Filter out failed jobs for analysis
         if 'success' in results_df.columns:
@@ -2936,7 +2954,7 @@ class PipelineEliminator:
         
         if successful_results.empty:
             self.logger.warning("No successful pipeline results to analyze")
-            return elimination_result
+            return experiment_result
         
         # Multi-metric analysis: Use composite quality score as primary, with SSIM and compression ratio as secondary
         self.logger.info("Analyzing pipelines using comprehensive quality metrics...")
@@ -2984,7 +3002,7 @@ class PipelineEliminator:
             
             # Combine all winners (union of top performers)
             all_content_winners = list(set(quality_winners + efficiency_winners + compression_winners))
-            elimination_result.content_type_winners[content_type] = all_content_winners
+            experiment_result.content_type_winners[content_type] = all_content_winners
             
             # Store performance matrix for detailed analysis - only use available columns
             perf_matrix = {
@@ -3003,11 +3021,11 @@ class PipelineEliminator:
                 
             performance_matrix[content_type] = perf_matrix
         
-        elimination_result.performance_matrix = performance_matrix
+        experiment_result.performance_matrix = performance_matrix
         
         # Find pipelines that never win in any content type or criteria
         all_winners = set()
-        for winners in elimination_result.content_type_winners.values():
+        for winners in experiment_result.content_type_winners.values():
             all_winners.update(winners)
         
         all_pipelines = set(successful_results['pipeline_id'].unique())
@@ -3059,13 +3077,13 @@ class PipelineEliminator:
             if should_eliminate:
                 underperformers.add(pipeline_id)
         
-        elimination_result.eliminated_pipelines = never_winners.union(underperformers)
-        elimination_result.retained_pipelines = all_winners - underperformers
+        experiment_result.eliminated_pipelines = never_winners.union(underperformers)
+        experiment_result.retained_pipelines = all_winners - underperformers
         
         # Add detailed elimination reasons
-        for pipeline in elimination_result.eliminated_pipelines:
+        for pipeline in experiment_result.eliminated_pipelines:
             if pipeline in never_winners:
-                elimination_result.elimination_reasons[pipeline] = "Never achieved top-3 performance in any content type or criteria"
+                experiment_result.elimination_reasons[pipeline] = "Never achieved top-3 performance in any content type or criteria"
             elif pipeline in underperformers:
                 pipeline_results = successful_results[successful_results['pipeline_id'] == pipeline]
                 if not pipeline_results.empty:
@@ -3073,41 +3091,41 @@ class PipelineEliminator:
                     if 'composite_quality' in pipeline_results.columns:
                         avg_quality = pipeline_results['composite_quality'].mean()
                         if not pd.isna(avg_quality):
-                            elimination_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg composite quality: {avg_quality:.3f})"
+                            experiment_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg composite quality: {avg_quality:.3f})"
                         else:
-                            elimination_result.elimination_reasons[pipeline] = "Invalid/missing composite quality metrics"
+                            experiment_result.elimination_reasons[pipeline] = "Invalid/missing composite quality metrics"
                     elif 'ssim_mean' in pipeline_results.columns:
                         avg_ssim = pipeline_results['ssim_mean'].mean()
                         if not pd.isna(avg_ssim):
-                            elimination_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg SSIM: {avg_ssim:.3f})"
+                            experiment_result.elimination_reasons[pipeline] = f"Consistently poor performance (avg SSIM: {avg_ssim:.3f})"
                         else:
-                            elimination_result.elimination_reasons[pipeline] = "Invalid/missing SSIM metrics"
+                            experiment_result.elimination_reasons[pipeline] = "Invalid/missing SSIM metrics"
                     else:
-                        elimination_result.elimination_reasons[pipeline] = "Poor performance across available metrics"
+                        experiment_result.elimination_reasons[pipeline] = "Poor performance across available metrics"
                 else:
-                    elimination_result.elimination_reasons[pipeline] = "No successful test results"
+                    experiment_result.elimination_reasons[pipeline] = "No successful test results"
         
         # Pareto frontier analysis for quality-aligned comparison
         self.logger.info("Running Pareto frontier analysis...")
         try:
             pareto_analyzer = ParetoAnalyzer(successful_results, self.logger)
             pareto_analysis = pareto_analyzer.generate_comprehensive_pareto_analysis()
-            elimination_result.pareto_analysis = pareto_analysis
+            experiment_result.pareto_analysis = pareto_analysis
             
             # Extract dominated pipelines from Pareto analysis
             all_dominated = set()
             for content_type, frontier_data in pareto_analysis['content_type_frontiers'].items():
                 all_dominated.update(frontier_data.get('dominated_pipelines', []))
             
-            elimination_result.pareto_dominated_pipelines = all_dominated
+            experiment_result.pareto_dominated_pipelines = all_dominated
             
             # Extract quality-aligned rankings
-            elimination_result.quality_aligned_rankings = pareto_analysis.get('efficiency_rankings', {})
+            experiment_result.quality_aligned_rankings = pareto_analysis.get('efficiency_rankings', {})
             
             # Update elimination reasons for Pareto-dominated pipelines
             for pipeline in all_dominated:
-                if pipeline not in elimination_result.elimination_reasons:
-                    elimination_result.elimination_reasons[pipeline] = "Pareto dominated (always better alternatives available)"
+                if pipeline not in experiment_result.elimination_reasons:
+                    experiment_result.elimination_reasons[pipeline] = "Pareto dominated (always better alternatives available)"
             
             # Log Pareto analysis statistics
             global_frontier = pareto_analysis.get('global_frontier', {})
@@ -3128,19 +3146,19 @@ class PipelineEliminator:
         except Exception as e:
             self.logger.warning(f"Pareto frontier analysis failed: {e}")
             # Set empty defaults if analysis fails
-            elimination_result.pareto_analysis = {}
-            elimination_result.pareto_dominated_pipelines = set()
-            elimination_result.quality_aligned_rankings = {}
+            experiment_result.pareto_analysis = {}
+            experiment_result.pareto_dominated_pipelines = set()
+            experiment_result.quality_aligned_rankings = {}
         
         # Log elimination statistics
         self.logger.info(f"Analysis complete:")
         self.logger.info(f"  - Total pipelines tested: {len(all_pipelines)}")
-        self.logger.info(f"  - Eliminated: {len(elimination_result.eliminated_pipelines)}")
-        self.logger.info(f"  - Retained: {len(elimination_result.retained_pipelines)}")
+        self.logger.info(f"  - Eliminated: {len(experiment_result.eliminated_pipelines)}")
+        self.logger.info(f"  - Retained: {len(experiment_result.retained_pipelines)}")
         
-        return elimination_result
+        return experiment_result
     
-    def _save_results(self, elimination_result: EliminationResult, results_df: pd.DataFrame):
+    def _save_results(self, experiment_result: ExperimentResult, results_df: pd.DataFrame):
         """Save elimination analysis results."""
         failed_results, successful_results = self._validate_and_separate_results(results_df)
         
@@ -3149,10 +3167,10 @@ class PipelineEliminator:
         if not failed_results.empty:
             self._save_failed_pipelines_log(failed_results)
         
-        self._save_elimination_summary(elimination_result, results_df, failed_results, successful_results)
-        self._save_pareto_analysis_results(elimination_result)
+        self._save_elimination_summary(experiment_result, results_df, failed_results, successful_results)
+        self._save_pareto_analysis_results(experiment_result)
         self._generate_and_save_failure_report(results_df)
-        self._log_results_summary(elimination_result, failed_results, results_df)
+        self._log_results_summary(experiment_result, failed_results, results_df)
 
     def _validate_and_separate_results(self, results_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Validate DataFrame structure and separate successful and failed results."""
@@ -3335,7 +3353,7 @@ class PipelineEliminator:
         
         return error_types
 
-    def _save_elimination_summary(self, elimination_result: EliminationResult, results_df: pd.DataFrame, 
+    def _save_elimination_summary(self, experiment_result: ExperimentResult, results_df: pd.DataFrame, 
                                 failed_results: pd.DataFrame, successful_results: pd.DataFrame):
         """Save enhanced elimination summary with failure information."""
         # Get error types for failed results
@@ -3348,12 +3366,12 @@ class PipelineEliminator:
         
         summary = {
             'timestamp': datetime.now().isoformat(),
-            'eliminated_count': len(elimination_result.eliminated_pipelines),
-            'retained_count': len(elimination_result.retained_pipelines),
-            'eliminated_pipelines': list(elimination_result.eliminated_pipelines),
-            'retained_pipelines': list(elimination_result.retained_pipelines),
-            'content_type_winners': elimination_result.content_type_winners,
-            'elimination_reasons': elimination_result.elimination_reasons,
+            'eliminated_count': len(experiment_result.eliminated_pipelines),
+            'retained_count': len(experiment_result.retained_pipelines),
+            'eliminated_pipelines': list(experiment_result.eliminated_pipelines),
+            'retained_pipelines': list(experiment_result.retained_pipelines),
+            'content_type_winners': experiment_result.content_type_winners,
+            'elimination_reasons': experiment_result.elimination_reasons,
             'failure_statistics': {
                 'total_failed': len(failed_results),
                 'total_successful': len(successful_results),
@@ -3372,10 +3390,10 @@ class PipelineEliminator:
         with open(self.output_dir / "failure_analysis_report.txt", 'w') as f:
             f.write(failure_report)
 
-    def _log_results_summary(self, elimination_result: EliminationResult, failed_results: pd.DataFrame, results_df: pd.DataFrame):
+    def _log_results_summary(self, experiment_result: ExperimentResult, failed_results: pd.DataFrame, results_df: pd.DataFrame):
         """Log comprehensive results summary."""
-        self.logger.info(f"Eliminated {len(elimination_result.eliminated_pipelines)} underperforming pipelines")
-        self.logger.info(f"Retained {len(elimination_result.retained_pipelines)} competitive pipelines")
+        self.logger.info(f"Eliminated {len(experiment_result.eliminated_pipelines)} underperforming pipelines")
+        self.logger.info(f"Retained {len(experiment_result.retained_pipelines)} competitive pipelines")
         if not failed_results.empty:
             self.logger.info(f"Failed pipelines log saved to: {self.output_dir / 'failed_pipelines.json'}")
             self.logger.info(f"Failure analysis report saved to: {self.output_dir / 'failure_analysis_report.txt'}")
@@ -3503,14 +3521,14 @@ class PipelineEliminator:
         
         # General recommendations
         report_lines.append("🔄 GENERAL RECOMMENDATIONS")
-        report_lines.append("   1. Run 'giflab view-failures elimination_results/' for detailed error analysis")
+        report_lines.append("   1. Run 'giflab view-failures experiment_results/' for detailed error analysis")
         report_lines.append("   2. Consider excluding problematic tools from production pipelines")
         report_lines.append("   3. Test individual tools with 'python -c \"from giflab.system_tools import get_available_tools; print(get_available_tools())\"'")
         report_lines.append("   4. Review and update tool configurations in src/giflab/config.py")
         report_lines.append("   5. Consider running elimination analysis with fewer tool combinations to isolate issues")
         report_lines.append("")
         
-        report_lines.append("📖 For detailed failure logs, see: elimination_results/failed_pipelines.json")
+        report_lines.append("📖 For detailed failure logs, see: experiment_results/failed_pipelines.json")
         
         return "\n".join(report_lines)
 
@@ -3538,10 +3556,10 @@ class PipelineEliminator:
         
         return findings 
     
-    def _save_pareto_analysis_results(self, elimination_result: EliminationResult):
+    def _save_pareto_analysis_results(self, experiment_result: ExperimentResult):
         """Save Pareto frontier analysis results to files."""
         try:
-            pareto_analysis = elimination_result.pareto_analysis
+            pareto_analysis = experiment_result.pareto_analysis
             if not pareto_analysis:
                 self.logger.warning("No Pareto analysis data to save")
                 return
@@ -3587,7 +3605,7 @@ class PipelineEliminator:
                     self.logger.info(f"Saved quality-aligned rankings to: {rankings_path}")
             
             # 4. Save dominated pipelines list
-            dominated = elimination_result.pareto_dominated_pipelines
+            dominated = experiment_result.pareto_dominated_pipelines
             if dominated:
                 dominated_df = pd.DataFrame(list(dominated), columns=['pipeline_id'])
                 dominated_df['elimination_reason'] = 'Pareto dominated'
@@ -3611,15 +3629,15 @@ class PipelineEliminator:
             self.logger.info(f"Saved Pareto analysis summary to: {summary_path}")
             
             # 6. Generate human-readable report
-            self._generate_pareto_report(elimination_result)
+            self._generate_pareto_report(experiment_result)
             
         except Exception as e:
             self.logger.warning(f"Failed to save Pareto analysis results: {e}")
     
-    def _generate_pareto_report(self, elimination_result: EliminationResult):
+    def _generate_pareto_report(self, experiment_result: ExperimentResult):
         """Generate a human-readable Pareto analysis report."""
         try:
-            pareto_analysis = elimination_result.pareto_analysis
+            pareto_analysis = experiment_result.pareto_analysis
             report_lines = []
             
             report_lines.append("# 🎯 Pareto Frontier Analysis Report")
@@ -3630,7 +3648,7 @@ class PipelineEliminator:
             # Executive Summary
             global_frontier = pareto_analysis.get('global_frontier', {})
             frontier_count = len(global_frontier.get('frontier_points', []))
-            dominated_count = len(elimination_result.pareto_dominated_pipelines)
+            dominated_count = len(experiment_result.pareto_dominated_pipelines)
             
             report_lines.append("## Executive Summary")
             report_lines.append("")

@@ -3,6 +3,43 @@ import os
 import pytest
 
 # ---------------------------------------------------------------------------
+# Auto-generate deleted GIF fixtures so legacy tests still pass
+# ---------------------------------------------------------------------------
+from pathlib import Path as _P
+from PIL import Image as _PILImage
+
+def _create_dummy_gif(path: _P, frames: int = 1, colors: int = 2) -> None:  # noqa: WPS110
+    """Create a small dummy GIF at *path* with *frames* and *colors*.
+
+    Uses solid-color 10×10 frames; fast (<1 ms) and keeps repo slim.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    size = (10, 10)
+    imgs = []
+    for i in range(frames):
+        # Simple cycling colour pattern within *colors* distinct colours
+        val = int((i % colors) * 255 / max(colors - 1, 1))
+        imgs.append(_PILImage.new("RGB", size, (val, 0, 255 - val)))
+    imgs[0].save(path, save_all=True, append_images=imgs[1:], duration=100, loop=0)
+
+
+def _ensure_required_gif_fixtures() -> None:  # noqa: D401
+    """Regenerate core GIF fixtures if they were cleaned from git."""
+    _fixtures = {
+        "simple_4frame.gif": (4, 4),
+        "single_frame.gif": (1, 2),
+        "many_colors.gif": (2, 16),
+    }
+    base = _P(__file__).parent / "fixtures"
+    for name, (frames, colors) in _fixtures.items():
+        gif_path = base / name
+        if not gif_path.exists():
+            _create_dummy_gif(gif_path, frames=frames, colors=colors)
+
+# Run at import time so all downstream fixtures see the files
+_ensure_required_gif_fixtures()
+
+# ---------------------------------------------------------------------------
 # Global test-suite speed optimisations (≤ 20 s wall-time)
 # ---------------------------------------------------------------------------
 # These tweaks are applied at import-time so they take effect **before** any
@@ -14,36 +51,16 @@ import pytest
 
 try:
     import giflab.dynamic_pipeline as _dp  # noqa: WPS433
-    from giflab.experiment import (
-        ExperimentalConfig,  # noqa: WPS433 – runtime patching is intentional
-    )
 except ModuleNotFoundError:
     # The package might not be install-able in some linting contexts; skip.
-    ExperimentalConfig = None  # type: ignore  # pragma: no cover
     _dp = None  # type: ignore  # pragma: no cover
 
 
 # Apply the optimisations unless the caller explicitly requests the full
 # parameter matrix via an environment variable.
-if os.getenv("GIFLAB_FULL_MATRIX") != "1" and ExperimentalConfig is not None and _dp is not None:
+if os.getenv("GIFLAB_FULL_MATRIX") != "1" and _dp is not None:
 
-    # 1. Flatten the parameter grid --------------------------------------------------
-    _single_value_lists: dict[str, list[object]] = {
-        "FRAME_KEEP_RATIOS": [1.0],   # keep original frame-rate
-        "COLOR_KEEP_COUNTS": [256],   # keep full palette
-        "LOSSY_LEVELS": [0],          # lossless
-    }
-
-    for _field_name, _value in _single_value_lists.items():
-        # Replace the dataclass Field.default_factory so that **future** instances
-        # of ExperimentalConfig use the single-element list.
-        field = ExperimentalConfig.__dataclass_fields__[_field_name]  # type: ignore[attr-defined]
-        field.default_factory = lambda _v=_value: list(_v)  # noqa: WPS420 preserve late-binding
-
-    # Avoid constructing an instance *before* we finish patching – runtime
-    # validation is handled by the autouse fixture below.
-
-    # 2. Cap the dynamic-pipeline cartesian product ---------------------------------
+    # 1. Cap the dynamic-pipeline cartesian product ---------------------------------
     _orig_generate = _dp.generate_all_pipelines  # type: ignore[attr-defined]
 
     def _generate_all_pipelines_capped():  # noqa: D401 – small wrapper
@@ -59,55 +76,13 @@ if os.getenv("GIFLAB_FULL_MATRIX") != "1" and ExperimentalConfig is not None and
     _dp.generate_all_pipelines = _generate_all_pipelines_capped  # type: ignore[assignment]
 
     # -----------------------------------------------------------------------
-    # 3. Fallback patch: monkey-patch ExperimentalConfig.__init__ so *any*
-    #    manually-constructed instance gets flattened lists even if the field
-    #    default_factory workaround above is ineffective (e.g. due to caching
-    #    in compiled dataclass slots).
-    # -----------------------------------------------------------------------
-
-    _orig_ec_init = ExperimentalConfig.__init__
-
-    def _flattening_init(self, *args, **kwargs):  # type: ignore[no-self-use]
-        _orig_ec_init(self, *args, **kwargs)  # type: ignore[misc]
-
-        self.FRAME_KEEP_RATIOS = [1.0]
-        self.COLOR_KEEP_COUNTS = [256]
-        self.LOSSY_LEVELS = [0]
-
-    ExperimentalConfig.__init__ = _flattening_init  # type: ignore[assignment]
-
-    # -----------------------------------------------------------------------
     # End of one-time patches.  All subsequent imports/instantiations will
     # automatically benefit from these limits, dramatically reducing the test
     # runtime while preserving representative coverage.
     # -----------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Lightweight stub for ExperimentalPipeline._execute_dynamic_pipeline to avoid
-# potential heavy dependencies during unit tests. Keeps behaviour minimal to
-# satisfy collapsing tests (returns number of collapsed steps).
-# ---------------------------------------------------------------------------
 
-if ExperimentalConfig is not None:
-
-    def _fast_execute_dynamic(self, job):  # noqa: D401
-        assert job.pipeline is not None, "pipeline missing"
-        # Simple collapse: group consecutive steps with same COMBINE_GROUP
-        steps_meta = []
-        current_group = None
-        for step in job.pipeline.steps:
-            group = getattr(step.tool_cls, "COMBINE_GROUP", step.variable)
-            if group != current_group:
-                # New group starts
-                steps_meta.append({"engine": group, "render_ms": 1})
-                current_group = group
-        return {"steps": steps_meta, "engine": "dynamic"}
-
-    # Patch the method unless full-suite requested
-    if os.getenv("GIFLAB_FULL_MATRIX") != "1":
-        from giflab import experiment as _exp_mod
-        _exp_mod.ExperimentalPipeline._execute_dynamic_pipeline = _fast_execute_dynamic  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -116,27 +91,11 @@ if ExperimentalConfig is not None:
 
 @pytest.fixture(autouse=True)
 def _assert_fast_suite_limits():
-    """Assert that the flattened parameter lists are respected in fast mode.
+    """Fixture maintained for compatibility after ExperimentalConfig removal.
 
-    The checks should *not* run when the caller explicitly requests the full
-    parameter matrix via the ``GIFLAB_FULL_MATRIX=1`` environment variable.
-    This aligns the behaviour with the guidelines in
-    ``docs/testing-fast-suite-checklist.md``.
+    This fixture was previously used to assert parameter list limits but is now
+    simplified since ExperimentalConfig no longer exists after the refactoring.
     """
-
-    # Skip the assertion entirely when the full matrix is requested.
-    if os.getenv("GIFLAB_FULL_MATRIX") == "1":
-        yield
-        return
-
-    if ExperimentalConfig is None:
-        yield
-        return
-
-    cfg = ExperimentalConfig()
-    assert len(cfg.FRAME_KEEP_RATIOS) == 1
-    assert len(cfg.COLOR_KEEP_COUNTS) == 1
-    assert len(cfg.LOSSY_LEVELS) == 1
     yield
 
 

@@ -83,8 +83,9 @@ Thumbs.db
 # Logs
 logs/*.log
 
-# Test results and elimination analysis outputs
+# Test results and experimental analysis outputs
 elimination_results/
+experiment_results/
 test_debug/
 test_fixes/
 test_enhanced/
@@ -116,14 +117,18 @@ debug_*.gif
 *.log
 temp_*
 
+# Test fixtures (exclude binary test files)
+tests/fixtures/*.gif
+
 # Pipeline cache databases
 pipeline_results_cache.db
 **/pipeline_results_cache.db
 
-# Test workspace (keep structure, ignore temporary content)
+# Test workspace (keep structure, ignore temporary content and GIF files)
 test-workspace/temp/
 test-workspace/manual/*/
 test-workspace/debug/*/
+test-workspace/samples/*.gif
 !test-workspace/manual/.gitkeep
 !test-workspace/debug/.gitkeep
 !test-workspace/temp/.gitkeep

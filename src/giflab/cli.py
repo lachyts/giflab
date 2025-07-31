@@ -12,15 +12,12 @@ from .config import (
     DEFAULT_COMPRESSION_CONFIG,
     PathConfig,
 )
-from .experiment import (
-    ExperimentalConfig,
-    ExperimentalPipeline,
-)
+
 from .pipeline import CompressionPipeline
 from .utils_pipeline_yaml import read_pipelines_yaml, write_pipelines_yaml
 from .validation import ValidationError, validate_raw_dir, validate_worker_count
 from giflab.combiner_registry import combiner_for
-from giflab.pipeline_elimination import PipelineEliminator
+from giflab.experimental import ExperimentalRunner
 
 
 @click.group()
@@ -125,7 +122,7 @@ def run(
             resume=resume,
             detect_source_from_directory=detect_source_from_directory,
             selected_pipelines=selected_pipes,
-        )
+    )
 
         # Generate CSV path if not provided
         if csv is None:
@@ -142,7 +139,7 @@ def run(
         click.echo(f"❌ Bad GIFs directory: {path_config.BAD_GIFS_DIR}")
         click.echo(
             f"👥 Workers: {validated_workers if validated_workers > 0 else multiprocessing.cpu_count()}"
-        )
+    )
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
         if pipelines:
             click.echo(f"🎛️  Selected pipelines: {len(selected_pipes)} from {pipelines}")
@@ -216,7 +213,7 @@ def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
         estimated_hours = estimated_time / 3600
         click.echo(
             f"⏱️  Estimated runtime: ~{estimated_time}s (~{estimated_hours:.1f}h)"
-        )
+    )
 
     # Show sample jobs
     if jobs_to_run:
@@ -456,147 +453,167 @@ def organize_directories(raw_dir: Path):
 
 @main.command()
 @click.option(
-    "--gifs",
-    "-g",
-    type=int,
-    default=10,
-    help="Number of test GIFs to generate (default: 10)",
+    "--output-dir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("experiment_results"),
+    help="Base directory for timestamped experiment results (default: experiment_results)",
 )
 @click.option(
-    "--workers",
-    "-j",
+    "--sampling",
+    type=click.Choice(['full', 'representative', 'factorial', 'progressive', 'targeted', 'quick']),
+    default='representative',
+    help="Sampling strategy to reduce testing time (default: representative)",
+)
+@click.option(
+    "--threshold",
+    "-t", 
+    type=float,
+    default=0.3,
+    help="Quality threshold for pipeline elimination (default: 0.3, lower = stricter)",
+)
+@click.option(
+    "--max-pipelines",
     type=int,
     default=0,
-    help=f"Number of worker processes (default: {multiprocessing.cpu_count()} = CPU count)",
+    help="Limit number of pipelines to test (0 = no limit, useful for quick tests)",
 )
 @click.option(
-    "--sample-gifs-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Directory containing sample GIFs to use instead of generating new ones",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Directory to save experiment results (default: data/experimental/results)",
-)
-@click.option(
-    "--strategies",
-    type=click.Choice([
-        "pure_gifsicle",
-        "pure_animately",
-        "animately_then_gifsicle",
-        "gifsicle_dithered",
-        "gifsicle_optimized",
-        "all"
-    ]),
-    multiple=True,
-    default=["all"],
-    help="Compression strategies to test (default: all)",
-)
-@click.option(
-    "--matrix/--no-matrix",
-    default=True,
-    help="Enable dynamic matrix mode with all 5 engines (default: true)",
-)
-@click.option(
-    "--no-analysis",
+    "--resume",
     is_flag=True,
-    help="Disable detailed analysis report generation",
+    help="Resume from previous incomplete run (uses progress tracking)",
+)
+@click.option(
+    "--estimate-time",
+    is_flag=True,
+    help="Show time estimate and exit (no actual testing)",
+)
+@click.option(
+    "--use-gpu",
+    is_flag=True,
+    help="Enable GPU acceleration for quality metrics calculation (requires OpenCV with CUDA)",
+)
+@click.option(
+    "--no-cache",
+    is_flag=True,
+    help="Disable cache and force re-running all pipeline tests (slower but fresh results)",
+)
+@click.option(
+    "--clear-cache",
+    is_flag=True,
+    help="Clear the pipeline results cache before running (forces fresh start)",
 )
 def experiment(
-    gifs: int,
-    workers: int,
-    sample_gifs_dir: Path | None,
-    output_dir: Path | None,
-    strategies: tuple[str, ...],
-    no_analysis: bool,
-    matrix: bool,
+    output_dir: Path,
+    sampling: str,
+    threshold: float,
+    max_pipelines: int,
+    resume: bool,
+    estimate_time: bool,
+    use_gpu: bool,
+    no_cache: bool,
+    clear_cache: bool,
 ):
-    """Run experimental compression testing with diverse sample GIFs.
+    """Run comprehensive experimental pipeline testing with intelligent sampling.
 
-    This command tests different compression strategies on a small set of
-    diverse GIFs to validate workflows and identify optimal parameters
-    before running on large datasets.
+    This command tests pipeline combinations on synthetic GIFs with diverse
+    characteristics and eliminates underperforming pipelines based on quality
+    metrics like SSIM, compression ratio, and processing speed.
+
+    Results are saved in timestamped directories to preserve historical data.
+    Smart caching avoids re-running identical pipeline tests.
     """
-    try:
-        # Validate worker count
+    from giflab.experimental import ExperimentalRunner
+    from giflab.dynamic_pipeline import generate_all_pipelines
+
+    # Create pipeline runner with cache settings
+    use_cache = not no_cache  # Invert the no_cache flag
+    runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+    
+    # Clear cache if requested
+    if clear_cache and runner.cache:
+        click.echo("🗑️ Clearing pipeline results cache...")
+        runner.cache.clear_cache()
+    
+    # Get pipeline count for estimation
+    all_pipelines = generate_all_pipelines()
+    
+    # Apply intelligent sampling strategy
+    if sampling != 'full':
+        test_pipelines = runner.select_pipelines_intelligently(all_pipelines, sampling)
+        strategy_info = runner.SAMPLING_STRATEGIES[sampling]
+        click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
+        click.echo(f"📋 {strategy_info.description}")
+    elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
+        test_pipelines = all_pipelines[:max_pipelines]
+        click.echo(f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+    else:
+        test_pipelines = all_pipelines
+        click.echo("🔬 Full comprehensive testing: Using all available pipelines")
+    
+    # Calculate total job estimates
+    if sampling == 'targeted':
+        synthetic_gifs = runner.get_targeted_synthetic_gifs()
+    else:
+        synthetic_gifs = runner.generate_synthetic_gifs()
+    total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+    estimated_time = runner._estimate_execution_time(total_jobs)
+    
+    click.echo("🧪 GifLab Experimental Pipeline Testing")
+    click.echo(f"📁 Output directory: {output_dir}")
+    click.echo(f"🎯 Quality threshold: {threshold}")
+    click.echo(f"📊 Total jobs: {total_jobs:,}")
+    click.echo(f"⏱️  Estimated time: {estimated_time}")
+    click.echo(f"🔄 Resume enabled: {resume}")
+    
+    # Display GPU status
+    if use_gpu:
         try:
-            validated_workers = validate_worker_count(workers)
-        except ValidationError as e:
-            click.echo(f"❌ Invalid worker count: {e}", err=True)
-            sys.exit(1)
-
-        # Expand strategy selection
-        all_strategies = [
-            "pure_gifsicle",
-            "pure_animately",
-            "animately_then_gifsicle",
-            "gifsicle_dithered",
-            "gifsicle_optimized"
-        ]
-
-        if "all" in strategies:
-            selected_strategies = all_strategies
-        else:
-            selected_strategies = list(strategies)
-
-        # Create experimental configuration
-        cfg = ExperimentalConfig(
-            TEST_GIFS_COUNT=gifs,
-            STRATEGIES=selected_strategies,
-            ENABLE_DETAILED_ANALYSIS=not no_analysis,
-            ENABLE_MATRIX_MODE=matrix,
-        )
-
-        # Override paths if provided
-        if sample_gifs_dir:
-            cfg.SAMPLE_GIFS_PATH = sample_gifs_dir
-        if output_dir:
-            cfg.RESULTS_PATH = output_dir
-
-        # Create experimental pipeline
-        pipeline = ExperimentalPipeline(cfg, validated_workers)
-
-        click.echo("🧪 GifLab Experimental Testing")
-        click.echo(f"📊 Test GIFs: {gifs}")
-        click.echo(f"🛠️ Strategies: {', '.join(selected_strategies)}")
-        click.echo(f"📁 Sample GIFs: {cfg.SAMPLE_GIFS_PATH}")
-        click.echo(f"📈 Results: {cfg.RESULTS_PATH}")
-        click.echo(f"👥 Workers: {validated_workers}")
-        click.echo(f"📊 Analysis: {'Enabled' if not no_analysis else 'Disabled'}")
-
-        # Load sample GIFs
-        sample_gifs = None
-        if sample_gifs_dir and sample_gifs_dir.exists():
-            sample_gifs = list(sample_gifs_dir.glob("*.gif"))
-            if not sample_gifs:
-                click.echo(f"⚠️ No GIF files found in {sample_gifs_dir}")
-                click.echo("Will generate test GIFs instead")
-                sample_gifs = None
+            import cv2
+            cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
+            if cuda_devices > 0:
+                click.echo(f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)")
             else:
-                click.echo(f"📂 Found {len(sample_gifs)} sample GIFs")
+                click.echo(f"🔄 GPU acceleration: Requested but no CUDA devices found - will use CPU")
+        except ImportError:
+            click.echo(f"🔄 GPU acceleration: Requested but OpenCV CUDA not available - will use CPU")
+        except Exception as e:
+            click.echo(f"🔄 GPU acceleration: Requested but initialization failed - will use CPU")
+    else:
+        click.echo(f"📊 GPU acceleration: Disabled (using CPU processing)")
+    
+    if estimate_time:
+        click.echo("✅ Time estimation complete. Use without --estimate-time to run actual analysis.")
+        return
+    
+    click.echo("\n🚀 Running comprehensive experimental pipeline testing...")
+    
+    # Run the experimental analysis
+    use_targeted_gifs = (sampling == 'targeted')
+    elimination_result = runner.run_experimental_analysis(
+            test_pipelines=test_pipelines,
+            elimination_threshold=threshold,
+            use_targeted_gifs=use_targeted_gifs
+    )
 
-        # Run experiment
-        click.echo("\n🚀 Starting experimental pipeline...")
-        results_path = pipeline.run_experiment(sample_gifs)
-
-        if results_path.exists():
-            click.echo("\n✅ Experiment completed successfully!")
-            click.echo(f"📊 Results saved to: {results_path}")
-
-            # Show quick summary
-            if not no_analysis:
-                analysis_path = results_path.parent / "analysis_report.json"
-                if analysis_path.exists():
-                    click.echo(f"📈 Analysis report: {analysis_path}")
-
-        else:
-            click.echo("\n❌ Experiment failed - no results generated")
-            sys.exit(1)
-
-    except Exception as e:
-        click.echo(f"❌ Experiment failed: {e}", err=True)
-        sys.exit(1)
+    # Display results
+    click.echo(f"\n📊 Experimental Results Summary:")
+    click.echo(f"   📉 Eliminated pipelines: {len(elimination_result.eliminated_pipelines)}")
+    click.echo(f"   ✅ Retained pipelines: {len(elimination_result.retained_pipelines)}")
+    total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
+    if total_pipelines > 0:
+        elimination_rate = len(elimination_result.eliminated_pipelines) / total_pipelines * 100
+        click.echo(f"   📈 Elimination rate: {elimination_rate:.1f}%")
+    
+    # Show top performers
+    if elimination_result.retained_pipelines:
+        click.echo(f"\n🏆 Top performing pipelines:")
+        for i, pipeline in enumerate(list(elimination_result.retained_pipelines)[:5], 1):
+            click.echo(f"   {i}. {pipeline}")
+    
+    click.echo(f"\n✅ Experimental analysis complete!")
+    click.echo(f"📁 Results saved to: {output_dir}")
+    click.echo(f"💡 Use 'giflab select-pipelines {output_dir}/latest/results.csv --top 3' to get production configs")
 
 
 # ---------------------------------------------------------------------------
@@ -630,364 +647,11 @@ def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
     click.echo(f"✅ Wrote {len(winners)} pipelines to {output}")
 
 
-@main.command()
-@click.option(
-    "--output-dir",
-    "-o",
-    type=click.Path(path_type=Path),
-    default=Path("elimination_results"),
-    help="Base directory for timestamped elimination results (default: elimination_results)",
-)
-@click.option(
-    "--threshold",
-    "-t", 
-    type=float,
-    default=0.3,
-    help="Quality threshold for elimination (default: 0.3, lower = stricter)",
-)
-@click.option(
-    "--validate-research",
-    is_flag=True,
-    help="Validate preliminary research findings about redundant methods",
-)
-@click.option(
-    "--test-dithering-only",
-    is_flag=True,
-    help="Only test dithering methods (skip frame reduction and lossy compression)",
-)
-@click.option(
-    "--resume",
-    is_flag=True,
-    help="Resume from previous incomplete run (uses progress tracking)",
-)
-@click.option(
-    "--estimate-time",
-    is_flag=True,
-    help="Show time estimate and exit (no actual testing)",
-)
-@click.option(
-    "--max-pipelines",
-    type=int,
-    default=0,
-    help="Limit number of pipelines to test (0 = no limit, useful for quick tests)",
-)
-@click.option(
-    "--sampling-strategy",
-    type=click.Choice(['full', 'representative', 'factorial', 'progressive', 'targeted', 'quick']),
-    default='representative',
-    help="Intelligent sampling strategy to reduce testing time (default: representative)",
-)
-@click.option(
-    "--use-gpu",
-    is_flag=True,
-    help="Enable GPU acceleration for quality metrics calculation (requires OpenCV with CUDA)",
-)
-@click.option(
-    "--no-cache",
-    is_flag=True,
-    help="Disable cache and force re-running all pipeline tests (slower but fresh results)",
-)
-@click.option(
-    "--clear-cache",
-    is_flag=True,
-    help="Clear the pipeline results cache before running (forces fresh start)",
-)
-def eliminate_pipelines(
-    output_dir: Path,
-    threshold: float,
-    validate_research: bool,
-    test_dithering_only: bool,
-    resume: bool,
-    estimate_time: bool,
-    max_pipelines: int,
-    sampling_strategy: str,
-    use_gpu: bool,
-    no_cache: bool,
-    clear_cache: bool,
-):
-    """
-    Eliminate underperforming pipeline combinations through competitive testing.
-    
-    Results are saved in timestamped directories (run_YYYYMMDD_HHMMSS) to preserve
-    historical data. A master CSV file tracks all runs for trend analysis.
-    Use the 'latest' symlink to access the most recent results.
-    
-    SMART CACHING: Results are cached in SQLite database to avoid re-running
-    identical pipeline tests. Cache is invalidated when code changes (git commit).
-    Use --no-cache to force fresh results or --clear-cache to reset.
-    
-    This systematically tests pipeline combinations on synthetic GIFs with diverse
-    characteristics and eliminates pipelines that consistently underperform based
-    on quality metrics like SSIM, compression ratio, and processing speed.
-    """
-    from giflab.external_engines.imagemagick_enhanced import (
-        identify_redundant_methods,
-        test_redundant_methods
-    )
-    from giflab.external_engines.ffmpeg_enhanced import (
-        test_bayer_scale_performance,
-        validate_sierra2_vs_floyd_steinberg
-    )
 
-    # Create eliminator with cache settings
-    use_cache = not no_cache  # Invert the no_cache flag
-    eliminator = PipelineEliminator(output_dir, use_gpu=use_gpu, use_cache=use_cache)
-    
-    # Clear cache if requested
-    if clear_cache and eliminator.cache:
-        click.echo("🗑️ Clearing pipeline results cache...")
-        eliminator.cache.clear_cache()
-    
-    # Get pipeline count for estimation
-    from giflab.dynamic_pipeline import generate_all_pipelines
-    all_pipelines = generate_all_pipelines()
-    
-    # Apply intelligent sampling strategy
-    if sampling_strategy != 'full':
-        test_pipelines = eliminator.select_pipelines_intelligently(all_pipelines, sampling_strategy)
-        strategy_info = eliminator.SAMPLING_STRATEGIES[sampling_strategy]
-        click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
-        click.echo(f"📋 {strategy_info.description}")
-    elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
-        test_pipelines = all_pipelines[:max_pipelines]
-        click.echo(f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
-    else:
-        test_pipelines = all_pipelines
-        click.echo("🔬 Full brute-force testing: Using all available pipelines")
-    
-    # Calculate total job estimates
-    if sampling_strategy == 'targeted':
-        synthetic_gifs = eliminator.get_targeted_synthetic_gifs()
-    else:
-        synthetic_gifs = eliminator.generate_synthetic_gifs()
-    total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(eliminator.test_params)
-    estimated_time = eliminator._estimate_execution_time(total_jobs)
-    
-    click.echo("🔬 Pipeline Elimination Analysis")
-    click.echo(f"📁 Output directory: {output_dir}")
-    click.echo(f"🎯 Quality threshold: {threshold}")
-    click.echo(f"📊 Total jobs: {total_jobs:,}")
-    click.echo(f"⏱️  Estimated time: {estimated_time}")
-    click.echo(f"🔄 Resume enabled: {resume}")
-    # Display GPU status with helpful information
-    if use_gpu:
-        try:
-            import cv2
-            cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
-            if cuda_devices > 0:
-                click.echo(f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)")
-            else:
-                click.echo(f"🔄 GPU acceleration: Requested but no CUDA devices found - will use CPU")
-                click.echo("💡 Install CUDA drivers and CUDA-capable hardware for GPU acceleration")
-        except ImportError:
-            click.echo(f"🔄 GPU acceleration: Requested but OpenCV CUDA not available - will use CPU")
-            click.echo("💡 Install opencv-python with CUDA support for GPU acceleration")
-        except Exception as e:
-            click.echo(f"🔄 GPU acceleration: Requested but initialization failed - will use CPU")
-            click.echo(f"💡 GPU error: {e}")
-    else:
-        click.echo(f"📊 GPU acceleration: Disabled (using CPU processing)")
-        click.echo("💡 Use --use-gpu flag to enable GPU acceleration for faster quality metrics")
-    
-    if estimate_time:
-        click.echo("✅ Time estimation complete. Use --no-estimate-time to run actual analysis.")
-        return
-    
-    if validate_research:
-        click.echo("\n📊 Validating preliminary research findings...")
 
-        # Generate test GIFs for validation  
-        if sampling_strategy == 'targeted':
-            synthetic_gifs = eliminator.get_targeted_synthetic_gifs()
-        else:
-            synthetic_gifs = eliminator.generate_synthetic_gifs()
-
-        # Test ImageMagick redundant methods
-        click.echo("Testing ImageMagick method redundancy...")
-        redundant_groups = identify_redundant_methods(synthetic_gifs)
-
-        if redundant_groups:
-            click.echo("✅ Found redundant method groups:")
-            for representative, equivalents in redundant_groups.items():
-                click.echo(f"   {representative} = {equivalents}")
-        else:
-            click.echo("❌ No redundant method groups found")
-
-        # Test FFmpeg Bayer scale performance on noise content
-        noise_gif = None
-        for gif_path in synthetic_gifs:
-            if "noise" in gif_path.stem:
-                noise_gif = gif_path
-                break
-
-        if noise_gif:
-            click.echo("Testing FFmpeg Bayer scale performance on noisy content...")
-            bayer_results = test_bayer_scale_performance(noise_gif)
-
-            # Find best performing Bayer scales
-            best_bayers = sorted(
-                [(method, result.get("kilobytes", float('inf')))
-                 for method, result in bayer_results.items()
-                 if "error" not in result],
-                key=lambda x: x[1]
-            )
-
-            if best_bayers:
-                click.echo("✅ Best Bayer scales for noisy content:")
-                for method, size_kb in best_bayers[:3]:
-                    scale = method.split("=")[1]
-                    click.echo(f"   Scale {scale}: {size_kb}KB")
-
-        # Test Sierra2 vs Floyd-Steinberg comparison
-        click.echo("Validating Sierra2 vs Floyd-Steinberg performance...")
-        comparison_results = validate_sierra2_vs_floyd_steinberg(synthetic_gifs[:3])
-
-        # Save validation results
-        validation_summary = {
-            "redundant_imagemagick_groups": {k: list(v) for k, v in redundant_groups.items()},
-            "bayer_scale_results": bayer_results if 'bayer_results' in locals() else {},
-            "sierra2_vs_floyd_comparison": comparison_results
-        }
-
-        import json
-        with open(output_dir / "research_validation.json", 'w') as f:
-            json.dump(validation_summary, f, indent=2)
-
-        click.echo(f"✅ Research validation results saved to {output_dir}/research_validation.json")
-
-    if test_dithering_only:
-        click.echo("\n🎨 Testing dithering methods only...")
-        # This would implement dithering-only testing
-        click.echo("Dithering-only testing would be implemented here")
-    else:
-        click.echo("\n⚔️  Running full competitive elimination analysis...")
-        
-        # Check for existing resume data if requested
-        if resume:
-            resume_file = output_dir / "elimination_progress.json"
-            if resume_file.exists():
-                click.echo(f"📂 Found existing progress file: {resume_file}")
-                click.echo("🔄 Will resume from previous state...")
-            else:
-                click.echo("🆕 No previous progress found, starting fresh...")
-        
-        # Run the full elimination analysis with comprehensive metrics
-        use_targeted_gifs = (sampling_strategy == 'targeted')
-        elimination_result = eliminator.run_elimination_analysis(
-            test_pipelines=test_pipelines,
-            elimination_threshold=threshold,
-            use_targeted_gifs=use_targeted_gifs
-        )
-        
-        # Display comprehensive results
-        click.echo(f"\n📊 Comprehensive Elimination Results:")
-        click.echo(f"   📉 Eliminated: {len(elimination_result.eliminated_pipelines)} pipelines")
-        click.echo(f"   ✅ Retained: {len(elimination_result.retained_pipelines)} pipelines")
-        total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
-        if total_pipelines > 0:
-            elimination_rate = len(elimination_result.eliminated_pipelines) / total_pipelines * 100
-            click.echo(f"   📈 Elimination rate: {elimination_rate:.1f}%")
-        else:
-            click.echo("   📈 Elimination rate: N/A (no pipelines tested)")
-        
-        if elimination_result.eliminated_pipelines:
-            click.echo(f"\n❌ Top eliminated pipelines:")
-            # Show first 10 eliminated pipelines with reasons
-            for i, pipeline in enumerate(sorted(elimination_result.eliminated_pipelines)[:10]):
-                reason = elimination_result.elimination_reasons.get(pipeline, "No reason provided")
-                click.echo(f"   {i+1:2d}. {pipeline}")
-                click.echo(f"       └─ {reason}")
-            
-            if len(elimination_result.eliminated_pipelines) > 10:
-                click.echo(f"   ... and {len(elimination_result.eliminated_pipelines) - 10} more (see full results in {output_dir})")
-        
-        if elimination_result.content_type_winners:
-            click.echo("\n🏆 Winners by content type (Quality | Efficiency | Compression):")
-            for content_type, winners in elimination_result.content_type_winners.items():
-                # Show performance matrix info if available
-                perf_info = elimination_result.performance_matrix.get(content_type, {})
-                avg_quality = perf_info.get('mean_composite_quality', 0)
-                avg_compression = perf_info.get('mean_compression_ratio', 0)
-                
-                click.echo(f"   📁 {content_type.upper()}: (avg quality: {avg_quality:.3f}, avg compression: {avg_compression:.1f}x)")
-                
-                # Show top 5 winners
-                for i, winner in enumerate(winners[:5]):
-                    click.echo(f"      {i+1}. {winner}")
-                
-                if len(winners) > 5:
-                    click.echo(f"      ... and {len(winners) - 5} more")
-    
-    # Show file outputs
-    click.echo(f"\n📄 Results saved to timestamped directory:")
-    click.echo(f"   📁 Run directory: {output_dir}")
-    click.echo(f"   📊 CSV data: {output_dir}/elimination_test_results.csv")
-    click.echo(f"   📊 Timestamped CSV: {output_dir}/elimination_test_results_*.csv")
-    click.echo(f"   📝 Summary: {output_dir}/elimination_summary.json")
-    click.echo(f"   📋 Run metadata: {output_dir}/run_metadata.json")
-    
-    # Show master history file info
-    master_history = output_dir.parent / "elimination_history_master.csv"
-    latest_link = output_dir.parent / "latest"
-    cache_db = output_dir.parent / "pipeline_results_cache.db"
-    
-    if master_history.exists():
-        click.echo(f"   📈 Master history: {master_history}")
-    if latest_link.exists():
-        click.echo(f"   🔗 Latest results: {latest_link}")
-    if cache_db.exists() and not no_cache:
-        cache_size_mb = cache_db.stat().st_size / (1024 * 1024)
-        click.echo(f"   💾 Cache database: {cache_db} ({cache_size_mb:.1f} MB)")
-        
-    failed_pipelines_file = output_dir / "failed_pipelines.json"
-    has_failed_pipelines = failed_pipelines_file.exists()
-    if has_failed_pipelines:
-        click.echo(f"   ❌ Failed pipelines: {output_dir}/failed_pipelines.json")
-        click.echo(f"   📋 Failure analysis: {output_dir}/failure_analysis_report.txt")
-    if resume:
-        click.echo(f"   💾 Progress: {output_dir}/elimination_progress.json")
-    
-    click.echo(f"\n✅ Analysis complete!")
-    
-    # Provide next steps
-    click.echo(f"\n🔄 Next steps:")
-    click.echo(f"   1. Review eliminated pipelines in the summary file")
-    click.echo(f"   2. Use retained pipelines for production workflows")
-    click.echo(f"   3. Run: giflab run data/raw --pipelines <retained_pipelines>")
-    if has_failed_pipelines:
-        click.echo(f"   4. Review failed pipelines: giflab view-failures {output_dir}")
-    
-    # Show historical data usage
-    click.echo(f"\n📊 Historical data usage:")
-    click.echo(f"   • Latest results: Access via {latest_link} symlink")
-    click.echo(f"   • All runs: Browse {output_dir.parent}/run_* directories")
-    if master_history.exists():
-        click.echo(f"   • Compare runs: Analyze {master_history.name}")
-        click.echo(f"   • Example: pandas.read_csv('{master_history}').groupby('run_id')")
-    
-    # Show cache usage info
-    if not no_cache:
-        click.echo(f"\n💾 Cache usage:")
-        click.echo(f"   • Future runs will be faster due to cached results")
-        click.echo(f"   • Use --no-cache to force fresh results")
-        click.echo(f"   • Use --clear-cache to reset cache database")
-        if cache_db.exists():
-            click.echo(f"   • Cache invalidates automatically on code changes")
-        
-        # Mention debug command for failures
-        if failed_pipelines_file.exists():
-            click.echo(f"\n🔍 Debugging failures:")
-            click.echo(f"   • Use 'giflab debug-failures' to analyze pipeline failures")
-            click.echo(f"   • Filter by error type: 'giflab debug-failures --error-type ffmpeg'")
-            click.echo(f"   • Get summary: 'giflab debug-failures --summary'")
-    
-    if elimination_result.eliminated_pipelines:
-        total_tested = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
-        if total_tested > 0:
-            potential_savings = len(elimination_result.eliminated_pipelines) / total_tested * 100
-            click.echo(f"\n💡 Potential {potential_savings:.0f}% reduction in pipeline testing time!")
-        else:
-            click.echo("\n💡 Potential time savings: Unable to calculate")
+# ---------------------------------------------------------------------------
+# failure analysis commands
+# ---------------------------------------------------------------------------
 
 
 @main.command()
@@ -1022,10 +686,10 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
     
         # View top 10 failures from latest run
         giflab view-failures elimination_results/
-        
+
         # View all gifski failures with details
         giflab view-failures elimination_results/ --error-type gifski --limit 0 --detailed
-        
+
         # Quick overview of command execution failures
         giflab view-failures elimination_results/ --error-type command --limit 5
     """
@@ -1062,7 +726,7 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
             'timeout': 'timeout',
             'other': None  # Will be handled separately
         }
-        
+
         keyword = error_keywords.get(error_type)
         for failure in failed_pipelines:
             error_msg = failure.get('error_message', '').lower()
@@ -1072,7 +736,7 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
                     filtered_failures.append(failure)
             elif keyword and keyword in error_msg:
                 filtered_failures.append(failure)
-        
+
         failed_pipelines = filtered_failures
     
     # Apply limit
@@ -1125,12 +789,12 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
         gif_name = failure.get('gif_name', 'unknown')
         error_msg = failure.get('error_message', 'No error message')
         tools = failure.get('tools_used', [])
-        
+
         click.echo(f"\n{i:2d}. {pipeline_id}")
         click.echo(f"    GIF: {gif_name} ({failure.get('content_type', 'unknown')})")
         click.echo(f"    Tools: {', '.join(tools) if tools else 'unknown'}")
         click.echo(f"    Error: {error_msg}")
-        
+
         if detailed:
             traceback_info = failure.get('error_traceback', '')
             if traceback_info:
@@ -1203,13 +867,13 @@ def debug_failures(
     \b
         # Show summary of all failures
         giflab debug-failures --summary
-        
+
         # Show detailed gifski failures
         giflab debug-failures --error-type gifski
-        
+
         # Show recent failures (last 24 hours)
         giflab debug-failures --recent-hours 24
-        
+
         # Clear failures that should be fixed
         giflab debug-failures --clear-fixed
     """
@@ -1221,19 +885,19 @@ def debug_failures(
         return
     
     try:
-        from .pipeline_elimination import PipelineResultsCache, ErrorTypes
+        from .experimental import PipelineResultsCache, ErrorTypes
         import git
-        
+
         # Get current git commit
         try:
             repo = git.Repo(".")
             git_commit = repo.head.commit.hexsha[:8]
         except Exception:
             git_commit = "unknown"
-        
+
         # Initialize cache connection
         cache = PipelineResultsCache(cache_db_path, git_commit)
-        
+
         if clear_fixed:
             # Clear specific failure types that should be fixed by recent code changes
             import sqlite3
@@ -1268,18 +932,18 @@ def debug_failures(
                     click.echo("   No fixed failures found to clear")
                     
                 return
-        
+
         # Query failures
         failures = cache.query_failures(
             error_type=error_type,
             pipeline_id=pipeline,
             recent_hours=recent_hours
-        )
-        
+    )
+
         if not failures:
             click.echo("✅ No pipeline failures found with the specified criteria")
             return
-        
+
         if summary:
             # Show summary statistics
             from collections import Counter
@@ -1311,7 +975,7 @@ def debug_failures(
             click.echo(f"\n⚠️  Most Common Error Messages:")
             for error_msg, count in error_messages.most_common(3):
                 click.echo(f"   {error_msg}... : {count} occurrences")
-        
+
         else:
             # Show detailed failures
             click.echo(f"🔍 Pipeline Failures ({len(failures)} found)")

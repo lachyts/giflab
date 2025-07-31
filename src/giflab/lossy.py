@@ -70,6 +70,7 @@ from .frame_keep import (
 )
 from .meta import extract_gif_metadata
 from .validation import validate_path_security
+from .external_engines.imagemagick import export_png_sequence
 
 
 class LossyEngine(Enum):
@@ -392,12 +393,8 @@ def compress_with_gifsicle(
             f"Gifsicle failed with exit code {e.returncode}: {e.stderr}"
         ) from e
     except subprocess.TimeoutExpired as e:
-        # Ensure process is properly terminated on timeout
-        if e.args and hasattr(e.args[0], 'kill'):
-            try:
-                e.args[0].kill()
-            except Exception:
-                pass
+        # subprocess.run already cleans up the child process on timeout.
+        # The previous kill() attempt used the wrong object (cmd string) and was ineffective.
         raise RuntimeError(f"Gifsicle timed out after {RUN_TIMEOUT} seconds") from e
     except Exception as e:
         raise RuntimeError(f"Gifsicle execution failed: {str(e)}") from e
@@ -564,12 +561,7 @@ def compress_with_animately(
             f"Animately failed with exit code {e.returncode}: {e.stderr}"
         ) from e
     except subprocess.TimeoutExpired as e:
-        # Ensure process is properly terminated on timeout
-        if e.args and hasattr(e.args[0], 'kill'):
-            try:
-                e.args[0].kill()
-            except Exception:
-                pass
+        # subprocess.run already terminates the child process on timeout.
         raise RuntimeError(f"Animately timed out after {RUN_TIMEOUT} seconds") from e
     except Exception as e:
         raise RuntimeError(f"Animately execution failed: {str(e)}") from e
@@ -589,7 +581,6 @@ def _is_executable(path: str) -> bool:
         return Path(path).is_file() and os.access(path, os.X_OK)
 
     # Otherwise, check if it's available in PATH
-    import shutil
     return shutil.which(path) is not None
 
 
@@ -819,8 +810,6 @@ def _setup_png_sequence_directory(
     Raises:
         RuntimeError: If PNG sequence setup fails
     """
-    from .external_engines.imagemagick import export_png_sequence
-    
     logger = logging.getLogger(__name__)
     
     if png_sequence_dir is not None:
@@ -1040,12 +1029,8 @@ def _execute_animately_advanced(
             f"Animately advanced lossy failed with exit code {e.returncode}: {e.stderr}"
         ) from e
     except subprocess.TimeoutExpired as e:
-        if e.args and hasattr(e.args[0], 'kill'):
-            try:
-                e.args[0].kill()
-            except Exception:
-                pass
         timeout_duration = RUN_TIMEOUT * ADVANCED_TIMEOUT_MULTIPLIER
+        # subprocess.run already cleans up; simply propagate a clear error.
         raise RuntimeError(
             f"Animately advanced lossy timed out after {timeout_duration} seconds"
         ) from e
