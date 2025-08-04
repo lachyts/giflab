@@ -1,10 +1,12 @@
 """I/O utilities for atomic writes, CSV operations, and error logging."""
 
+import atexit
 import csv
 import json
 import logging
 import os
-import shutil
+from shutil import move, copy2
+import signal
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -105,7 +107,7 @@ def atomic_write(target_path: Path, mode: str = "w"):
             yield temp_file
             temp_file.flush()
             # Atomic move on POSIX systems
-            shutil.move(temp_file.name, target_path)
+            move(temp_file.name, target_path)
         except Exception:
             # Clean up temp file on error
             Path(temp_file.name).unlink(missing_ok=True)
@@ -255,12 +257,12 @@ def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:
             raise OSError(f"Too many filename conflicts when moving {gif_path}")
 
     try:
-        # Use Path.rename() which is more reliable than shutil.move()
+        # Use Path.rename() which is more reliable than move()
         gif_path.rename(dest_path)
     except OSError as e:
         # If rename fails (e.g., cross-filesystem), fall back to copy + delete
         try:
-            shutil.copy2(str(gif_path), str(dest_path))
+            copy2(str(gif_path), str(dest_path))
             gif_path.unlink()
         except Exception as copy_error:
             raise OSError(f"Failed to move {gif_path} to {dest_path}: {copy_error}") from e

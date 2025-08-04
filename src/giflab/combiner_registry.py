@@ -97,14 +97,14 @@ def _combine_animately(input_path: Path, output_path: Path, params: dict[str, An
 # Generic placeholder combiners for other tool families (copy pass-through)
 # ---------------------------------------------------------------------------
 
-import shutil
+from shutil import copy
 import time
 
 
 def _noop_copy(input_path: Path, output_path: Path, engine: str) -> dict[str, Any]:
     start = time.time()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(input_path, output_path)
+    copy(input_path, output_path)
     return {"render_ms": int((time.time() - start) * 1000), "engine": engine}
 
 

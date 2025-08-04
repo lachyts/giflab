@@ -11,7 +11,7 @@ fast feedback if the environment is mis-configured.
 import os
 import platform
 import re
-import shutil
+from shutil import which
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +40,7 @@ class ToolInfo:
 
 def _which(cmd: str) -> str | None:
     """Return full path if *cmd* is executable in $PATH, else *None*."""
-    return shutil.which(cmd)
+    return which(cmd)
 
 
 def _extract_version(output: str, pattern: str) -> str | None:

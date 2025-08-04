@@ -7,7 +7,7 @@ Based on research findings identifying 13 different dithering methods.
 from __future__ import annotations
 
 import os
-import shutil
+from shutil import copy
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -116,7 +116,7 @@ def frame_reduce(
     if keep_ratio == 1.0:
         start = time.perf_counter()
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(input_path, output_path)
+        copy(input_path, output_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
         size_kb = int(os.path.getsize(output_path) / 1024)
         return {

@@ -950,7 +950,7 @@ class GifskiLossyCompressor(LossyCompressionTool):
 # No-Operation fallbacks (always available)
 # ---------------------------------------------------------------------------
 
-import shutil
+from shutil import copy
 import time
 
 
@@ -970,7 +970,7 @@ class _BaseNoOpTool:
     def _copy_file(self, src: Path, dst: Path) -> dict[str, Any]:
         start = time.time()
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(src, dst)
+        copy(src, dst)
         return {"render_ms": int((time.time() - start) * 1000), "engine": self.NAME}
 
 

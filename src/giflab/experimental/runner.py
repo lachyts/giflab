@@ -1,13 +1,16 @@
-"""Experimental Pipeline Framework
+"""Core experimental runner for systematic pipeline testing.
 
-Systematically tests and analyzes pipeline combinations through
-competitive testing on synthetic GIFs with diverse characteristics.
+This module contains the main ExperimentalRunner class responsible for
+systematic testing and analysis of pipeline combinations.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
+import signal
+from shutil import copy
 import sqlite3
 import sys
 import traceback
@@ -21,472 +24,14 @@ import pandas as pd
 import numpy as np
 from PIL import Image, ImageDraw
 
-from .dynamic_pipeline import generate_all_pipelines, Pipeline
+from ..dynamic_pipeline import generate_all_pipelines, Pipeline
+from ..elimination_errors import ErrorTypes
+from ..elimination_cache import PipelineResultsCache, get_git_commit
+from ..synthetic_gifs import SyntheticGifGenerator, SyntheticGifSpec
+from ..error_handling import clean_error_message
+from .pareto import ParetoAnalyzer
+from .sampling import SAMPLING_STRATEGIES, PipelineSampler
 
-# Import modularized components
-from .elimination_errors import ErrorTypes
-from .elimination_cache import PipelineResultsCache, get_git_commit
-from .synthetic_gifs import SyntheticGifGenerator, SyntheticGifSpec
-from .error_handling import clean_error_message
-
-# ---------------------------------------------------------------------------
-# Deprecated helper functions (wrapped in always-false block to avoid runtime
-# execution and indentation errors).
-# ---------------------------------------------------------------------------
-if False:
-    def _init_database(self):
-        """Initialize the SQLite database schema."""
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                # Results table (successful tests)
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS pipeline_results (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        cache_key TEXT UNIQUE NOT NULL,
-                        pipeline_id TEXT NOT NULL,
-                        gif_name TEXT NOT NULL,
-                        test_colors INTEGER NOT NULL,
-                        test_lossy INTEGER NOT NULL,
-                        test_frame_ratio REAL NOT NULL,
-                        applied_colors INTEGER,
-                        applied_lossy INTEGER,
-                        applied_frame_ratio REAL,
-                        actual_pipeline_steps INTEGER,
-                        git_commit TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        result_json TEXT NOT NULL
-                    )
-                """)
-                
-                # Failures table (for debugging and analysis)
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS pipeline_failures (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        pipeline_id TEXT NOT NULL,
-                        gif_name TEXT NOT NULL,
-                        test_colors INTEGER NOT NULL,
-                        test_lossy INTEGER NOT NULL,
-                        test_frame_ratio REAL NOT NULL,
-                        applied_colors INTEGER,
-                        applied_lossy INTEGER,
-                        applied_frame_ratio REAL,
-                        actual_pipeline_steps INTEGER,
-                        git_commit TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        error_type TEXT NOT NULL,
-                        error_message TEXT NOT NULL,
-                        error_traceback TEXT,
-                        pipeline_steps TEXT,
-                        tools_used TEXT
-                    )
-                """)
-                
-                # Create indexes for faster lookups
-                # Legacy index for backward compatibility
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_cache_lookup 
-                    ON pipeline_results(pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio)
-                """)
-                
-                # New index for semantic parameters
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_semantic_lookup 
-                    ON pipeline_results(pipeline_id, gif_name, applied_colors, applied_lossy, applied_frame_ratio)
-                """)
-                
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_failure_lookup 
-                    ON pipeline_failures(pipeline_id, error_type, created_at)
-                """)
-                
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_failure_analysis 
-                    ON pipeline_failures(error_type, git_commit, created_at)
-                """)
-                
-                # Add migration logic for existing databases
-                self._migrate_database_schema(conn)
-                
-                conn.commit()
-                self.logger.debug(f"📁 Initialized cache database: {self.cache_db_path}")
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to initialize cache database: {e}")
-    
-    def _migrate_database_schema(self, conn):
-        """Add new semantic columns to existing databases."""
-        try:
-            # Check if new columns exist, add them if not
-            cursor = conn.execute("PRAGMA table_info(pipeline_results)")
-            columns = {row[1] for row in cursor.fetchall()}
-            
-            if 'applied_colors' not in columns:
-                self.logger.info("🔄 Migrating cache database schema to semantic parameters")
-                
-                # Add new columns to pipeline_results
-                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_colors INTEGER")
-                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_lossy INTEGER") 
-                conn.execute("ALTER TABLE pipeline_results ADD COLUMN applied_frame_ratio REAL")
-                conn.execute("ALTER TABLE pipeline_results ADD COLUMN actual_pipeline_steps INTEGER")
-                
-                # Add new columns to pipeline_failures
-                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_colors INTEGER")
-                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_lossy INTEGER")
-                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN applied_frame_ratio REAL") 
-                conn.execute("ALTER TABLE pipeline_failures ADD COLUMN actual_pipeline_steps INTEGER")
-                
-                self.logger.info("✅ Database schema migration completed")
-                
-        except Exception as e:
-            self.logger.warning(f"Database migration failed (non-critical): {e}")
-    
-    def _generate_cache_key(self, pipeline_id: str, gif_name: str, params: dict) -> str:
-        """Generate a unique cache key for a pipeline test combination."""
-        import hashlib
-        
-        # Create a deterministic key from all parameters
-        key_data = f"{pipeline_id}|{gif_name}|{params['colors']}|{params['lossy']}|{params.get('frame_ratio', 1.0)}|{self.git_commit}"
-        return hashlib.sha256(key_data.encode()).hexdigest()
-    
-    def get_cached_result(self, pipeline_id: str, gif_name: str, params: dict) -> Optional[dict]:
-        """Retrieve cached result if it exists and is valid.
-        
-        Args:
-            pipeline_id: Pipeline identifier
-            gif_name: Test GIF name
-            params: Test parameters dict
-            
-        Returns:
-            Cached result dict or None if not found/invalid
-        """
-        cache_key = self._generate_cache_key(pipeline_id, gif_name, params)
-        
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                cursor = conn.execute("""
-                    SELECT result_json, git_commit, created_at 
-                    FROM pipeline_results 
-                    WHERE cache_key = ?
-                """, (cache_key,))
-                
-                row = cursor.fetchone()
-                if row:
-                    result_json, cached_git_commit, created_at = row
-                    
-                    # Check if cache is still valid (same git commit)
-                    if cached_git_commit == self.git_commit:
-                        self.logger.debug(f"💾 Cache hit for {pipeline_id} on {gif_name}")
-                        return json.loads(result_json)
-                    else:
-                        self.logger.debug(f"💾 Cache invalidated for {pipeline_id} on {gif_name} (git commit changed)")
-                        # Could optionally delete invalidated entries here
-                        return None
-                else:
-                    self.logger.debug(f"💾 Cache miss for {pipeline_id} on {gif_name}")
-                    return None
-                    
-        except Exception as e:
-            self.logger.warning(f"Failed to retrieve cached result: {e}")
-            return None
-    
-    def queue_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
-        """Queue a successful pipeline test result for batch storage.
-        
-        Args:
-            pipeline_id: Pipeline identifier
-            gif_name: Test GIF name  
-            params: Test parameters dict
-            result: Test result dict to cache
-        """
-        cache_key = self._generate_cache_key(pipeline_id, gif_name, params)
-        
-        self._pending_results.append({
-            'cache_key': cache_key,
-            'pipeline_id': pipeline_id,
-            'gif_name': gif_name,
-            'test_colors': params['colors'],
-            'test_lossy': params['lossy'],
-            'test_frame_ratio': params.get('frame_ratio', 1.0),
-            'applied_colors': result.get('applied_colors'),
-            'applied_lossy': result.get('applied_lossy'),
-            'applied_frame_ratio': result.get('applied_frame_ratio'),
-            'actual_pipeline_steps': result.get('actual_pipeline_steps'),
-            'git_commit': self.git_commit,
-            'created_at': datetime.now().isoformat(),
-            'result_json': json.dumps(result)
-        })
-        
-        self.logger.debug(f"💾 Queued result for {pipeline_id} on {gif_name} (batch size: {len(self._pending_results)})")
-    
-    def queue_failure(self, pipeline_id: str, gif_name: str, params: dict, error_info: dict):
-        """Queue a pipeline failure for batch storage and analysis.
-        
-        Args:
-            pipeline_id: Pipeline identifier
-            gif_name: Test GIF name
-            params: Test parameters dict
-            error_info: Error information dict with keys: error, error_traceback, pipeline_steps, tools_used
-        """
-        error_type = ErrorTypes.categorize_error(error_info.get('error', ''))
-        
-        self._pending_failures.append({
-            'pipeline_id': pipeline_id,
-            'gif_name': gif_name,
-            'test_colors': params['colors'],
-            'test_lossy': params['lossy'],
-            'test_frame_ratio': params.get('frame_ratio', 1.0),
-            'applied_colors': None,  # Always None for failures since pipeline failed
-            'applied_lossy': None,   # Always None for failures since pipeline failed
-            'applied_frame_ratio': None,  # Always None for failures since pipeline failed
-            'actual_pipeline_steps': None,  # Always None for failures since pipeline failed
-            'git_commit': self.git_commit,
-            'created_at': datetime.now().isoformat(),
-            'error_type': error_type,
-            'error_message': error_info.get('error', 'Unknown error'),
-            'error_traceback': error_info.get('error_traceback', ''),
-            'pipeline_steps': json.dumps(error_info.get('pipeline_steps', [])),
-            'tools_used': json.dumps(error_info.get('tools_used', []))
-        })
-        
-        self.logger.debug(f"💾 Queued failure for {pipeline_id} on {gif_name} (batch size: {len(self._pending_failures)})")
-    
-    def flush_batch(self, force: bool = False):
-        """Flush pending results and failures to database.
-        
-        Args:
-            force: If True, flush regardless of batch size
-        """
-        batch_size = 10  # Configurable batch size
-        
-        # Flush results if batch is ready or forced
-        if force or len(self._pending_results) >= batch_size:
-            self._flush_results_batch()
-            
-        # Flush failures if batch is ready or forced
-        if force or len(self._pending_failures) >= batch_size:
-            self._flush_failures_batch()
-    
-    def _flush_results_batch(self):
-        """Flush pending successful results to database."""
-        if not self._pending_results:
-            return
-            
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                conn.executemany("""
-                    INSERT OR REPLACE INTO pipeline_results 
-                    (cache_key, pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
-                     applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
-                     git_commit, created_at, result_json)
-                    VALUES (:cache_key, :pipeline_id, :gif_name, :test_colors, :test_lossy, 
-                            :test_frame_ratio, :applied_colors, :applied_lossy, :applied_frame_ratio,
-                            :actual_pipeline_steps, :git_commit, :created_at, :result_json)
-                """, self._pending_results)
-                
-                conn.commit()
-                count = len(self._pending_results)
-                self.logger.debug(f"💾 Flushed {count} cached results to database")
-                self._pending_results.clear()
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to flush results batch: {e}")
-    
-    def _flush_failures_batch(self):
-        """Flush pending failures to database."""
-        if not self._pending_failures:
-            return
-            
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                conn.executemany("""
-                    INSERT INTO pipeline_failures 
-                    (pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
-                     applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
-                     git_commit, created_at, error_type, error_message, error_traceback,
-                     pipeline_steps, tools_used)
-                    VALUES (:pipeline_id, :gif_name, :test_colors, :test_lossy, :test_frame_ratio,
-                            :applied_colors, :applied_lossy, :applied_frame_ratio, :actual_pipeline_steps,
-                            :git_commit, :created_at, :error_type, :error_message, :error_traceback,
-                            :pipeline_steps, :tools_used)
-                """, self._pending_failures)
-                
-                conn.commit()
-                count = len(self._pending_failures)
-                self.logger.info(f"🔍 Stored {count} failures for debugging analysis")
-                self._pending_failures.clear()
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to flush failures batch: {e}")
-    
-    def store_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
-        """Store a pipeline test result (legacy method - now uses batching).
-        
-        Args:
-            pipeline_id: Pipeline identifier
-            gif_name: Test GIF name  
-            params: Test parameters dict
-            result: Test result dict to cache
-        """
-        self.queue_result(pipeline_id, gif_name, params, result)
-        self.flush_batch()  # Auto-flush when batch is ready
-    
-    def clear_cache(self):
-        """Clear all cached results and failures."""
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_results")
-                results_count = cursor.fetchone()[0]
-                
-                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_failures")
-                failures_count = cursor.fetchone()[0]
-                
-                conn.execute("DELETE FROM pipeline_results")
-                conn.execute("DELETE FROM pipeline_failures")
-                conn.commit()
-                
-                self.logger.info(f"🗑️ Cleared {results_count} cached results and {failures_count} stored failures")
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to clear cache: {e}")
-    
-    def get_cache_stats(self) -> dict:
-        """Get statistics about the current cache."""
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                # Results statistics
-                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_results")
-                total_results = cursor.fetchone()[0]
-                
-                cursor = conn.execute("""
-                    SELECT git_commit, COUNT(*) 
-                    FROM pipeline_results 
-                    GROUP BY git_commit 
-                    ORDER BY COUNT(*) DESC
-                """)
-                results_by_commit = dict(cursor.fetchall())
-                
-                cursor = conn.execute("""
-                    SELECT COUNT(*) FROM pipeline_results 
-                    WHERE git_commit = ?
-                """, (self.git_commit,))
-                current_commit_results = cursor.fetchone()[0]
-                
-                # Failures statistics
-                cursor = conn.execute("SELECT COUNT(*) FROM pipeline_failures")
-                total_failures = cursor.fetchone()[0]
-                
-                cursor = conn.execute("""
-                    SELECT error_type, COUNT(*) 
-                    FROM pipeline_failures 
-                    WHERE git_commit = ?
-                    GROUP BY error_type 
-                    ORDER BY COUNT(*) DESC
-                """, (self.git_commit,))
-                current_failures_by_type = dict(cursor.fetchall())
-                
-                # Database file size
-                db_size_bytes = self.cache_db_path.stat().st_size if self.cache_db_path.exists() else 0
-                db_size_mb = db_size_bytes / (1024 * 1024)
-                
-                return {
-                    'total_results': total_results,
-                    'current_commit_results': current_commit_results,
-                    'results_by_commit': results_by_commit,
-                    'total_failures': total_failures,
-                    'current_failures_by_type': current_failures_by_type,
-                    'database_size_mb': round(db_size_mb, 2),
-                    'current_git_commit': self.git_commit,
-                    'pending_batch_size': len(self._pending_results),
-                    'pending_failures_size': len(self._pending_failures)
-                }
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to get cache stats: {e}")
-            return {
-                'total_results': 0,
-                'current_commit_results': 0,
-                'results_by_commit': {},
-                'total_failures': 0,
-                'current_failures_by_type': {},
-                'database_size_mb': 0,
-                'current_git_commit': self.git_commit,
-                'pending_batch_size': 0,
-                'pending_failures_size': 0
-            }
-    
-    def query_failures(self, error_type: Optional[str] = None, pipeline_id: Optional[str] = None, 
-                      recent_hours: Optional[int] = None) -> List[dict]:
-        """Query failures for debugging analysis.
-        
-        Args:
-            error_type: Filter by specific error type (e.g., 'ffmpeg', 'timeout')
-            pipeline_id: Filter by specific pipeline
-            recent_hours: Only show failures from last N hours
-            
-        Returns:
-            List of failure records
-        """
-        try:
-            with sqlite3.connect(self.cache_db_path) as conn:
-                # Build dynamic query
-                where_conditions = ["git_commit = ?"]
-                params = [self.git_commit]
-                
-                if error_type:
-                    where_conditions.append("error_type = ?")
-                    params.append(error_type)
-                    
-                if pipeline_id:
-                    where_conditions.append("pipeline_id = ?")
-                    params.append(pipeline_id)
-                    
-                if recent_hours:
-                    from datetime import datetime, timedelta
-                    cutoff_time = (datetime.now() - timedelta(hours=recent_hours)).isoformat()
-                    where_conditions.append("created_at >= ?")
-                    params.append(cutoff_time)
-                
-                where_clause = " AND ".join(where_conditions)
-                
-                cursor = conn.execute(f"""
-                    SELECT pipeline_id, gif_name, test_colors, test_lossy, test_frame_ratio,
-                           applied_colors, applied_lossy, applied_frame_ratio, actual_pipeline_steps,
-                           error_type, error_message, error_traceback, created_at,
-                           pipeline_steps, tools_used
-                    FROM pipeline_failures 
-                    WHERE {where_clause}
-                    ORDER BY created_at DESC
-                """, params)
-                
-                columns = [desc[0] for desc in cursor.description]
-                failures = []
-                
-                for row in cursor.fetchall():
-                    failure = dict(zip(columns, row))
-                    # Parse JSON fields
-                    try:
-                        failure['pipeline_steps'] = json.loads(failure['pipeline_steps'])
-                        failure['tools_used'] = json.loads(failure['tools_used'])
-                    except (json.JSONDecodeError, TypeError):
-                        failure['pipeline_steps'] = []
-                        failure['tools_used'] = []
-                    
-                    failures.append(failure)
-                
-                return failures
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to query failures: {e}")
-            return []
-
-
-@dataclass 
-class SamplingStrategy:
-    """Configuration for intelligent sampling strategies."""
-    name: str
-    description: str
-    sample_ratio: float  # Fraction of total pipelines to test
-    min_samples_per_tool: int = 3  # Minimum samples per tool type
 
 @dataclass
 class ExperimentResult:
@@ -506,319 +51,11 @@ class ExperimentResult:
     quality_aligned_rankings: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)
 
 
-class ParetoAnalyzer:
-    """Advanced Pareto frontier analysis for pipeline efficiency comparison."""
-    
-    def __init__(self, results_df: pd.DataFrame, logger: logging.Logger = None):
-        """Initialize the Pareto analyzer.
-        
-        Args:
-            results_df: DataFrame with pipeline test results
-            logger: Optional logger instance
-        """
-        self.results_df = results_df
-        self.logger = logger or logging.getLogger(__name__)
-        self.quality_metrics = ['composite_quality', 'ssim_mean', 'ms_ssim_mean']
-        self.size_metrics = ['file_size_kb', 'compression_ratio']
-    
-    def generate_comprehensive_pareto_analysis(self) -> dict:
-        """Generate complete Pareto analysis across all dimensions."""
-        
-        analysis = {
-            'content_type_frontiers': {},
-            'global_frontier': None,
-            'pipeline_dominance_analysis': {},
-            'efficiency_rankings': {},
-            'trade_off_insights': {}
-        }
-        
-        try:
-            # 1. Per-content-type analysis
-            for content_type in self.results_df['content_type'].unique():
-                content_data = self.results_df[self.results_df['content_type'] == content_type]
-                analysis['content_type_frontiers'][content_type] = self._compute_pareto_frontier(
-                    content_data, quality_col='composite_quality', size_col='file_size_kb'
-                )
-            
-            # 2. Global frontier across all content types
-            analysis['global_frontier'] = self._compute_pareto_frontier(
-                self.results_df, quality_col='composite_quality', size_col='file_size_kb'
-            )
-            
-            # 3. Pipeline dominance analysis
-            analysis['pipeline_dominance_analysis'] = self._analyze_pipeline_dominance()
-            
-            # 4. Efficiency rankings at quality targets
-            analysis['efficiency_rankings'] = self._rank_pipelines_at_quality_targets()
-            
-            # 5. Trade-off insights
-            analysis['trade_off_insights'] = self._generate_trade_off_insights()
-            
-        except Exception as e:
-            self.logger.warning(f"Pareto analysis failed: {e}")
-            
-        return analysis
-    
-    def _compute_pareto_frontier(self, data: pd.DataFrame, 
-                                quality_col: str, size_col: str) -> dict:
-        """Compute Pareto frontier for quality vs size trade-off."""
-        
-        if data.empty or quality_col not in data.columns or size_col not in data.columns:
-            return {'frontier_points': [], 'dominated_pipelines': []}
-        
-        # Filter out invalid data
-        valid_data = data.dropna(subset=[quality_col, size_col])
-        if valid_data.empty:
-            return {'frontier_points': [], 'dominated_pipelines': []}
-        
-        # Step 1: For each pipeline, get its best performances
-        pipeline_best_points = {}
-        
-        for pipeline_id in valid_data['pipeline_id'].unique():
-            pipeline_data = valid_data[valid_data['pipeline_id'] == pipeline_id]
-            
-            # Get all quality-size points for this pipeline
-            points = []
-            for _, row in pipeline_data.iterrows():
-                quality = row[quality_col]
-                size = row[size_col]
-                if pd.notna(quality) and pd.notna(size):
-                    points.append((quality, size, dict(row)))
-            
-            # For this pipeline, find its own Pareto frontier
-            pipeline_frontier = self._find_pareto_optimal_points(points)
-            pipeline_best_points[pipeline_id] = pipeline_frontier
-        
-        # Step 2: Combine all pipeline best points
-        all_candidate_points = []
-        for pipeline_id, points in pipeline_best_points.items():
-            for quality, size, row_data in points:
-                all_candidate_points.append((quality, size, pipeline_id, row_data))
-        
-        # Step 3: Find global Pareto frontier
-        global_frontier = self._find_pareto_optimal_points(all_candidate_points)
-        
-        # Step 4: Identify dominated pipelines
-        frontier_pipelines = {point[2] for point in global_frontier}  # pipeline_ids in frontier
-        all_pipelines = set(valid_data['pipeline_id'].unique())
-        dominated_pipelines = all_pipelines - frontier_pipelines
-        
-        return {
-            'frontier_points': [
-                {
-                    'quality': point[0],
-                    'file_size_kb': point[1], 
-                    'pipeline_id': point[2],
-                    'efficiency_score': point[0] / point[1] if point[1] > 0 else 0,  # quality per KB
-                    'row_data': point[3] if len(point) > 3 else None
-                }
-                for point in global_frontier
-            ],
-            'dominated_pipelines': list(dominated_pipelines),
-            'pipeline_frontier_segments': pipeline_best_points
-        }
-    
-    def _find_pareto_optimal_points(self, points: list) -> list:
-        """Find Pareto optimal points from a list of (quality, size, ...) tuples.
-        
-        Higher quality is better, lower size is better.
-        """
-        if not points:
-            return []
-        
-        # Sort by quality (descending) then by size (ascending) 
-        sorted_points = sorted(points, key=lambda x: (-x[0], x[1]))
-        
-        pareto_frontier = []
-        min_size_seen = float('inf')
-        
-        for point in sorted_points:
-            quality, size = point[0], point[1]
-            
-            # This point is Pareto optimal if it has smaller size than any previous point
-            # (since we're iterating in descending quality order)
-            if size < min_size_seen:
-                pareto_frontier.append(point)
-                min_size_seen = size
-        
-        return pareto_frontier
-    
-    def _analyze_pipeline_dominance(self) -> dict:
-        """Analyze which pipelines dominate others across different scenarios."""
-        
-        dominance_analysis = {}
-        
-        for content_type in self.results_df['content_type'].unique():
-            content_data = self.results_df[self.results_df['content_type'] == content_type]
-            
-            pipeline_dominance = {}
-            
-            for pipeline_a in content_data['pipeline_id'].unique():
-                data_a = content_data[content_data['pipeline_id'] == pipeline_a]
-                dominated_by_a = []
-                
-                for pipeline_b in content_data['pipeline_id'].unique():
-                    if pipeline_a == pipeline_b:
-                        continue
-                        
-                    data_b = content_data[content_data['pipeline_id'] == pipeline_b]
-                    
-                    # Check if A dominates B (A has better/equal quality AND better/equal size)
-                    if self._pipeline_dominates(data_a, data_b):
-                        dominated_by_a.append(pipeline_b)
-                
-                pipeline_dominance[pipeline_a] = {
-                    'dominates': dominated_by_a,
-                    'dominance_count': len(dominated_by_a)
-                }
-            
-            dominance_analysis[content_type] = pipeline_dominance
-        
-        return dominance_analysis
-    
-    def _pipeline_dominates(self, data_a: pd.DataFrame, data_b: pd.DataFrame) -> bool:
-        """Check if pipeline A dominates pipeline B."""
-        
-        # Compare best performances
-        best_a_quality = data_a['composite_quality'].max() if 'composite_quality' in data_a.columns else 0
-        best_a_size = data_a['file_size_kb'].min() if 'file_size_kb' in data_a.columns else float('inf')
-        
-        best_b_quality = data_b['composite_quality'].max() if 'composite_quality' in data_b.columns else 0  
-        best_b_size = data_b['file_size_kb'].min() if 'file_size_kb' in data_b.columns else float('inf')
-        
-        # A dominates B if A is better/equal in both dimensions and strictly better in at least one
-        quality_better_or_equal = best_a_quality >= best_b_quality
-        size_better_or_equal = best_a_size <= best_b_size
-        
-        strictly_better = (best_a_quality > best_b_quality) or (best_a_size < best_b_size)
-        
-        return quality_better_or_equal and size_better_or_equal and strictly_better
-    
-    def _rank_pipelines_at_quality_targets(self) -> dict:
-        """Rank pipelines by file size at specific quality target levels."""
-        
-        target_qualities = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
-        rankings = {}
-        
-        for target_quality in target_qualities:
-            # Find pipelines that can achieve this quality level
-            capable_pipelines = {}
-            
-            for pipeline_id in self.results_df['pipeline_id'].unique():
-                pipeline_data = self.results_df[self.results_df['pipeline_id'] == pipeline_id]
-                
-                # Find results at or above target quality
-                quality_col = 'composite_quality'
-                if quality_col in pipeline_data.columns:
-                    quality_results = pipeline_data[pipeline_data[quality_col] >= target_quality]
-                    
-                    if not quality_results.empty:
-                        # Best (smallest) file size at this quality level
-                        best_size = quality_results['file_size_kb'].min()
-                        capable_pipelines[pipeline_id] = {
-                            'best_size_kb': best_size,
-                            'samples_at_quality': len(quality_results)
-                        }
-            
-            # Rank by file size
-            ranked_pipelines = sorted(
-                capable_pipelines.items(), 
-                key=lambda x: x[1]['best_size_kb']
-            )
-            
-            rankings[f"quality_{target_quality}"] = ranked_pipelines
-        
-        return rankings
-    
-    def _generate_trade_off_insights(self) -> dict:
-        """Generate insights about quality-size trade-offs."""
-        
-        insights = {}
-        
-        try:
-            # Calculate efficiency metrics
-            if 'composite_quality' in self.results_df.columns and 'file_size_kb' in self.results_df.columns:
-                # Avoid division by zero
-                valid_sizes = self.results_df['file_size_kb'] > 0
-                temp_df = self.results_df[valid_sizes].copy()
-                temp_df['efficiency_ratio'] = temp_df['composite_quality'] / temp_df['file_size_kb']
-                
-                # Top efficiency leaders
-                efficiency_leaders = temp_df.nlargest(10, 'efficiency_ratio')[
-                    ['pipeline_id', 'composite_quality', 'file_size_kb', 'efficiency_ratio']
-                ].to_dict('records')
-                
-                insights['efficiency_leaders'] = efficiency_leaders
-                
-                # Quality vs size correlation by pipeline
-                pipeline_correlations = {}
-                for pipeline_id in temp_df['pipeline_id'].unique():
-                    pipeline_data = temp_df[temp_df['pipeline_id'] == pipeline_id]
-                    if len(pipeline_data) > 2:
-                        correlation = pipeline_data['composite_quality'].corr(pipeline_data['file_size_kb'])
-                        if pd.notna(correlation):
-                            pipeline_correlations[pipeline_id] = correlation
-                
-                insights['quality_size_correlations'] = pipeline_correlations
-                
-                # Sweet spot analysis (high quality, low size)
-                quality_threshold = temp_df['composite_quality'].quantile(0.8)  # Top 20% quality
-                size_threshold = temp_df['file_size_kb'].quantile(0.2)  # Bottom 20% size
-                
-                sweet_spot_results = temp_df[
-                    (temp_df['composite_quality'] >= quality_threshold) & 
-                    (temp_df['file_size_kb'] <= size_threshold)
-                ]
-                
-                insights['sweet_spot_pipelines'] = sweet_spot_results['pipeline_id'].value_counts().to_dict()
-                
-        except Exception as e:
-            self.logger.warning(f"Trade-off insights generation failed: {e}")
-        
-        return insights
-
-
 class ExperimentalRunner:
     """Systematic experimental pipeline testing through competitive analysis."""
     
-    # Available sampling strategies for efficient testing
-    SAMPLING_STRATEGIES = {
-        'full': SamplingStrategy(
-            name="Full Brute Force",
-            description="Test all pipeline combinations (slowest, most thorough)",
-            sample_ratio=1.0,
-        ),
-        'representative': SamplingStrategy(
-            name="Representative Sampling", 
-            description="Test representative samples from each tool category",
-            sample_ratio=0.15,  # ~15% of pipelines
-            min_samples_per_tool=5,
-        ),
-        'factorial': SamplingStrategy(
-            name="Factorial Design",
-            description="Statistical design of experiments approach",
-            sample_ratio=0.08,  # ~8% of pipelines
-            min_samples_per_tool=3,
-        ),
-        'progressive': SamplingStrategy(
-            name="Progressive Elimination",
-            description="Multi-stage elimination with refinement",
-            sample_ratio=0.25,  # Varies across stages
-            min_samples_per_tool=4,
-        ),
-        'quick': SamplingStrategy(
-            name="Quick Test",
-            description="Fast test for development (least thorough)",
-            sample_ratio=0.05,  # ~5% of pipelines
-            min_samples_per_tool=2,
-        ),
-        'targeted': SamplingStrategy(
-            name="Targeted Expansion",
-            description="Strategic expansion focusing on high-value size and temporal variations",
-            sample_ratio=0.12,  # ~12% of pipelines
-            min_samples_per_tool=4,
-        ),
-    }
+    # Available sampling strategies (imported from experimental.sampling)
+    SAMPLING_STRATEGIES = SAMPLING_STRATEGIES
     
     # Constants for progress tracking and memory management
     PROGRESS_SAVE_INTERVAL = 100  # Save resume data every N jobs to prevent memory buildup
@@ -829,6 +66,9 @@ class ExperimentalRunner:
         self.use_gpu = use_gpu
         self.use_cache = use_cache
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize pipeline sampler
+        self.sampler = PipelineSampler(self.logger)
         
         # Create timestamped output directory for this run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -879,6 +119,55 @@ class ExperimentalRunner:
     
     def generate_synthetic_gifs(self) -> List[Path]:
         """Generate all synthetic test GIFs."""
+        return self.gif_generator.generate_all_gifs()
+    
+    # Delegate sampling methods to the PipelineSampler
+    def select_pipelines_intelligently(self, all_pipelines: List, strategy: str = 'representative') -> List:
+        """Select pipelines using intelligent sampling strategies to reduce testing time."""
+        return self.sampler.select_pipelines_intelligently(all_pipelines, strategy)
+    
+    # Sampling methods moved to experimental.sampling module
+    
+    
+    
+    
+    
+    def get_targeted_synthetic_gifs(self) -> List[Path]:
+        """Generate a strategically reduced set of synthetic GIFs for targeted testing."""
+        return self.sampler.get_targeted_synthetic_gifs()
+    
+    # NOTE: The rest of the ExperimentalRunner methods will be added in the next step
+    # This is just the structure and constructor to start with
+    
+    def _test_gpu_availability(self):
+        """Test if GPU acceleration is available."""
+        try:
+            import cv2
+            device_count = cv2.cuda.getCudaEnabledDeviceCount()
+            if device_count > 0:
+                self.logger.info(f"🚀 GPU acceleration available: {device_count} CUDA device(s)")
+            else:
+                self.logger.warning("⚠️ GPU acceleration requested but no CUDA devices found - falling back to CPU")
+                self.use_gpu = False
+        except ImportError:
+            self.logger.warning("⚠️ GPU acceleration requested but OpenCV with CUDA not available - falling back to CPU")
+            self.use_gpu = False
+        except Exception as e:
+            self.logger.warning(f"⚠️ GPU availability test failed: {e} - falling back to CPU")
+            self.use_gpu = False
+    
+    def _log_run_metadata(self):
+        """Log metadata about this elimination run."""
+        git_commit = get_git_commit()
+        self.logger.info(f"🔬 Elimination run metadata:")
+        self.logger.info(f"   Git commit: {git_commit}")
+        self.logger.info(f"   Timestamp: {datetime.now().isoformat()}")
+        self.logger.info(f"   Output directory: {self.output_dir}")
+        self.logger.info(f"   Use GPU: {self.use_gpu}")
+        self.logger.info(f"   Use cache: {self.use_cache}")
+    
+    def generate_synthetic_gifs(self) -> List[Path]:
+        """Generate all synthetic test GIFs."""
         self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
         
         from importlib import import_module
@@ -909,6 +198,130 @@ class ExperimentalRunner:
                 progress.update(0)  # refresh display
             
         return gif_paths
+    
+    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec):
+        """Create a synthetic GIF based on specification."""
+        images = []
+        
+        for frame_idx in range(spec.frames):
+            if spec.content_type == "gradient":
+                img = self._create_gradient_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "complex_gradient":
+                img = self._create_complex_gradient_frame(spec.size, frame_idx, spec.frames) 
+            elif spec.content_type == "solid":
+                img = self._create_solid_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "contrast":
+                img = self._create_contrast_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "noise":
+                img = self._create_noise_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "texture":
+                img = self._create_texture_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "geometric":
+                img = self._create_geometric_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "minimal":
+                img = self._create_minimal_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "spectrum":
+                img = self._create_spectrum_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "motion":
+                img = self._create_motion_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "mixed":
+                img = self._create_mixed_content_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "charts":
+                img = self._create_data_visualization_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "morph":
+                img = self._create_transitions_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "micro_detail":
+                img = self._create_single_pixel_anim_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "static_plus":
+                img = self._create_static_minimal_change_frame(spec.size, frame_idx, spec.frames)
+            elif spec.content_type == "detail":
+                img = self._create_high_frequency_detail_frame(spec.size, frame_idx, spec.frames)
+            else:
+                img = self._create_simple_frame(spec.size, frame_idx, spec.frames)
+                
+            images.append(img)
+        
+        # Save GIF with consistent settings
+        if images:
+            images[0].save(
+                path,
+                save_all=True,
+                append_images=images[1:],
+                duration=100,  # 100ms per frame
+                loop=0
+            )
+    
+    def _create_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Create smooth gradient frame - should benefit from Riemersma dithering."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Animated gradient shift
+        offset = (frame / total_frames) * 255
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                # Create smooth diagonal gradient with temporal shift
+                r = int((x / size[0]) * 255)
+                g = int((y / size[1]) * 255) 
+                b = int(((x + y + offset) / (size[0] + size[1])) * 255) % 255
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_complex_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Multi-directional gradients with multiple hues."""
+        img = Image.new('RGB', size)
+        draw = ImageDraw.Draw(img)
+        
+        # Time-based rotation
+        phase = (frame / total_frames) * 2 * np.pi
+        
+        center_x, center_y = size[0] // 2, size[1] // 2
+        
+        for x in range(size[0]):
+            for y in range(size[1]):
+                # Distance and angle from center
+                dx, dy = x - center_x, y - center_y
+                distance = np.sqrt(dx*dx + dy*dy)
+                angle = np.arctan2(dy, dx) + phase
+                
+                # Complex gradient based on polar coordinates
+                r = int(127 + 127 * np.sin(angle))
+                g = int(127 + 127 * np.cos(angle * 1.5))
+                b = int(127 + 127 * np.sin(distance / 20 + phase))
+                
+                draw.point((x, y), (r, g, b))
+                
+        return img
+    
+    def _create_solid_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
+        """Solid color blocks - dithering should provide no benefit."""
+        img = Image.new('RGB', size, (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        # Simple color blocks that change over time
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)]
+        block_size = 20
+        
+        for x in range(0, size[0], block_size):
+            for y in range(0, size[1], block_size):
+                color_idx = ((x // block_size) + (y // block_size) + frame) % len(colors)
+                draw.rectangle([x, y, x + block_size - 1, y + block_size - 1], 
+                             fill=colors[color_idx])
+                
+        return img
+    
+    # Delegate sampling methods to the PipelineSampler
+    def select_pipelines_intelligently(self, all_pipelines: List, strategy: str = 'representative') -> List:
+        """Select pipelines using intelligent sampling strategies to reduce testing time."""
+        return self.sampler.select_pipelines_intelligently(all_pipelines, strategy)
+    
+    def get_targeted_synthetic_gifs(self) -> List[Path]:
+        """Generate a strategically reduced set of synthetic GIFs for targeted testing."""
+        return self.sampler.get_targeted_synthetic_gifs()
+    
+
     
     def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec):
         """Create a synthetic GIF based on specification."""
@@ -1452,222 +865,21 @@ class ExperimentalRunner:
 
     def select_pipelines_intelligently(self, all_pipelines: List, strategy: str = 'representative') -> List:
         """Select pipelines using intelligent sampling strategies to reduce testing time."""
-        sampling_config = self.SAMPLING_STRATEGIES.get(strategy, self.SAMPLING_STRATEGIES['representative'])
-        
-        self.logger.info(f"🧠 Using sampling strategy: {sampling_config.name}")
-        self.logger.info(f"📋 Description: {sampling_config.description}")
-        self.logger.info(f"📊 Target sample ratio: {sampling_config.sample_ratio:.1%}")
-        
-        if strategy == 'factorial':
-            return self._factorial_design_sampling(all_pipelines, sampling_config)
-        elif strategy == 'progressive':
-            return self._progressive_elimination_sampling(all_pipelines, sampling_config)
-        elif strategy == 'targeted':
-            return self._targeted_expansion_sampling(all_pipelines, sampling_config)
-        else:
-            return self._representative_sampling(all_pipelines, sampling_config)
+        return self.sampler.select_pipelines_intelligently(all_pipelines, strategy)
     
-    def _representative_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
-        """Sample representative pipelines from each tool category."""
-        from collections import defaultdict
-        import random
-        
-        # Handle empty pipeline list
-        if not all_pipelines:
-            self.logger.warning("⚠️ No pipelines provided for sampling")
-            return []
-        
-        # Validate pipeline objects - ensure they have the expected structure
-        valid_pipelines = []
-        for pipeline in all_pipelines:
-            if hasattr(pipeline, 'steps') and hasattr(pipeline.steps, '__iter__'):
-                try:
-                    # Test if we can access tool names (this will fail for invalid objects)
-                    _ = [step.tool_cls.NAME for step in pipeline.steps]
-                    valid_pipelines.append(pipeline)
-                except (AttributeError, TypeError):
-                    self.logger.warning(f"⚠️ Invalid pipeline object detected: {type(pipeline)}. Skipping.")
-            else:
-                self.logger.warning(f"⚠️ Pipeline object missing 'steps' attribute: {type(pipeline)}. Skipping.")
-        
-        if not valid_pipelines:
-            self.logger.warning("⚠️ No valid pipeline objects found for sampling")
-            return []
-        
-        # Group pipelines by tool categories and dithering methods
-        tool_groups = defaultdict(list)
-        
-        for pipeline in valid_pipelines:
-            # Extract tool signatures from pipeline steps
-            tool_signature = "_".join([step.tool_cls.NAME for step in pipeline.steps])
-            tool_groups[tool_signature].append(pipeline)
-        
-        selected_pipelines = []
-        total_target = int(len(all_pipelines) * config.sample_ratio)
-        
-        # Handle case where no tool groups found
-        if not tool_groups:
-            self.logger.warning("⚠️ No tool groups found in pipelines")
-            return []
-            
-        samples_per_group = max(config.min_samples_per_tool, total_target // len(tool_groups))
-        
-        self.logger.info(f"🔧 Tool groups found: {len(tool_groups)}")
-        self.logger.info(f"📈 Target samples per group: {samples_per_group}")
-        
-        for tool_sig, pipelines in tool_groups.items():
-            # Sample from this group - prioritize diversity in parameters
-            group_samples = min(samples_per_group, len(pipelines))
-            
-            if group_samples == len(pipelines):
-                selected_pipelines.extend(pipelines)
-            else:
-                # Ensure diversity by sampling across different parameter ranges
-                sampled = self._diverse_parameter_sampling(pipelines, group_samples)
-                selected_pipelines.extend(sampled)
-        
-        # If we're under target, add random samples from high-potential pipelines
-        if len(selected_pipelines) < total_target:
-            # Use list comprehension instead of set operations on non-hashable objects
-            selected_ids = {id(p) for p in selected_pipelines}
-            remaining = [p for p in all_pipelines if id(p) not in selected_ids]
-            additional = min(total_target - len(selected_pipelines), len(remaining))
-            if remaining and additional > 0:
-                selected_pipelines.extend(random.sample(remaining, additional))
-        
-        actual_count = min(total_target, len(selected_pipelines))
-        
-        # Safe percentage calculation
-        percentage = (actual_count / len(all_pipelines) * 100) if all_pipelines else 0
-        self.logger.info(f"✅ Selected {actual_count} pipelines from {len(all_pipelines)} total ({percentage:.1f}%)")
-        return selected_pipelines[:actual_count]
+    # Sampling methods moved to experimental.sampling module
     
-    def _diverse_parameter_sampling(self, pipelines: List, n_samples: int) -> List:
-        """Sample pipelines with diverse parameter combinations."""
-        import random
-        
-        if n_samples >= len(pipelines):
-            return pipelines
-        
-        # TODO: Enhanced parameter space analysis
-        # For now, use stratified random sampling
-        return random.sample(pipelines, n_samples)
-    
-    def _factorial_design_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
-        """Use statistical design of experiments for efficient sampling."""
-        self.logger.info("🧪 Using factorial design approach")
-        
-        # Identify key factors for factorial design:
-        # Factor 1: Tool family (ImageMagick, FFmpeg, Gifsicle, etc.)
-        # Factor 2: Dithering method category (None, Floyd-Steinberg, Bayer, etc.) 
-        # Factor 3: Color reduction level (Low: 8-16, Medium: 32-64, High: 128+)
-        # Factor 4: Lossy compression (None: 0, Light: 20-40, Heavy: 60+)
-        
-        tool_families = set()
-        dithering_categories = set()
-        
-        for pipeline in all_pipelines:
-            for step in pipeline.steps:
-                if hasattr(step.tool_cls, 'NAME'):
-                    tool_name = step.tool_cls.NAME
-                    tool_families.add(tool_name.split('_')[0])  # Get base tool name
-                    
-                    # Categorize dithering methods
-                    if 'None' in tool_name or 'none' in tool_name.lower():
-                        dithering_categories.add('none')
-                    elif 'floyd' in tool_name.lower() or 'FloydSteinberg' in tool_name:
-                        dithering_categories.add('floyd_steinberg')
-                    elif 'bayer' in tool_name.lower() or 'Bayer' in tool_name:
-                        dithering_categories.add('bayer')
-                    elif 'riemersma' in tool_name.lower():
-                        dithering_categories.add('riemersma')
-                    else:
-                        dithering_categories.add('other')
-        
-        # Create factorial combinations
-        target_count = int(len(all_pipelines) * config.sample_ratio)
-        combinations_needed = min(target_count, len(tool_families) * len(dithering_categories) * 3 * 2)  # 3 color levels, 2 lossy levels
-        
-        self.logger.info(f"🔬 Factorial design: {len(tool_families)} tools × {len(dithering_categories)} dithering methods")
-        self.logger.info(f"🎯 Target factorial combinations: {combinations_needed}")
-        
-        # For now, fall back to representative sampling with factorial weighting
-        return self._representative_sampling(all_pipelines, config)
-    
-    def _progressive_elimination_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
-        """Multi-stage progressive elimination to focus on promising pipelines."""
-        self.logger.info("📈 Using progressive elimination strategy")
-        
-        # Stage 1: Quick screening (5% of pipelines)
-        stage1_config = SamplingStrategy("stage1", "Initial screening", 0.05, min_samples_per_tool=2)
-        stage1_pipelines = self._representative_sampling(all_pipelines, stage1_config)
-        
-        self.logger.info(f"🔍 Stage 1: Screening {len(stage1_pipelines)} pipelines for initial assessment")
-        
-        # In a full implementation, we would:
-        # 1. Run Stage 1 testing
-        # 2. Identify top-performing tool families/dithering methods
-        # 3. Run Stage 2 with more comprehensive testing of promising categories
-        # 4. Run Stage 3 with full parameter sweeps of the best candidates
-        
-        # For now, return stage 1 selection with expanded promising categories
-        expanded_target = int(len(all_pipelines) * config.sample_ratio)
-        if len(stage1_pipelines) < expanded_target:
-            # Add more samples from promising categories (would be data-driven in full implementation)
-            stage1_ids = {id(p) for p in stage1_pipelines}
-            remaining = [p for p in all_pipelines if id(p) not in stage1_ids] 
-            additional_needed = expanded_target - len(stage1_pipelines)
-            if remaining:
-                additional_samples = remaining[:additional_needed]
-                stage1_pipelines.extend(additional_samples)
-        
-        self.logger.info(f"📊 Progressive sampling selected {len(stage1_pipelines)} pipelines")
-        return stage1_pipelines
 
-    def _targeted_expansion_sampling(self, all_pipelines: List, config: SamplingStrategy) -> List:
-        """Strategic sampling focused on high-value expanded dataset testing."""
-        self.logger.info("🎯 Using targeted expansion strategy")
-        
-        # Validate input - delegate to representative sampling which has validation
-        selected_pipelines = self._representative_sampling(all_pipelines, config)
-        
-        self.logger.info(f"📊 Targeted expansion selected {len(selected_pipelines)} pipelines")
-        self.logger.info("🎯 Will test on strategically selected GIF subset (17 vs 25 GIFs)")
-        
-        return selected_pipelines
+    
+
+    
+
+
+
 
     def get_targeted_synthetic_gifs(self) -> List[Path]:
         """Generate a strategically reduced set of synthetic GIFs for targeted testing."""
-        self.logger.info("🎯 Generating targeted synthetic GIF subset")
-        
-        # Define high-value subset: Original + Size variations + 1 frame variation + 1 content type
-        targeted_specs = []
-        
-        # Keep all original research-based content (10 GIFs)
-        original_names = [
-            'smooth_gradient', 'complex_gradient', 'solid_blocks', 'high_contrast',
-            'photographic_noise', 'texture_complex', 'geometric_patterns', 
-            'few_colors', 'many_colors', 'animation_heavy'
-        ]
-        
-        # Add high-value size variations (4 GIFs) - skip medium, keep key sizes
-        size_variation_names = [
-            'gradient_small',    # 50x50 - minimum realistic
-            'gradient_large',    # 500x500 - big file performance  
-            'gradient_xlarge',   # 1000x1000 - maximum realistic
-            'noise_large'        # 500x500 - test Bayer on large files
-        ]
-        
-        # Add key frame variation (2 GIFs) - most informative extremes
-        frame_variation_names = [
-            'minimal_frames',    # 2 frames - edge case
-            'long_animation'     # 50 frames - extended animation (skip 100 frame extreme)
-        ]
-        
-        # Add most valuable new content type (1 GIF)
-        new_content_names = [
-            'mixed_content'      # Real-world mixed content (skip data viz and transitions initially)
-        ]
+        return self.sampler.get_targeted_synthetic_gifs()
         
         # Combine all targeted names
         targeted_names = original_names + size_variation_names + frame_variation_names + new_content_names
@@ -1807,6 +1019,42 @@ class ExperimentalRunner:
         csv_writer = csv.DictWriter(csv_file, fieldnames=csv_fieldnames)
         if write_csv_header:
             csv_writer.writeheader()
+        
+        # Register cleanup handlers to prevent data loss on unexpected termination
+        def _cleanup_csv():
+            """Ensure CSV file is properly flushed and closed on exit."""
+            try:
+                if csv_file and not csv_file.closed:
+                    # Final flush of any remaining buffer
+                    if 'results_buffer' in locals() and results_buffer:
+                        self._flush_results_buffer(results_buffer, csv_writer, csv_file, force=True)
+                    csv_file.flush()
+                    csv_file.close()
+                    self.logger.info("📝 CSV file cleanup completed on exit")
+            except Exception as e:
+                # Log but don't raise - we're in cleanup
+                self.logger.warning(f"CSV cleanup warning: {e}")
+        
+        # Register atexit handler
+        atexit.register(_cleanup_csv)
+        
+        # Register signal handlers for common termination signals
+        def _signal_handler(signum, frame):
+            """Handle termination signals by cleaning up CSV and exiting gracefully."""
+            signal_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+            self.logger.info(f"🛑 Received {signal_name}, cleaning up CSV and exiting...")
+            _cleanup_csv()
+            sys.exit(1)
+        
+        # Register handlers for common termination signals
+        try:
+            signal.signal(signal.SIGTERM, _signal_handler)  # Termination request
+            signal.signal(signal.SIGINT, _signal_handler)   # Ctrl+C
+            if hasattr(signal, 'SIGHUP'):  # Not available on Windows
+                signal.signal(signal.SIGHUP, _signal_handler)  # Terminal disconnect
+        except (AttributeError, OSError) as e:
+            # Some signals may not be available on all platforms
+            self.logger.debug(f"Could not register some signal handlers: {e}")
         
         # Estimate remaining time
         remaining_jobs = total_jobs - len(completed_job_ids)
@@ -2262,8 +1510,7 @@ class ExperimentalRunner:
                 current_input = step_output
             
             # Copy final result to output path
-            import shutil
-            shutil.copy(current_input, output_path)
+            copy(current_input, output_path)
             
             # Calculate comprehensive quality metrics using GPU-accelerated system if available
             try:

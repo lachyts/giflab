@@ -42,7 +42,7 @@ Usage Examples:
 import json
 import logging
 import os
-import shutil
+from shutil import which, rmtree
 import subprocess
 import tempfile
 import time
@@ -581,7 +581,7 @@ def _is_executable(path: str) -> bool:
         return Path(path).is_file() and os.access(path, os.X_OK)
 
     # Otherwise, check if it's available in PATH
-    return shutil.which(path) is not None
+    return which(path) is not None
 
 
 def validate_lossy_level(lossy_level: int, engine: LossyEngine) -> None:
@@ -746,7 +746,7 @@ def _managed_temp_directory(prefix: str = "animately_png_") -> Generator[Path, N
         yield temp_path
     finally:
         try:
-            shutil.rmtree(temp_path)
+            rmtree(temp_path)
         except Exception:
             # Best effort cleanup - don't fail if cleanup fails
             pass
@@ -1117,7 +1117,7 @@ def compress_with_animately_advanced_lossy(
             # Clean up temporary directory
             if png_dir.name.startswith("animately_png_"):
                 try:
-                    shutil.rmtree(png_dir)
+                    rmtree(png_dir)
                 except Exception:
                     pass  # Best effort cleanup
 
