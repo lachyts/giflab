@@ -315,65 +315,83 @@ class SyntheticFrameGenerator:
         return generator_func(size, frame, total_frames)
     
     def _create_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
-        """Create smooth gradient frame - should benefit from Riemersma dithering."""
-        img = Image.new('RGB', size)
-        draw = ImageDraw.Draw(img)
+        """Create smooth gradient frame - should benefit from Riemersma dithering.
         
+        Vectorized implementation using NumPy arrays for performance.
+        """
         # Animated gradient shift
         offset = (frame / total_frames) * 255
         
-        for x in range(size[0]):
-            for y in range(size[1]):
-                # Create smooth diagonal gradient with temporal shift
-                r = int((x / size[0]) * 255)
-                g = int((y / size[1]) * 255) 
-                b = int(((x + y + offset) / (size[0] + size[1])) * 255) % 255
-                draw.point((x, y), (r, g, b))
-                
-        return img
+        # Create coordinate meshgrids
+        x_coords, y_coords = np.meshgrid(np.arange(size[0]), np.arange(size[1]), indexing='xy')
+        
+        # Vectorized gradient calculation
+        r = (x_coords / size[0] * 255).astype(np.uint8)
+        g = (y_coords / size[1] * 255).astype(np.uint8)
+        b = (((x_coords + y_coords + offset) / (size[0] + size[1])) * 255 % 255).astype(np.uint8)
+        
+        # Stack RGB channels and transpose to (height, width, channels)
+        rgb_array = np.stack([r, g, b], axis=-1)
+        
+        # Convert to PIL Image
+        return Image.fromarray(rgb_array, 'RGB')
     
     def _create_complex_gradient_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
-        """Multi-directional gradients with multiple hues."""
-        img = Image.new('RGB', size)
-        draw = ImageDraw.Draw(img)
+        """Multi-directional gradients with multiple hues.
         
+        Vectorized implementation using NumPy arrays for performance.
+        """
         # Time-based rotation
         phase = (frame / total_frames) * 2 * np.pi
         
         center_x, center_y = size[0] // 2, size[1] // 2
         
-        for x in range(size[0]):
-            for y in range(size[1]):
-                # Distance and angle from center
-                dx, dy = x - center_x, y - center_y
-                distance = np.sqrt(dx*dx + dy*dy)
-                angle = np.arctan2(dy, dx) + phase
-                
-                # Complex gradient based on polar coordinates
-                r = int(127 + 127 * np.sin(angle))
-                g = int(127 + 127 * np.cos(angle * 1.5))
-                b = int(127 + 127 * np.sin(distance / 20 + phase))
-                
-                draw.point((x, y), (r, g, b))
-                
-        return img
+        # Create coordinate meshgrids
+        x_coords, y_coords = np.meshgrid(np.arange(size[0]), np.arange(size[1]), indexing='xy')
+        
+        # Vectorized distance and angle calculations
+        dx = x_coords - center_x
+        dy = y_coords - center_y
+        distance = np.sqrt(dx*dx + dy*dy)
+        angle = np.arctan2(dy, dx) + phase
+        
+        # Vectorized complex gradient calculations
+        r = (127 + 127 * np.sin(angle)).astype(np.uint8)
+        g = (127 + 127 * np.cos(angle * 1.5)).astype(np.uint8)
+        b = (127 + 127 * np.sin(distance / 20 + phase)).astype(np.uint8)
+        
+        # Stack RGB channels and transpose to (height, width, channels)
+        rgb_array = np.stack([r, g, b], axis=-1)
+        
+        # Convert to PIL Image
+        return Image.fromarray(rgb_array, 'RGB')
     
     def _create_solid_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
-        """Solid color blocks - dithering should provide no benefit."""
-        img = Image.new('RGB', size, (255, 255, 255))
-        draw = ImageDraw.Draw(img)
+        """Solid color blocks - dithering should provide no benefit.
         
+        Vectorized implementation using NumPy arrays for performance.
+        """
         # Simple color blocks that change over time
-        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)]
+        colors = np.array([(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)])
         block_size = 20
         
-        for x in range(0, size[0], block_size):
-            for y in range(0, size[1], block_size):
-                color_idx = ((x // block_size) + (y // block_size) + frame) % len(colors)
-                draw.rectangle([x, y, x + block_size - 1, y + block_size - 1], 
-                             fill=colors[color_idx])
-                
-        return img
+        # Create base white image
+        img_array = np.full((size[1], size[0], 3), 255, dtype=np.uint8)
+        
+        # Create block coordinate arrays
+        x_blocks = np.arange(0, size[0], block_size)
+        y_blocks = np.arange(0, size[1], block_size)
+        
+        # Apply colors to blocks vectorized
+        for i, x in enumerate(x_blocks):
+            for j, y in enumerate(y_blocks):
+                color_idx = (i + j + frame) % len(colors)
+                x_end = min(x + block_size, size[0])
+                y_end = min(y + block_size, size[1])
+                img_array[y:y_end, x:x_end] = colors[color_idx]
+        
+        # Convert to PIL Image
+        return Image.fromarray(img_array, 'RGB')
     
     def _create_contrast_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
         """High contrast patterns - no dithering benefit expected."""
@@ -391,52 +409,58 @@ class SyntheticFrameGenerator:
         return img
     
     def _create_noise_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
-        """Photo-realistic noise - good for testing Bayer dithering."""
-        img = Image.new('RGB', size)
-        draw = ImageDraw.Draw(img)
+        """Photo-realistic noise - good for testing Bayer dithering.
         
+        Vectorized implementation using NumPy arrays for performance.
+        """
         # Reproducible noise with temporal coherence
         np.random.seed(frame * 42)
         
         # Base image with noise
         base_color = int(128 + 50 * np.sin(frame / total_frames * 2 * np.pi))
         
-        for x in range(size[0]):
-            for y in range(size[1]):
-                noise_r = np.random.randint(-50, 50)
-                noise_g = np.random.randint(-50, 50) 
-                noise_b = np.random.randint(-50, 50)
-                
-                r = max(0, min(255, base_color + noise_r))
-                g = max(0, min(255, base_color + noise_g))
-                b = max(0, min(255, base_color + noise_b))
-                
-                draw.point((x, y), (r, g, b))
-                
-        return img
+        # Generate noise arrays for all three channels
+        noise_r = np.random.randint(-50, 51, size=(size[1], size[0]))
+        noise_g = np.random.randint(-50, 51, size=(size[1], size[0]))
+        noise_b = np.random.randint(-50, 51, size=(size[1], size[0]))
+        
+        # Apply noise to base color and clamp to valid range
+        r = np.clip(base_color + noise_r, 0, 255).astype(np.uint8)
+        g = np.clip(base_color + noise_g, 0, 255).astype(np.uint8)
+        b = np.clip(base_color + noise_b, 0, 255).astype(np.uint8)
+        
+        # Stack RGB channels
+        rgb_array = np.stack([r, g, b], axis=-1)
+        
+        # Convert to PIL Image
+        return Image.fromarray(rgb_array, 'RGB')
     
     def _create_texture_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
-        """Complex textures where dithering patterns blend naturally."""
-        img = Image.new('RGB', size)
-        draw = ImageDraw.Draw(img)
+        """Complex textures where dithering patterns blend naturally.
         
+        Vectorized implementation using NumPy arrays for performance.
+        """
         # Procedural texture with animation
         phase = (frame / total_frames) * 4 * np.pi
         
-        for x in range(size[0]):
-            for y in range(size[1]):
-                # Multi-frequency texture pattern
-                val1 = np.sin(x * 0.1 + phase) * np.cos(y * 0.1)
-                val2 = np.sin(x * 0.05 + y * 0.05 + phase * 0.5)
-                val3 = np.sin((x + y) * 0.02 + phase * 0.3)
-                
-                r = int(127 + 60 * val1)
-                g = int(127 + 60 * val2) 
-                b = int(127 + 60 * val3)
-                
-                draw.point((x, y), (r, g, b))
-                
-        return img
+        # Create coordinate meshgrids
+        x_coords, y_coords = np.meshgrid(np.arange(size[0]), np.arange(size[1]), indexing='xy')
+        
+        # Vectorized multi-frequency texture pattern
+        val1 = np.sin(x_coords * 0.1 + phase) * np.cos(y_coords * 0.1)
+        val2 = np.sin(x_coords * 0.05 + y_coords * 0.05 + phase * 0.5)
+        val3 = np.sin((x_coords + y_coords) * 0.02 + phase * 0.3)
+        
+        # Vectorized color calculations
+        r = (127 + 60 * val1).astype(np.uint8)
+        g = (127 + 60 * val2).astype(np.uint8)
+        b = (127 + 60 * val3).astype(np.uint8)
+        
+        # Stack RGB channels
+        rgb_array = np.stack([r, g, b], axis=-1)
+        
+        # Convert to PIL Image
+        return Image.fromarray(rgb_array, 'RGB')
     
     def _create_geometric_frame(self, size: Tuple[int, int], frame: int, total_frames: int) -> Image.Image:
         """Structured geometric shapes - test ordered dithering."""
@@ -718,22 +742,32 @@ class SyntheticFrameGenerator:
         img = Image.new('RGB', size, (255, 255, 255))
         draw = ImageDraw.Draw(img)
         
-        # Fine grid pattern
-        for x in range(0, size[0], 2):
-            for y in range(0, size[1], 2):
-                if (x + y + frame) % 4 == 0:
-                    draw.point((x, y), (0, 0, 0))
+        # Vectorized fine grid pattern
+        x_grid = np.arange(0, size[0], 2)
+        y_grid = np.arange(0, size[1], 2)
+        x_coords_grid, y_coords_grid = np.meshgrid(x_grid, y_grid, indexing='xy')
+        grid_condition = (x_coords_grid + y_coords_grid + frame) % 4 == 0
         
-        # Moiré patterns - high frequency interference
+        # Apply grid pattern
+        for x_idx, y_idx in zip(x_coords_grid[grid_condition], y_coords_grid[grid_condition]):
+            if 0 <= x_idx < size[0] and 0 <= y_idx < size[1]:
+                draw.point((x_idx, y_idx), (0, 0, 0))
+        
+        # Vectorized Moiré patterns - high frequency interference
         center_x, center_y = size[0] // 2, size[1] // 2
-        for x in range(size[0]):
-            for y in range(size[1]):
-                dx, dy = x - center_x, y - center_y
-                distance = np.sqrt(dx*dx + dy*dy)
-                
-                freq = 0.5 + frame / total_frames * 0.3
-                if int(distance * freq) % 2 == 0:
-                    img.putpixel((x, y), (200, 200, 200))
+        x_full, y_full = np.meshgrid(np.arange(size[0]), np.arange(size[1]), indexing='xy')
+        
+        dx = x_full - center_x
+        dy = y_full - center_y
+        distance = np.sqrt(dx*dx + dy*dy)
+        
+        freq = 0.5 + frame / total_frames * 0.3
+        moire_condition = (distance * freq).astype(int) % 2 == 0
+        
+        # Convert to numpy array for vectorized updates
+        img_array = np.array(img)
+        img_array[moire_condition] = [200, 200, 200]
+        img = Image.fromarray(img_array)
         
         # Fine diagonal lines that create aliasing
         line_spacing = 3
