@@ -20,6 +20,8 @@ from .runner import ExperimentalRunner, ExperimentResult
 # Import cache and error components that were already extracted
 from ..elimination_cache import PipelineResultsCache, get_git_commit
 from ..elimination_errors import ErrorTypes
+# Import synthetic GIF components for backward compatibility
+from ..synthetic_gifs import SyntheticGifSpec
 
 # Re-export key components
 __all__ = [
@@ -35,4 +37,7 @@ __all__ = [
     "PipelineResultsCache",
     "ErrorTypes",
     "get_git_commit",
+    
+    # Synthetic GIF components (backward compatibility)
+    "SyntheticGifSpec",
 ]
