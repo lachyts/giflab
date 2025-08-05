@@ -30,11 +30,20 @@ giflab/
 
 ### 1. **Unit/Integration Tests** (`tests/`)
 ```bash
+# Development: Lightning-fast tests (<30s)
+make test-fast
+
+# Pre-commit: Comprehensive integration tests (<5min)
+make test-integration
+
+# Release: Full test matrix (<30min)  
+make test-full
+
 # Add new test files
 pytest tests/test_new_feature.py
 
-# Run all tests  
-pytest
+# Run specific tests
+pytest tests/test_new_feature.py
 ```
 
 ### 2. **Manual Testing** (`test-workspace/manual/`)
@@ -117,9 +126,15 @@ python scripts/clean_testing_workspace.py --interactive
 
 ### Makefile Targets
 ```bash
+# Testing Commands
+make test-fast           # Lightning-fast tests (<30s, development workflow)
+make test-integration    # Integration tests (<5min, pre-commit validation)
+make test-full           # Full test matrix (<30min, release validation)
+
+# Workspace Management
+make test-workspace      # Create proper test workspace structure
 make clean-temp          # Clean temporary test files
 make clean-testing-mess  # Emergency cleanup of root pollution
-make test-workspace      # Create proper test workspace structure
 ```
 
 ### VS Code/Cursor Integration

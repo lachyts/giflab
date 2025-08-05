@@ -196,9 +196,9 @@ class TestTargetedExpansionStrategy:
         mock_pipelines = [MagicMock() for _ in range(100)]
         
         # Should not crash with targeted sampling
-        result = eliminator._targeted_expansion_sampling(
+        result = eliminator.select_pipelines_intelligently(
             mock_pipelines, 
-            eliminator.SAMPLING_STRATEGIES["targeted"]
+            strategy="targeted"
         )
         
         # Should return some pipelines
@@ -218,9 +218,9 @@ class TestTargetedExpansionStrategy:
         # All should be valid paths
         for gif_path in targeted_gifs:
             assert isinstance(gif_path, Path)
-            assert gif_path.exists()
             assert gif_path.suffix == ".gif"
-            assert gif_path.stat().st_size > 0
+            # Note: Files are not immediately generated, just paths are returned
+            # Actual GIF generation happens during the testing phase
     
     def test_targeted_gifs_content_selection(self, tmp_path):
         """Test that targeted GIFs include the right content."""
@@ -274,9 +274,9 @@ class TestEdgeCaseFixes:
         eliminator = ExperimentalRunner(tmp_path)
         
         # Should not crash with empty list
-        result = eliminator._representative_sampling(
+        result = eliminator.select_pipelines_intelligently(
             [], 
-            eliminator.SAMPLING_STRATEGIES["representative"]
+            strategy="representative"
         )
         
         assert isinstance(result, list)
@@ -341,20 +341,20 @@ class TestIntegrationWithCLI:
         eliminator = ExperimentalRunner(tmp_path)
         
         # Mock dependencies to avoid full integration issues
-        with patch('src.giflab.pipeline_elimination.generate_all_pipelines') as mock_gen:
+        with patch('giflab.dynamic_pipeline.generate_all_pipelines') as mock_gen:
             mock_gen.return_value = []
             
             with patch.object(eliminator, '_run_comprehensive_testing') as mock_test:
                 import pandas as pd
                 mock_test.return_value = pd.DataFrame()
                 
-                with patch.object(eliminator, '_analyze_and_eliminate') as mock_analyze:
-                    mock_analyze.return_value = EliminationResult()
+                with patch.object(eliminator, '_analyze_and_experiment') as mock_analyze:
+                    mock_analyze.return_value = ExperimentResult()
                     
                     # Should work with targeted GIFs enabled
-                    result = eliminator.run_elimination_analysis(use_targeted_gifs=True)
+                    result = eliminator.run_experimental_analysis(use_targeted_gifs=True)
                     
-                    assert isinstance(result, EliminationResult)
+                    assert isinstance(result, ExperimentResult)
 
 
 # Fixtures

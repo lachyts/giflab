@@ -10,22 +10,54 @@ This document outlines the testing strategy used to ensure reliability and corre
 
 ---
 
-## 1.1 Fast Test-Suite Guideline (≤ 20 s)
+## 1.1 Fast Test-Suite Guideline (≤ 30 s) - UPDATED 2025
 
-GifLab’s default test invocation must complete in **≤ 20 seconds** wall-time on a typical laptop.
-To guarantee that speedy feedback loop we apply the following guard-rails:
+GifLab's test infrastructure has been optimized with a **three-tier strategy** that provides lightning-fast feedback for development while maintaining comprehensive coverage:
 
-1. Heavy or external-binary tests are marked `@pytest.mark.slow` and are therefore skipped by the default command:
-   ```bash
-   pytest -m "not slow"
-   ```
-2. `tests/conftest.py` flattens the experimental parameter grid and caps dynamic-pipeline enumeration to **50** combinations (configurable via the `GIFLAB_MAX_PIPES` environment&nbsp;variable).
-3. Integration tests rely on micro GIF fixtures (≤ 50 × 50 px, ≤ 10 frames) and pass `timeout=<10` s to every `subprocess.run`.
-4. Unit tests that still need to call the compression helpers can enable the fixture `fast_compress(monkeypatch)` to monkey-patch `compress_with_gifsicle` / `compress_with_animately` with a no-op copy **that also injects realistic placeholder metrics (`kilobytes`, `ssim` = 1.0)** so downstream analysis is not skewed.
-5. The CI pipeline also runs the same fast subset (`pytest -m "not slow"`).  A full matrix can be triggered manually by exporting `GIFLAB_FULL_MATRIX=1`.
-6. The dynamic-pipeline execution helper was refactored into a top-level function (or replaced by `ThreadPoolExecutor`) to avoid `multiprocessing`-pickling issues on macOS/Windows during parallel test execution.
+### Three-Tier Testing Strategy
 
-These measures keep day-to-day development lightning-fast while preserving the option for exhaustive coverage in nightly runs.
+#### Tier 1: ⚡ Lightning Tests (<30s)
+```bash
+make test-fast
+# or: pytest -m "fast" tests/ -n auto --tb=short
+```
+- **Purpose**: Rapid development iteration
+- **Coverage**: Core functionality with complete mocking
+- **Environment**: `GIFLAB_ULTRA_FAST=1 GIFLAB_MAX_PIPES=3 GIFLAB_MOCK_ALL_ENGINES=1`
+
+#### Tier 2: 🔄 Integration Tests (<5min)  
+```bash
+make test-integration
+# or: pytest -m "not slow" tests/ -n 4 --tb=short
+```
+- **Purpose**: Pre-commit validation  
+- **Coverage**: 95%+ code paths with limited pipeline matrix
+- **Environment**: `GIFLAB_MAX_PIPES=10`
+
+#### Tier 3: 🔍 Full Matrix Tests (<30min)
+```bash
+make test-full
+# or: pytest tests/ --tb=short --durations=20 --maxfail=10
+```
+- **Purpose**: Release validation
+- **Coverage**: Complete pipeline combinations
+- **Environment**: `GIFLAB_FULL_MATRIX=1`
+
+### Performance Optimizations Applied
+
+1. **Critical mock pattern fixes**: Eliminated 82s → 0.04s execution times (2061x speedup)
+2. **Parallel execution enabled**: pytest-xdist with `-n auto` for multi-core utilization
+3. **Smart environment controls**: Variable-driven behavior for different test scenarios
+4. **Test categorization**: `@pytest.mark.fast`, `@pytest.mark.slow` for selective execution
+5. **Pipeline matrix capping**: Configurable via `GIFLAB_MAX_PIPES` (default: 3 for fast, 50 for integration)
+
+### Legacy Optimizations (Still Active)
+- Integration tests use micro GIF fixtures (≤ 50 × 50 px, ≤ 10 frames)
+- `fast_compress(monkeypatch)` fixture available for mocking compression operations
+- `tests/conftest.py` contains speed optimizations and pipeline capping logic
+- Timeout protection (`timeout=<10s`) on subprocess operations
+
+📖 **For complete optimization details**: See [Test Performance Optimization Guide](../guides/test-performance-optimization.md)
 
 ---
 

@@ -5,12 +5,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.giflab.tag_pipeline import (
+from giflab.tag_pipeline import (
     TaggingPipeline,
     create_tagging_pipeline,
     validate_tagged_csv,
 )
-from src.giflab.tagger import TaggingResult
+from giflab.tagger import TaggingResult
 
 
 class TestTaggingPipeline:
@@ -88,7 +88,7 @@ class TestTaggingPipeline:
 
     def test_tagging_pipeline_initialization(self, mock_tagger):
         """Test TaggingPipeline initialization."""
-        with patch('src.giflab.tag_pipeline.HybridCompressionTagger', return_value=mock_tagger):
+        with patch('giflab.tag_pipeline.HybridCompressionTagger', return_value=mock_tagger):
             pipeline = TaggingPipeline(workers=2)
 
             assert pipeline.workers == 2

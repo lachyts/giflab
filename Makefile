@@ -14,7 +14,7 @@ CSV_PATH := $(CSV_DIR)/results_$(DATE).csv
 # TARGETS
 # -----------------------------------------------------------------------------
 
-.PHONY: data help clean-temp clean-testing-mess test-workspace
+.PHONY: data help clean-temp clean-testing-mess test-workspace test-fast test-integration test-full
 
 data: ## Run compression pipeline on RAW_DIR and generate EDA artefacts
 	@echo "🎞️  Running GifLab compression pipeline (raw=$(RAW_DIR))…"
@@ -48,6 +48,24 @@ clean-testing-mess: ## Emergency cleanup of testing files in root directory
 	@echo "🗑️  Removing PNG export directories..."
 	@rm -rf *png_export* *png_frames* *png_sequence* *png_from_* *png_fix*
 	@echo "✅ Root directory cleaned! Use 'make test-workspace' to create proper structure."
+
+test-fast: ## Run lightning-fast test suite (<30s, development workflow)
+	@echo "⚡ Running lightning-fast test suite for development..."
+	@export GIFLAB_ULTRA_FAST=1 GIFLAB_MAX_PIPES=3 GIFLAB_MOCK_ALL_ENGINES=1; \
+	poetry run pytest -m "fast" tests/ -n auto --tb=short
+	@echo "✅ Fast test suite complete! Use for rapid development iteration."
+
+test-integration: ## Run integration test suite (<5min, pre-commit validation)  
+	@echo "🔄 Running integration test suite for comprehensive validation..."
+	@export GIFLAB_MAX_PIPES=10; \
+	poetry run pytest -m "not slow" tests/ -n 4 --tb=short --durations=10
+	@echo "✅ Integration test suite complete! Use before committing changes."
+
+test-full: ## Run full test matrix (<30min, release validation)
+	@echo "🔍 Running full test matrix for complete coverage..."
+	@export GIFLAB_FULL_MATRIX=1; \
+	poetry run pytest tests/ --tb=short --durations=20 --maxfail=10
+	@echo "✅ Full test matrix complete! Use before major releases."
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+: .*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ": |## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$3}' 

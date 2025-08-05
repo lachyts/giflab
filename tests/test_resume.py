@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.giflab.meta import GifMetadata
-from src.giflab.pipeline import CompressionJob, CompressionPipeline
+from giflab.meta import GifMetadata
+from giflab.pipeline import CompressionJob, CompressionPipeline
 
 # Fixtures now defined in conftest.py for better performance
 
@@ -372,7 +372,7 @@ class TestResumeFilterJobs:
 class TestResumeIntegration:
     """Integration tests for complete resume functionality."""
 
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_resume_mixed_completion_states(self, mock_extract_metadata, test_config, temp_dirs):
         """Test resume with mixed completion states across multiple jobs."""
         compression_config, path_config = test_config

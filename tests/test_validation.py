@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.giflab.validation import (
+from giflab.validation import (
     ValidationError,
     sanitize_filename,
     validate_config_paths,
@@ -361,7 +361,7 @@ class TestIntegration:
 
     def test_config_validation_integration(self, tmp_path):
         """Test that config validation works with PathConfig."""
-        from src.giflab.config import PathConfig
+        from giflab.config import PathConfig
 
         # Create a config with valid paths
         config = PathConfig(

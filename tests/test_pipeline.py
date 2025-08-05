@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.giflab.pipeline import (
+from giflab.pipeline import (
     CompressionJob,
     CompressionPipeline,
     CompressionResult,
@@ -73,7 +73,7 @@ class TestCompressionPipeline:
         assert any(gif.name == "test1.gif" for gif in gifs)
         assert any(gif.name == "test2.GIF" for gif in gifs)
 
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_generate_jobs(self, mock_extract_metadata, test_config, temp_dirs, sample_gif_metadata):
         """Test job generation."""
         compression_config, path_config = test_config
@@ -125,8 +125,8 @@ class TestCompressionPipeline:
         assert len(folder_name) <= 264  # 200 + 64 + 1 underscore (full SHA)
         assert folder_name.endswith("_123456789abc")
 
-    @patch('src.giflab.pipeline.move_bad_gif')
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.move_bad_gif')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_generate_jobs_with_bad_gif(self, mock_extract_metadata, mock_move_bad_gif,
                                        test_config, temp_dirs):
         """Test job generation with a bad GIF file."""
@@ -187,8 +187,8 @@ class TestCompressionPipeline:
         # Job should be filtered out (already completed)
         assert len(filtered_jobs) == 0
 
-    @patch('src.giflab.pipeline.calculate_comprehensive_metrics')
-    @patch('src.giflab.pipeline.apply_compression_with_all_params')
+    @patch('giflab.pipeline.calculate_comprehensive_metrics')
+    @patch('giflab.pipeline.apply_compression_with_all_params')
     def test_execute_job(self, mock_compress, mock_metrics, test_config, sample_job):
         """Test job execution."""
         compression_config, path_config = test_config
@@ -211,8 +211,8 @@ class TestCompressionPipeline:
         assert result.ssim == 0.95
         assert result.render_ms == 1200
 
-    @patch('src.giflab.pipeline.calculate_comprehensive_metrics')
-    @patch('src.giflab.pipeline.apply_compression_with_all_params')
+    @patch('giflab.pipeline.calculate_comprehensive_metrics')
+    @patch('giflab.pipeline.apply_compression_with_all_params')
     def test_execute_job_failure(self, mock_compress, mock_metrics, test_config, sample_job):
         """Test job execution failure handling."""
         compression_config, path_config = test_config
@@ -224,8 +224,8 @@ class TestCompressionPipeline:
         with pytest.raises(RuntimeError, match="Job execution failed"):
             pipeline.execute_job(sample_job)
 
-    @patch('src.giflab.pipeline.ProcessPoolExecutor')
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.ProcessPoolExecutor')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_run_success(self, mock_extract_metadata, mock_executor_class,
                         test_config, temp_dirs, sample_gif_metadata):
         """Test successful pipeline run."""
@@ -269,7 +269,7 @@ class TestCompressionPipeline:
         mock_executor.submit.return_value = mock_future
 
         # Mock as_completed to return our future
-        with patch('src.giflab.pipeline.as_completed') as mock_as_completed:
+        with patch('giflab.pipeline.as_completed') as mock_as_completed:
             mock_as_completed.return_value = [mock_future]
 
             # Create test GIF file
@@ -292,7 +292,7 @@ class TestCompressionPipeline:
             csv_files = list(temp_dirs["csv"].glob("results_*.csv"))
             assert len(csv_files) == 1
 
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_find_original_gif_by_sha(self, mock_extract_metadata, test_config, temp_dirs, sample_gif_metadata):
         """Test finding original GIF by SHA hash."""
         compression_config, path_config = test_config
@@ -313,7 +313,7 @@ class TestCompressionPipeline:
         found_path = pipeline.find_original_gif_by_sha("nonexistent", temp_dirs["raw"])
         assert found_path is None
 
-    @patch('src.giflab.pipeline.extract_gif_metadata')
+    @patch('giflab.pipeline.extract_gif_metadata')
     def test_find_original_gif_by_folder_name(self, mock_extract_metadata, test_config, temp_dirs, sample_gif_metadata):
         """Test finding original GIF by render folder name."""
         compression_config, path_config = test_config
@@ -365,7 +365,7 @@ class TestCreatePipeline:
 class TestExecuteSingleJob:
     """Test standalone job execution function."""
 
-    @patch('src.giflab.pipeline.CompressionPipeline.execute_job')
+    @patch('giflab.pipeline.CompressionPipeline.execute_job')
     def test_execute_single_job(self, mock_execute, sample_job):
         """Test single job execution."""
         mock_result = Mock(spec=CompressionResult)

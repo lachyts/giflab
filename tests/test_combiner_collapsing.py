@@ -3,14 +3,14 @@ from unittest.mock import patch
 
 import pytest
 
-from src.giflab.dynamic_pipeline import Pipeline, PipelineStep
-from src.giflab.experiment import (
+from giflab.dynamic_pipeline import Pipeline, PipelineStep
+from giflab.experimental.runner import (
     ExperimentalConfig,
     ExperimentalPipeline,
     ExperimentJob,
 )
-from src.giflab.meta import GifMetadata
-from src.giflab.tool_wrappers import (
+from giflab.meta import GifMetadata
+from giflab.tool_wrappers import (
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     GifsicleLossyBasic,
@@ -65,7 +65,7 @@ def test_mixed_tool_collapsing(tmp_path: Path, dummy_gif: Path):
     )
 
     # Patch combiners dict so collapsing uses mocks
-    from src.giflab import combiner_registry as _cr
+    from giflab import combiner_registry as _cr
 
     with patch.dict(_cr._COMBINERS, {
         "animately": lambda *a, **k: {"render_ms": 1},
@@ -86,7 +86,7 @@ def test_mixed_tool_collapsing(tmp_path: Path, dummy_gif: Path):
 )
 def test_placeholder_combiner_groups(tmp_path: Path, dummy_gif: Path, group, color_cls, lossy_cls):
     import importlib
-    tw_mod = importlib.import_module("src.giflab.tool_wrappers")
+    tw_mod = importlib.import_module("giflab.tool_wrappers")
     color_cls_obj = getattr(tw_mod, color_cls)
     lossy_cls_obj = getattr(tw_mod, lossy_cls)
 
@@ -112,7 +112,7 @@ def test_placeholder_combiner_groups(tmp_path: Path, dummy_gif: Path, group, col
         pipeline=pipeline,
     )
 
-    from src.giflab import combiner_registry as _cr
+    from giflab import combiner_registry as _cr
 
     with patch.dict(_cr._COMBINERS, {group: lambda *a, **k: {"render_ms": 1}}):
         res = runner._execute_dynamic_pipeline(job)

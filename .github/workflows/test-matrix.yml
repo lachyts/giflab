@@ -1,0 +1,197 @@
+name: Test Matrix Strategy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run full matrix nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  lightning-tests:
+    name: Lightning Tests (⚡ <30s)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11, 3.12]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run Lightning Tests
+      run: |
+        export GIFLAB_ULTRA_FAST=1
+        export GIFLAB_MAX_PIPES=3
+        export GIFLAB_MOCK_ALL_ENGINES=1
+        poetry run pytest -m "fast" tests/ -n auto --tb=short --cov=src/giflab --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  integration-tests:
+    name: Integration Tests (🔄 <5min)
+    runs-on: ubuntu-latest
+    needs: lightning-tests
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.12
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-3.12-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Install external dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gifsicle imagemagick ffmpeg
+    
+    - name: Run Integration Tests
+      run: |
+        export GIFLAB_MAX_PIPES=10
+        poetry run pytest -m "not slow" tests/ -n 4 --tb=short --durations=10 --maxfail=5
+
+  full-matrix-tests:
+    name: Full Matrix Tests (🔍 <30min)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.12
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-3.12-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Install external dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gifsicle imagemagick ffmpeg
+        # Install Gifski (if available)
+        wget -q https://github.com/ImageOptim/gifski/releases/latest/download/gifski_1.14.1_amd64.deb || true
+        sudo dpkg -i gifski_1.14.1_amd64.deb || true
+    
+    - name: Run Full Test Matrix
+      run: |
+        export GIFLAB_FULL_MATRIX=1
+        poetry run pytest tests/ --tb=short --durations=20 --maxfail=10 --timeout=1800
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-full-matrix
+        path: |
+          test-results/
+          logs/
+        retention-days: 30
+
+  performance-validation:
+    name: Performance Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.12
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Install dependencies
+      run: poetry install --no-interaction
+    
+    - name: Validate Test Performance
+      run: |
+        # Lightning tests must complete in under 30 seconds
+        echo "⚡ Validating lightning test performance..."
+        timeout 30s make test-fast || (echo "❌ Lightning tests exceeded 30s limit" && exit 1)
+        
+        # Integration subset must complete in under 5 minutes
+        echo "🔄 Validating integration test performance..."
+        timeout 300s poetry run pytest -m "integration" tests/ -n 4 --tb=no || (echo "❌ Integration tests exceeded 5min limit" && exit 1)
+        
+        echo "✅ All performance targets met!"

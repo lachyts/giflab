@@ -256,7 +256,7 @@ class ExperimentalRunner:
         results_df = self._run_comprehensive_testing(synthetic_gifs, test_pipelines)
         
         # Analyze results and eliminate underperformers
-        experiment_result = self._analyze_and_eliminate(results_df, quality_threshold)
+        experiment_result = self._analyze_and_experiment(results_df, quality_threshold)
         
         # Save results
         self._save_results(experiment_result, results_df)
@@ -265,7 +265,7 @@ class ExperimentalRunner:
     
     def _run_comprehensive_testing(self, gif_paths: List[Path], pipelines: List[Pipeline]) -> pd.DataFrame:
         """Run comprehensive testing of all pipeline combinations with streaming results to disk."""
-        from .metrics import calculate_comprehensive_metrics, DEFAULT_METRICS_CONFIG
+        from ..metrics import calculate_comprehensive_metrics, DEFAULT_METRICS_CONFIG
         import tempfile
         import time
         import csv
@@ -740,8 +740,7 @@ class ExperimentalRunner:
     
     def _execute_pipeline_with_metrics(self, gif_path: Path, pipeline: Pipeline, params: dict, content_type: str) -> dict:
         """Execute a single pipeline and calculate comprehensive quality metrics."""
-        from .metrics import calculate_comprehensive_metrics
-        from .dynamic_pipeline import Pipeline
+        from ..metrics import calculate_comprehensive_metrics
         import tempfile
         import time
         
@@ -977,7 +976,7 @@ class ExperimentalRunner:
         if not self.use_gpu:
             # User hasn't requested GPU or GPU not available
             self.logger.debug("📊 Computing quality metrics using CPU (GPU not requested or unavailable)")
-            from .metrics import calculate_comprehensive_metrics
+            from ..metrics import calculate_comprehensive_metrics
             return calculate_comprehensive_metrics(original_path, compressed_path)
             
         try:
@@ -991,7 +990,7 @@ class ExperimentalRunner:
                 self.logger.warning("🔄 CUDA devices became unavailable during processing")
                 self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
                 self.logger.info("💡 Performance may be slower than expected")
-                from .metrics import calculate_comprehensive_metrics
+                from ..metrics import calculate_comprehensive_metrics
                 return calculate_comprehensive_metrics(original_path, compressed_path)
         
             self.logger.info("🚀 Computing quality metrics using GPU acceleration")
@@ -1004,7 +1003,7 @@ class ExperimentalRunner:
             self.logger.warning("🔄 OpenCV CUDA support lost during processing")
             self.logger.warning("🔄 Falling back to CPU for quality metrics calculation")
             self.logger.info("💡 Install opencv-python with CUDA support for better performance")
-            from .metrics import calculate_comprehensive_metrics
+            from ..metrics import calculate_comprehensive_metrics
             return calculate_comprehensive_metrics(original_path, compressed_path)
     
     def _calculate_cuda_metrics(self, original_path: Path, compressed_path: Path) -> dict:

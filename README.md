@@ -520,8 +520,14 @@ GifLab maintains strict testing standards to ensure code quality and project cle
 
 ### Quick Commands
 ```bash
-# Run tests
-pytest
+# Development Testing (⚡ <30s, rapid iteration)
+make test-fast
+
+# Pre-commit Testing (🔄 <5min, comprehensive validation)  
+make test-integration
+
+# Release Testing (🔍 <30min, full coverage)
+make test-full
 
 # Create test workspace
 make test-workspace
