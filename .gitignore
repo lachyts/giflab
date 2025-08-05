@@ -117,6 +117,9 @@ debug_*.gif
 *.log
 temp_*
 
+# Performance monitoring history (CI artifacts handle persistence)
+test-performance-history.json
+
 # Test fixtures (exclude binary test files)
 tests/fixtures/*.gif
 

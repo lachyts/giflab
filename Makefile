@@ -49,11 +49,24 @@ clean-testing-mess: ## Emergency cleanup of testing files in root directory
 	@rm -rf *png_export* *png_frames* *png_sequence* *png_from_* *png_fix*
 	@echo "✅ Root directory cleaned! Use 'make test-workspace' to create proper structure."
 
-test-fast: ## Run lightning-fast test suite (<30s, development workflow)
+test-fast: ## Run lightning-fast test suite (<10s, development workflow)
 	@echo "⚡ Running lightning-fast test suite for development..."
-	@export GIFLAB_ULTRA_FAST=1 GIFLAB_MAX_PIPES=3 GIFLAB_MOCK_ALL_ENGINES=1; \
-	poetry run pytest -m "fast" tests/ -n auto --tb=short
-	@echo "✅ Fast test suite complete! Use for rapid development iteration."
+	@echo "⏱️  Performance monitoring: Will alert if tests exceed 10s threshold"
+	@start_time=$$(date +%s); \
+	export GIFLAB_ULTRA_FAST=1 GIFLAB_MAX_PIPES=3 GIFLAB_MOCK_ALL_ENGINES=1; \
+	poetry run pytest -m "fast" tests/ -n auto --tb=short; \
+	test_result=$$?; \
+	end_time=$$(date +%s); \
+	duration=$$((end_time - start_time)); \
+	echo "⏱️  Test execution time: $${duration}s"; \
+	if [ $$duration -gt 10 ]; then \
+		echo "🚨 WARNING: Fast tests took $${duration}s (exceeds 10s threshold!)"; \
+		echo "💡 Consider investigating performance regression in test suite"; \
+		echo "📊 Expected: ≤10s | Actual: $${duration}s | Target met: ❌"; \
+	else \
+		echo "✅ Performance target met: $${duration}s ≤ 10s"; \
+	fi; \
+	exit $$test_result
 
 test-integration: ## Run integration test suite (<5min, pre-commit validation)  
 	@echo "🔄 Running integration test suite for comprehensive validation..."

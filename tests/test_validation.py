@@ -20,6 +20,7 @@ from giflab.validation import (
 class TestValidateRawDir:
     """Tests for validate_raw_dir function."""
 
+    @pytest.mark.fast
     def test_validate_raw_dir_success(self, tmp_path):
         """Test successful RAW_DIR validation."""
         # Create a test directory with a GIF file
@@ -32,6 +33,7 @@ class TestValidateRawDir:
         assert result.exists()
         assert result.is_dir()
 
+    @pytest.mark.fast
     def test_validate_raw_dir_no_gifs_required(self, tmp_path):
         """Test RAW_DIR validation without requiring GIF files."""
         test_dir = tmp_path / "empty_dir"
@@ -40,11 +42,13 @@ class TestValidateRawDir:
         result = validate_raw_dir(test_dir, require_gifs=False)
         assert result == test_dir
 
+    @pytest.mark.fast
     def test_validate_raw_dir_empty_path(self):
         """Test validation with empty path."""
         with pytest.raises(ValidationError, match="RAW_DIR cannot be empty"):
             validate_raw_dir("")
 
+    @pytest.mark.fast
     def test_validate_raw_dir_nonexistent(self, tmp_path):
         """Test validation with non-existent directory."""
         nonexistent = tmp_path / "nonexistent"
@@ -52,6 +56,7 @@ class TestValidateRawDir:
         with pytest.raises(ValidationError, match="RAW_DIR does not exist"):
             validate_raw_dir(nonexistent)
 
+    @pytest.mark.fast
     def test_validate_raw_dir_not_directory(self, tmp_path):
         """Test validation with file instead of directory."""
         test_file = tmp_path / "test.txt"
@@ -60,6 +65,7 @@ class TestValidateRawDir:
         with pytest.raises(ValidationError, match="RAW_DIR is not a directory"):
             validate_raw_dir(test_file)
 
+    @pytest.mark.fast
     def test_validate_raw_dir_no_gifs(self, tmp_path):
         """Test validation with directory containing no GIF files."""
         test_dir = tmp_path / "no_gifs"
@@ -69,6 +75,7 @@ class TestValidateRawDir:
         with pytest.raises(ValidationError, match="RAW_DIR contains no GIF files"):
             validate_raw_dir(test_dir, require_gifs=True)
 
+    @pytest.mark.fast
     def test_validate_raw_dir_unreadable(self, tmp_path):
         """Test validation with unreadable directory."""
         test_dir = tmp_path / "unreadable"
@@ -83,17 +90,20 @@ class TestValidateRawDir:
 class TestValidatePathSecurity:
     """Tests for validate_path_security function."""
 
+    @pytest.mark.fast
     def test_validate_path_security_success(self, tmp_path):
         """Test successful path security validation."""
         test_path = tmp_path / "safe_path"
         result = validate_path_security(test_path)
         assert result == test_path
 
+    @pytest.mark.fast
     def test_validate_path_security_empty(self):
         """Test validation with empty path."""
         with pytest.raises(ValidationError, match="Path cannot be empty"):
             validate_path_security("")
 
+    @pytest.mark.fast
     def test_validate_path_security_dangerous_chars(self):
         """Test validation with dangerous characters."""
         dangerous_paths = [
@@ -111,6 +121,7 @@ class TestValidatePathSecurity:
             with pytest.raises(ValidationError, match="potentially dangerous characters"):
                 validate_path_security(dangerous_path)
 
+    @pytest.mark.fast
     def test_validate_path_security_traversal(self):
         """Test validation with path traversal attempts."""
         traversal_paths = [
@@ -123,12 +134,14 @@ class TestValidatePathSecurity:
             with pytest.raises(ValidationError, match="directory traversal"):
                 validate_path_security(traversal_path)
 
+    @pytest.mark.fast
     def test_validate_path_security_null_bytes(self):
         """Test validation with null bytes."""
         # Test with null bytes in the string directly
         with pytest.raises(ValidationError, match="null bytes"):
             validate_path_security("path/with\x00null")
 
+    @pytest.mark.fast
     def test_validate_path_security_too_long(self):
         """Test validation with excessively long path."""
         long_path = "/path/" + "a" * 5000
@@ -139,12 +152,14 @@ class TestValidatePathSecurity:
 class TestValidateOutputPath:
     """Tests for validate_output_path function."""
 
+    @pytest.mark.fast
     def test_validate_output_path_success(self, tmp_path):
         """Test successful output path validation."""
         output_path = tmp_path / "output.csv"
         result = validate_output_path(output_path)
         assert result == output_path
 
+    @pytest.mark.fast
     def test_validate_output_path_create_parent(self, tmp_path):
         """Test output path validation with parent creation."""
         output_path = tmp_path / "new_dir" / "output.csv"
@@ -152,12 +167,14 @@ class TestValidateOutputPath:
         assert result == output_path
         assert output_path.parent.exists()
 
+    @pytest.mark.fast
     def test_validate_output_path_no_create_parent(self, tmp_path):
         """Test output path validation without parent creation."""
         output_path = tmp_path / "nonexistent" / "output.csv"
         with pytest.raises(ValidationError, match="Parent directory does not exist"):
             validate_output_path(output_path, create_parent=False)
 
+    @pytest.mark.fast
     def test_validate_output_path_unwritable_parent(self, tmp_path):
         """Test output path validation with unwritable parent."""
         output_path = tmp_path / "output.csv"
@@ -167,6 +184,7 @@ class TestValidateOutputPath:
             with pytest.raises(ValidationError, match="not writable"):
                 validate_output_path(output_path)
 
+    @pytest.mark.fast
     def test_validate_output_path_existing_unwritable(self, tmp_path):
         """Test output path validation with existing unwritable file."""
         output_path = tmp_path / "output.csv"
@@ -186,6 +204,7 @@ class TestValidateOutputPath:
 class TestValidateWorkerCount:
     """Tests for validate_worker_count function."""
 
+    @pytest.mark.fast
     def test_validate_worker_count_success(self):
         """Test successful worker count validation."""
         assert validate_worker_count(4) == 4

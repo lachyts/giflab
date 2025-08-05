@@ -25,6 +25,7 @@ def _make_test_gif(tmp_path: Path) -> Path:
 # Variable-isolation tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.fast
 @pytest.mark.parametrize("variable", [
     "frame_reduction",
     "color_reduction",
@@ -35,6 +36,7 @@ def test_at_least_one_tool_available(variable):
     assert wrappers, f"No wrappers found for variable={variable}"
 
 
+@pytest.mark.fast
 @pytest.mark.parametrize("variable,params", [
     ("frame_reduction", {"ratio": 1.0}),
     ("color_reduction", {"colors": 256}),
@@ -60,17 +62,20 @@ def test_noop_wrapper_apply_succeeds(variable, params, tmp_path):
 # Dynamic pipeline generation tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.fast
 def test_generate_all_pipelines_non_empty():
     pipelines = generate_all_pipelines()
     assert pipelines, "No pipelines generated"
 
 
+@pytest.mark.fast
 def test_pipeline_identifiers_unique():
     pipelines = generate_all_pipelines()
     ids = [p.identifier() for p in pipelines]
     assert len(ids) == len(set(ids)), "Pipeline identifiers are not unique"
 
 
+@pytest.mark.fast
 def test_collapsed_steps_order_and_length():
     pipelines = generate_all_pipelines()
     max_pipes = int(os.getenv("GIFLAB_MAX_PIPES", "50"))

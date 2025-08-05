@@ -19,6 +19,7 @@ from giflab.experimental import (
 class TestNewFrameGenerationMethods:
     """Test all new frame generation methods added for expansion."""
     
+    @pytest.mark.fast
     def test_mixed_content_frame_generation(self, tmp_path):
         """Test mixed content frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -40,6 +41,7 @@ class TestNewFrameGenerationMethods:
             if colors:  # getcolors returns None if too many colors
                 assert len(colors) > 1
     
+    @pytest.mark.fast
     def test_data_visualization_frame_generation(self, tmp_path):
         """Test data visualization (charts) frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -50,6 +52,7 @@ class TestNewFrameGenerationMethods:
             assert frame.size == (300, 200)
             assert frame.mode == "RGB"
             
+    @pytest.mark.fast
     def test_transitions_frame_generation(self, tmp_path):
         """Test transitions (morphing) frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -61,6 +64,7 @@ class TestNewFrameGenerationMethods:
             assert frame.size == (150, 150)
             assert frame.mode == "RGB"
     
+    @pytest.mark.fast
     def test_single_pixel_anim_frame_generation(self, tmp_path):
         """Test single pixel animation frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -77,6 +81,7 @@ class TestNewFrameGenerationMethods:
         # Frames should be different (pixel changes)
         assert list(frame1.getdata()) != list(frame2.getdata())
     
+    @pytest.mark.fast
     def test_static_minimal_change_frame_generation(self, tmp_path):
         """Test static minimal change frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -94,6 +99,7 @@ class TestNewFrameGenerationMethods:
                 assert frame.size == size
                 assert frame.mode == "RGB"
     
+    @pytest.mark.fast
     def test_high_frequency_detail_frame_generation(self, tmp_path):
         """Test high frequency detail frame generation."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -112,6 +118,7 @@ class TestNewFrameGenerationMethods:
 class TestExpandedSyntheticSpecs:
     """Test the expanded synthetic GIF specifications."""
     
+    @pytest.mark.fast
     def test_all_new_content_types_present(self, tmp_path):
         """Test that all new content types are included in specs."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -126,6 +133,7 @@ class TestExpandedSyntheticSpecs:
         assert "static_plus" in content_types
         assert "detail" in content_types
     
+    @pytest.mark.fast
     def test_size_variations_present(self, tmp_path):
         """Test that size variations are properly included."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -140,6 +148,7 @@ class TestExpandedSyntheticSpecs:
         assert "noise_small" in spec_names
         assert "noise_large" in spec_names
     
+    @pytest.mark.fast
     def test_frame_variations_present(self, tmp_path):
         """Test that frame count variations are included."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -151,6 +160,7 @@ class TestExpandedSyntheticSpecs:
         assert "long_animation" in spec_names
         assert "extended_animation" in spec_names
     
+    @pytest.mark.fast
     def test_expanded_spec_count(self, tmp_path):
         """Test that we have the expected number of specs."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -177,6 +187,7 @@ class TestExpandedSyntheticSpecs:
 class TestTargetedExpansionStrategy:
     """Test the new targeted expansion sampling strategy."""
     
+    @pytest.mark.fast
     def test_targeted_strategy_in_sampling_strategies(self, tmp_path):
         """Test that targeted strategy is available."""
         eliminator = ExperimentalRunner(tmp_path)
@@ -188,6 +199,7 @@ class TestTargetedExpansionStrategy:
         assert strategy.sample_ratio == 0.12
         assert strategy.min_samples_per_tool == 4
     
+    @pytest.mark.fast
     def test_targeted_sampling_method(self, tmp_path):
         """Test the targeted sampling method."""
         eliminator = ExperimentalRunner(tmp_path)

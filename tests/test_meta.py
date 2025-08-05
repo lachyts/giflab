@@ -17,6 +17,7 @@ from giflab.meta import (
 class TestComputeFileSha256:
     """Tests for compute_file_sha256 function."""
 
+    @pytest.mark.fast
     def test_sha256_of_known_content(self, tmp_path):
         """Test SHA256 computation with known content."""
         test_file = tmp_path / "test.txt"
@@ -30,6 +31,7 @@ class TestComputeFileSha256:
         result = compute_file_sha256(test_file)
         assert result == expected_hash
 
+    @pytest.mark.fast
     def test_sha256_empty_file(self, tmp_path):
         """Test SHA256 computation of empty file."""
         test_file = tmp_path / "empty.txt"
@@ -39,6 +41,7 @@ class TestComputeFileSha256:
         result = compute_file_sha256(test_file)
         assert result == expected_hash
 
+    @pytest.mark.fast
     def test_sha256_large_file(self, tmp_path):
         """Test SHA256 computation with large file (chunk reading)."""
         test_file = tmp_path / "large.txt"
@@ -54,6 +57,7 @@ class TestComputeFileSha256:
 class TestCalculateEntropy:
     """Tests for calculate_entropy function."""
 
+    @pytest.mark.fast
     def test_entropy_uniform_image(self):
         """Test entropy calculation for uniform (low entropy) image."""
         # Create a uniform gray image
@@ -63,6 +67,7 @@ class TestCalculateEntropy:
         # Uniform image should have very low entropy (close to 0)
         assert 0.0 <= entropy <= 1.0
 
+    @pytest.mark.fast
     def test_entropy_random_image(self):
         """Test entropy calculation for random (high entropy) image."""
         # Create a random image
@@ -73,6 +78,7 @@ class TestCalculateEntropy:
         # Random image should have higher entropy
         assert entropy > 4.0  # Should be close to 8 for truly random
 
+    @pytest.mark.fast
     def test_entropy_color_image(self):
         """Test entropy calculation converts color to grayscale."""
         # Create a color image
@@ -87,6 +93,7 @@ class TestCalculateEntropy:
 class TestGifMetadata:
     """Tests for GifMetadata dataclass."""
 
+    @pytest.mark.fast
     def test_gif_metadata_creation(self):
         """Test GifMetadata object creation."""
         metadata = GifMetadata(
@@ -113,6 +120,7 @@ class TestGifMetadata:
         assert metadata.source_platform == "unknown"
         assert metadata.source_metadata is None
 
+    @pytest.mark.fast
     def test_gif_metadata_optional_entropy(self):
         """Test GifMetadata with optional entropy field."""
         metadata = GifMetadata(
@@ -162,6 +170,7 @@ class TestExtractGifMetadata:
 
         return gif_path
 
+    @pytest.mark.fast
     def test_extract_gif_metadata_success(self, simple_gif):
         """Test successful GIF metadata extraction."""
         metadata = extract_gif_metadata(simple_gif)
@@ -177,6 +186,7 @@ class TestExtractGifMetadata:
         assert metadata.orig_n_colors > 0
         assert isinstance(metadata.entropy, float)
 
+    @pytest.mark.fast
     def test_extract_gif_metadata_file_not_found(self, tmp_path):
         """Test error handling for non-existent file."""
         non_existent = tmp_path / "does_not_exist.gif"
@@ -184,6 +194,7 @@ class TestExtractGifMetadata:
         with pytest.raises(IOError, match="File not found"):
             extract_gif_metadata(non_existent)
 
+    @pytest.mark.fast
     def test_extract_gif_metadata_not_gif(self, tmp_path):
         """Test error handling for non-GIF file."""
         # Create a PNG file instead of GIF
@@ -194,6 +205,7 @@ class TestExtractGifMetadata:
         with pytest.raises(ValueError, match="File is not a GIF"):
             extract_gif_metadata(png_path)
 
+    @pytest.mark.fast
     def test_extract_gif_metadata_invalid_file(self, tmp_path):
         """Test error handling for corrupted file."""
         # Create a file with .gif extension but invalid content
@@ -218,6 +230,7 @@ class TestExtractGifMetadata:
         img.save(gif_path, 'GIF')
         return gif_path
 
+    @pytest.mark.fast
     def test_extract_single_frame_gif(self, single_frame_gif):
         """Test metadata extraction for single-frame GIF."""
         metadata = extract_gif_metadata(single_frame_gif)
@@ -228,6 +241,7 @@ class TestExtractGifMetadata:
         assert metadata.orig_fps > 0  # Should have reasonable default FPS
         assert metadata.orig_n_colors > 0
 
+    @pytest.mark.fast
     def test_gif_metadata_consistency(self, simple_gif):
         """Test that repeated extractions give consistent results."""
         metadata1 = extract_gif_metadata(simple_gif)

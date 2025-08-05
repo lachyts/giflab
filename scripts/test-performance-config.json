@@ -1,0 +1,17 @@
+{
+  "thresholds": {
+    "fast": 10,
+    "integration": 300,
+    "full": 1800
+  },
+  "alert_on_regression": true,
+  "save_history": true,
+  "slack_webhook_url": null,
+  "email_alerts": null,
+  "regression_tolerance": 1.5,
+  "trend_analysis": {
+    "enabled": true,
+    "history_window": 10,
+    "alert_on_trend": true
+  }
+}
