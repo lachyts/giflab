@@ -28,6 +28,7 @@ from ..dynamic_pipeline import generate_all_pipelines, Pipeline
 from ..elimination_errors import ErrorTypes
 from ..elimination_cache import PipelineResultsCache, get_git_commit
 from ..synthetic_gifs import SyntheticGifGenerator, SyntheticGifSpec, SyntheticFrameGenerator
+from .targeted_presets import ExperimentPreset
 from ..error_handling import clean_error_message
 from .pareto import ParetoAnalyzer
 from .sampling import SAMPLING_STRATEGIES, PipelineSampler
@@ -59,8 +60,14 @@ class ExperimentalRunner:
     PROGRESS_SAVE_INTERVAL = 100  # Save resume data every N jobs to prevent memory buildup
     BUFFER_FLUSH_INTERVAL = 15    # Reduced from 50 for more frequent monitoring updates
     
-    def __init__(self, output_dir: Path = Path("experiment_results"), use_gpu: bool = False, use_cache: bool = True):
-        self.base_output_dir = output_dir
+    def __init__(self, output_dir: Path = Path("results/experiments"), use_gpu: bool = False, use_cache: bool = True):
+        # Always resolve paths to absolute paths to prevent nesting when working directory changes
+        if output_dir.is_absolute():
+            self.base_output_dir = output_dir
+        else:
+            # For relative paths, resolve from the project root (where .git exists)
+            project_root = Path(__file__).parent.parent.parent.parent  # Go up from src/giflab/experimental/runner.py
+            self.base_output_dir = (project_root / output_dir).resolve()
         self.use_gpu = use_gpu
         self.use_cache = use_cache
         self.logger = logging.getLogger(__name__)
@@ -70,6 +77,9 @@ class ExperimentalRunner:
         
         # Initialize vectorized frame generator for performance
         self._frame_generator = SyntheticFrameGenerator()
+        
+        # Track current preset for parameter override (None = use default test_params)
+        self._current_preset: Optional[ExperimentPreset] = None
         
         # Create timestamped output directory for this run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -134,6 +144,91 @@ class ExperimentalRunner:
     def select_pipelines_intelligently(self, all_pipelines: List, strategy: str = 'representative') -> List:
         """Select pipelines using intelligent sampling strategies to reduce testing time."""
         return self.sampler.select_pipelines_intelligently(all_pipelines, strategy)
+    
+    def generate_targeted_pipelines(self, preset_id: str) -> List[Pipeline]:
+        """Generate targeted pipelines for a specific experiment preset.
+        
+        Args:
+            preset_id: ID of the experiment preset to use
+            
+        Returns:
+            List of Pipeline objects for the specific combinations needed
+            
+        Raises:
+            ValueError: If preset_id is not found or invalid
+        """
+        # Import builtin presets to ensure they're registered
+        from . import builtin_presets
+        from .targeted_presets import PRESET_REGISTRY
+        from .targeted_generator import TargetedPipelineGenerator
+        
+        preset = PRESET_REGISTRY.get(preset_id)
+        generator = TargetedPipelineGenerator(self.logger)
+        
+        # Log the preset being used
+        self.logger.info(f"🎯 Using targeted preset: {preset.name}")
+        self.logger.info(f"📋 Description: {preset.description}")
+        
+        # Validate preset and generate pipelines
+        validation = generator.validate_preset_feasibility(preset)
+        if not validation['valid']:
+            raise ValueError(f"Invalid preset '{preset_id}': {validation['errors']}")
+        
+        self.logger.info(f"📊 Efficiency gain: {validation['efficiency_gain']:.1%} vs generate_all_pipelines")
+        
+        return generator.generate_targeted_pipelines(preset)
+    
+    def run_targeted_experiment(self, preset_id: str, quality_threshold: float = 0.05, 
+                              use_targeted_gifs: bool = False) -> ExperimentResult:
+        """Run a targeted experiment using a specific preset configuration.
+        
+        This is the main entry point for preset-based experiments, replacing
+        the generate_all_pipelines() + sampling workflow.
+        
+        Args:
+            preset_id: ID of the experiment preset to use
+            quality_threshold: SSIM threshold for elimination
+            use_targeted_gifs: Whether to use targeted GIF subset
+            
+        Returns:
+            ExperimentResult with targeted testing results
+        """
+        # Import builtin presets to ensure they're registered
+        from . import builtin_presets
+        from .targeted_presets import PRESET_REGISTRY
+        
+        # Get the preset for parameter override
+        preset = PRESET_REGISTRY.get(preset_id)
+        if not preset:
+            raise ValueError(f"Unknown preset ID: {preset_id}")
+        
+        # Activate preset mode for parameter override
+        self._current_preset = preset
+        
+        try:
+            # Generate targeted pipelines
+            targeted_pipelines = self.generate_targeted_pipelines(preset_id)
+            
+            # Run analysis with targeted pipelines
+            return self.run_experimental_analysis(
+                test_pipelines=targeted_pipelines,
+                quality_threshold=quality_threshold,
+                use_targeted_gifs=use_targeted_gifs
+            )
+        finally:
+            # Always reset preset mode
+            self._current_preset = None
+    
+    def list_available_presets(self) -> Dict[str, str]:
+        """List all available experiment presets.
+        
+        Returns:
+            Dictionary mapping preset IDs to descriptions
+        """
+        # Import builtin presets to ensure they're registered
+        from . import builtin_presets
+        from .targeted_presets import PRESET_REGISTRY
+        return PRESET_REGISTRY.list_presets()
     
     # Sampling methods moved to experimental.sampling module
     
@@ -326,13 +421,13 @@ class ExperimentalRunner:
         # Setup streaming CSV file for results
         streaming_csv_path = self.output_dir / "streaming_results.csv"
         csv_fieldnames = [
-            'gif_name', 'content_type', 'pipeline_id', 'success',
+            'gif_name', 'content_type', 'pipeline_id', 'connection_signature', 'success',
             'file_size_kb', 'original_size_kb', 'compression_ratio',
             'ssim_mean', 'ssim_std', 'ssim_min', 'ssim_max',
             'ms_ssim_mean', 'psnr_mean', 'temporal_consistency',
             'mse_mean', 'rmse_mean', 'fsim_mean', 'gmsd_mean',
             'chist_mean', 'edge_similarity_mean', 'texture_similarity_mean',
-            'sharpness_similarity_mean', 'composite_quality',
+            'sharpness_similarity_mean', 'composite_quality', 'enhanced_composite_quality', 'efficiency',
             'render_time_ms', 'total_processing_time_ms',
             'pipeline_steps', 'tools_used', 
             'applied_colors', 'applied_lossy', 'applied_frame_ratio', 'actual_pipeline_steps',
@@ -458,6 +553,7 @@ class ExperimentalRunner:
                                 'gif_name': gif_path.stem,
                                 'content_type': content_type,
                                 'pipeline_id': pipeline.identifier(),
+                                'connection_signature': 'FAIL',  # Validation failed before execution
                                 'success': False,
                                 'error': error_msg,
                                 'test_colors': params.get("colors", 0),
@@ -493,6 +589,7 @@ class ExperimentalRunner:
                                     'gif_name': gif_path.stem,
                                     'content_type': content_type,
                                     'pipeline_id': pipeline.identifier(),
+                                    'connection_signature': 'FAIL',  # Tool validation failed before execution
                                     'success': False,
                                     'error': error_msg,
                                     'test_colors': params.get("colors", 0),
@@ -537,6 +634,7 @@ class ExperimentalRunner:
                             'gif_name': gif_path.stem,
                             'content_type': content_type,
                             'pipeline_id': pipeline.identifier(),
+                            'connection_signature': 'ERROR',  # Pipeline failed during execution
                             'error': clean_error_message(str(e)),  # Clean error message for CSV
                             'error_traceback': traceback.format_exc().replace('\n', ' | '),  # Preserve full traceback
                             'error_timestamp': datetime.now().isoformat(),
@@ -568,6 +666,8 @@ class ExperimentalRunner:
                             'texture_similarity_mean': None,
                             'sharpness_similarity_mean': None,
                             'composite_quality': None,
+                            'enhanced_composite_quality': None,
+                            'efficiency': None,
                             'render_time_ms': None,
                             'total_processing_time_ms': None
                         }
@@ -692,6 +792,7 @@ class ExperimentalRunner:
                         'gif_name': result.get('gif_name', ''),
                         'content_type': result.get('content_type', ''),
                         'pipeline_id': result.get('pipeline_id', ''),
+                        'connection_signature': result.get('connection_signature', ''),
                         'success': result.get('success', False),
                         'file_size_kb': result.get('file_size_kb', 0),
                         'original_size_kb': result.get('original_size_kb', 0),
@@ -712,6 +813,8 @@ class ExperimentalRunner:
                         'texture_similarity_mean': result.get('texture_similarity_mean', 0.0),
                         'sharpness_similarity_mean': result.get('sharpness_similarity_mean', 0.0),
                         'composite_quality': result.get('composite_quality', 0.0),
+                        'enhanced_composite_quality': result.get('enhanced_composite_quality', 0.0),
+                        'efficiency': result.get('efficiency', 0.0),
                         'render_time_ms': result.get('render_time_ms', 0),
                         'total_processing_time_ms': result.get('total_processing_time_ms', 0),
                         'pipeline_steps': str(result.get('pipeline_steps', [])),
@@ -754,6 +857,8 @@ class ExperimentalRunner:
             current_input = gif_path
             pipeline_metadata = {}
             png_sequence_dir = None  # Track PNG sequences for gifski optimization
+            connection_signature = []  # Track connection methods between steps (G=GIF, P=PNG)
+            self.logger.debug(f"Initialized connection_signature tracking for {pipeline.identifier()}")
             
             for i, step in enumerate(pipeline.steps):
                 step_output = tmpdir_path / f"step_{step.variable}_{current_input.stem}.gif"
@@ -778,6 +883,21 @@ class ExperimentalRunner:
                     if png_sequence_dir and ("Gifski" in wrapper.__class__.__name__ or 
                                            "AnimatelyAdvancedLossyCompressor" == wrapper.__class__.__name__):
                         step_params["png_sequence_dir"] = str(png_sequence_dir)
+                
+                # Track connection method to this step (for all steps after the first)
+                if i > 0:  # Track all connections except to first step
+                    # PNG input is only possible for lossy compression steps (gifski/animately-advanced)
+                    step_uses_png_input = False
+                    if step.variable == "lossy_compression":
+                        if png_sequence_dir and ("Gifski" in wrapper.__class__.__name__ or 
+                                               "AnimatelyAdvancedLossyCompressor" == wrapper.__class__.__name__):
+                            step_uses_png_input = True
+                    
+                    # All other steps (frame/color reduction) always use GIF connections
+                    connection_method = 'P' if step_uses_png_input else 'G'
+                    connection_signature.append(connection_method)
+                    # Debug logging
+                    self.logger.debug(f"Step {i} ({step.variable}): connection_method={connection_method}, png_dir_available={png_sequence_dir is not None}")
                 
                 # Check if next step supports PNG sequence input (gifski or animately advanced)
                 next_step_is_gifski = False
@@ -806,29 +926,36 @@ class ExperimentalRunner:
                     # Use appropriate export function based on tool
                     # Export from step_output (processed result) not current_input (raw input)
                     if "FFmpeg" in wrapper.__class__.__name__:
-                        from .external_engines.ffmpeg import export_png_sequence
+                        from ..external_engines.ffmpeg import export_png_sequence
                         png_result = export_png_sequence(step_output, png_sequence_dir)
                     elif "Animately" in wrapper.__class__.__name__:
-                        from .external_engines.animately import export_png_sequence
+                        from ..external_engines.animately import export_png_sequence
                         png_result = export_png_sequence(step_output, png_sequence_dir)
                     else:  # ImageMagick
-                        from .external_engines.imagemagick import export_png_sequence
+                        from ..external_engines.imagemagick import export_png_sequence
                         png_result = export_png_sequence(step_output, png_sequence_dir)
                     
                     # Merge PNG export metadata
                     pipeline_metadata.update({f"png_export_{step.variable}": png_result})
                     
                     # CRITICAL: Validate frame count for PNG sequence tools compatibility
-                    # Both gifski and animately advanced require at least 2 frames to create an animation
+                    # Gifski requires at least 2 frames and ONLY accepts PNG sequences
+                    # Animately Advanced accepts any frame count and can fallback to GIF
                     frame_count = png_result.get("frame_count", 0)
-                    if frame_count < 2:
-                        next_tool_name = "gifski" if next_step_is_gifski else "animately-advanced"
+                    if next_step_is_gifski and frame_count < 2:
+                        # Gifski cannot work with <2 frames - this will cause pipeline failure
                         self.logger.warning(
-                            f"PNG sequence has only {frame_count} frame(s), but {next_tool_name} requires at least 2. "
-                            f"Disabling PNG sequence optimization for this pipeline step. "
-                            f"Tool will fall back to processing the GIF directly."
+                            f"PNG sequence has only {frame_count} frame(s), but gifski requires at least 2 frames. "
+                            f"Gifski pipeline will fail - gifski cannot process GIF input directly."
                         )
-                        png_sequence_dir = None  # Disable optimization, use fallback GIF processing
+                        png_sequence_dir = None  # Will cause gifski pipeline to fail later
+                    elif next_step_is_animately_advanced:
+                        # Animately Advanced accepts any frame count in PNG sequences
+                        if frame_count >= 1:
+                            self.logger.debug(f"PNG sequence with {frame_count} frame(s) ready for animately-advanced")
+                        else:
+                            self.logger.warning(f"PNG export failed (0 frames), animately-advanced will use GIF fallback")
+                            png_sequence_dir = None
                 else:
                     png_sequence_dir = None  # Reset if not using PNG sequence optimization
                 
@@ -849,10 +976,16 @@ class ExperimentalRunner:
                     quality_metrics = self._get_fallback_metrics(gif_path, output_path)
             
             # Compile complete result with all metrics
+            # Filter out any empty entries and build final signature
+            valid_connections = [c for c in connection_signature if c]
+            final_signature = ''.join(valid_connections) if valid_connections else 'GG'
+            self.logger.debug(f"Connection signature compilation: raw={connection_signature}, valid={valid_connections}, final='{final_signature}' for {pipeline.identifier()}")
+            
             result = {
                 'gif_name': gif_path.stem,
                 'content_type': content_type,
                 'pipeline_id': pipeline.identifier(),
+                'connection_signature': final_signature,
                 'success': True,
                 
                 # File metrics
@@ -880,8 +1013,10 @@ class ExperimentalRunner:
                 'texture_similarity_mean': quality_metrics.get('texture_similarity', 0.0),
                 'sharpness_similarity_mean': quality_metrics.get('sharpness_similarity', 0.0),
                 
-                # Composite quality score (weighted combination)
+                # Composite quality scores (traditional and enhanced)
                 'composite_quality': quality_metrics.get('composite_quality', 0.0),
+                'enhanced_composite_quality': quality_metrics.get('enhanced_composite_quality', 0.0),
+                'efficiency': quality_metrics.get('efficiency', 0.0),
                 
                 # Performance metrics
                 'render_time_ms': quality_metrics.get('render_ms', 0),
@@ -1011,7 +1146,7 @@ class ExperimentalRunner:
         import cv2
         import numpy as np
         import time
-        from .metrics import extract_gif_frames, resize_to_common_dimensions, align_frames
+        from giflab.metrics import extract_gif_frames, resize_to_common_dimensions, align_frames
         from .config import DEFAULT_METRICS_CONFIG
         
         config = DEFAULT_METRICS_CONFIG
@@ -1120,14 +1255,18 @@ class ExperimentalRunner:
         temporal_delta = self._calculate_temporal_consistency(aligned_pairs)
         result['temporal_consistency'] = float(temporal_delta)
         
-        # Calculate composite quality using traditional metrics
-        composite_quality = (
-            config.SSIM_WEIGHT * result['ssim'] +
-            config.MS_SSIM_WEIGHT * result['ms_ssim'] +
-            config.PSNR_WEIGHT * result['psnr'] +
-            config.TEMPORAL_WEIGHT * result['temporal_consistency']
-        )
-        result['composite_quality'] = float(composite_quality)
+        # Calculate composite quality using enhanced metrics system
+        from ..enhanced_metrics import process_metrics_with_enhanced_quality
+        
+        # Process with enhanced quality system (adds enhanced_composite_quality and efficiency)
+        result = process_metrics_with_enhanced_quality(result, config)
+        
+        # Ensure compression ratio is available for efficiency calculation
+        if 'compression_ratio' not in result:
+            result['compression_ratio'] = self._calculate_compression_ratio(
+                original_path if 'original_path' in locals() else Path("dummy"), 
+                compressed_path
+            )
         
         # Add system metrics
         result['kilobytes'] = float(compressed_path.stat().st_size / 1024)
@@ -1378,10 +1517,14 @@ class ExperimentalRunner:
     def test_params(self) -> List[dict]:
         """Test parameter combinations for comprehensive evaluation.
         
-        FOCUSED: Consistent 50% frame reduction with systematic testing of:
-        - Lossy: 60%, 100% compression levels (engine-specific mapping)
-        - Colors: 32, 128 palette sizes
+        When running targeted presets, uses preset-defined locked parameters.
+        Otherwise uses default systematic parameter combinations.
         """
+        # Override with preset parameters if running in targeted mode
+        if self._current_preset is not None:
+            return self._generate_preset_params(self._current_preset)
+        
+        # Default comprehensive parameter testing
         params = [
             # === 2x2 MATRIX: LOSSY × COLORS ===
             {"colors": 32, "lossy": 60, "frame_ratio": 0.5},   # Mid colors + moderate lossy
@@ -1406,6 +1549,50 @@ class ExperimentalRunner:
                 param_set["frame_ratio"] = max(0.1, min(1.0, param_set["frame_ratio"]))
         
         return params
+    
+    def _generate_preset_params(self, preset: ExperimentPreset) -> List[dict]:
+        """Generate parameter combinations from preset slot configurations.
+        
+        Args:
+            preset: ExperimentPreset with slot configurations
+            
+        Returns:
+            Single-element list with preset-defined parameters
+        """
+        params = {}
+        
+        # Extract color parameters
+        if preset.color_slot.type == "locked":
+            params["colors"] = preset.color_slot.parameters.get("colors", 32)
+        else:
+            # For variable color slots, use a default value
+            # (Variable slots vary by tool class, not parameters)
+            params["colors"] = 32
+        
+        # Extract lossy parameters  
+        if preset.lossy_slot.type == "locked":
+            params["lossy"] = preset.lossy_slot.parameters.get("level", 40)
+        else:
+            # For variable lossy slots, use a default value
+            params["lossy"] = 60
+        
+        # Extract frame parameters
+        if preset.frame_slot.type == "locked":
+            # Frame slot parameters might have different names
+            frame_params = preset.frame_slot.parameters
+            if "ratio" in frame_params:
+                params["frame_ratio"] = frame_params["ratio"]
+            elif "ratios" in frame_params and isinstance(frame_params["ratios"], list):
+                # Use first ratio if multiple provided
+                params["frame_ratio"] = frame_params["ratios"][0] 
+            else:
+                params["frame_ratio"] = 0.5  # Default
+        else:
+            # Variable frame slots get default
+            params["frame_ratio"] = 0.5
+        
+        self.logger.info(f"🔒 Using preset-locked parameters: {params}")
+        return [params]  # Single parameter set for preset mode
     
     def _load_resume_data(self, resume_file: Path) -> dict:
         """Load previously completed jobs for resume functionality."""
@@ -1619,12 +1806,19 @@ class ExperimentalRunner:
             # Check if pipeline consistently underperforms - use available columns
             should_eliminate = False
             
-            if 'composite_quality' in pipeline_results.columns:
-                avg_composite_quality = pipeline_results['composite_quality'].mean()
-                max_composite_quality = pipeline_results['composite_quality'].max()
+            # Use enhanced composite quality metric if available, fallback to legacy composite quality
+            quality_column = None
+            if 'enhanced_composite_quality' in pipeline_results.columns:
+                quality_column = 'enhanced_composite_quality'
+            elif 'composite_quality' in pipeline_results.columns:
+                quality_column = 'composite_quality'
+                
+            if quality_column:
+                avg_composite_quality = pipeline_results[quality_column].mean()
+                max_composite_quality = pipeline_results[quality_column].max()
                 
                 if pd.isna(avg_composite_quality) or pd.isna(max_composite_quality):
-                    self.logger.warning(f"Invalid composite_quality metrics for pipeline: {pipeline_id}")
+                    self.logger.warning(f"Invalid {quality_column} metrics for pipeline: {pipeline_id}")
                     should_eliminate = True
                 elif (avg_composite_quality < threshold or max_composite_quality < threshold * 1.5):
                     should_eliminate = True
@@ -1639,7 +1833,7 @@ class ExperimentalRunner:
                     should_eliminate = True
             
             # If no quality metrics available, use any numeric column for basic filtering
-            if 'composite_quality' not in pipeline_results.columns and 'ssim_mean' not in pipeline_results.columns:
+            if quality_column is None and 'ssim_mean' not in pipeline_results.columns:
                 numeric_cols = pipeline_results.select_dtypes(include=['number']).columns
                 if len(numeric_cols) > 0:
                     primary_metric = pipeline_results[numeric_cols[0]].mean()
@@ -2093,14 +2287,14 @@ class ExperimentalRunner:
         
         # General recommendations
         report_lines.append("🔄 GENERAL RECOMMENDATIONS")
-        report_lines.append("   1. Run 'giflab view-failures experiment_results/' for detailed error analysis")
+        report_lines.append("   1. Run 'giflab view-failures results/experiments/latest/' for detailed error analysis")
         report_lines.append("   2. Consider excluding problematic tools from production pipelines")
         report_lines.append("   3. Test individual tools with 'python -c \"from giflab.system_tools import get_available_tools; print(get_available_tools())\"'")
         report_lines.append("   4. Review and update tool configurations in src/giflab/config.py")
         report_lines.append("   5. Consider running elimination analysis with fewer tool combinations to isolate issues")
         report_lines.append("")
         
-        report_lines.append("📖 For detailed failure logs, see: experiment_results/failed_pipelines.json")
+        report_lines.append("📖 For detailed failure logs, see: results/experiments/latest/failed_pipelines.json")
         
         return "\n".join(report_lines)
 

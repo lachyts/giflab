@@ -109,7 +109,7 @@ The framework creates a timestamped results directory:
 
 ```
 data/experimental/results/YYYYMMDD_HHMMSS/
-├── experiment_results.csv          # Raw results data
+├── results.csv          # Raw results data
 ├── analysis_report.json            # Comprehensive analysis
 └── visualizations/                 # Charts and graphs
     ├── strategy_comparison.png
@@ -137,7 +137,7 @@ You can also analyze results programmatically:
 from giflab.analysis import ExperimentalAnalyzer
 
 # Load results
-analyzer = ExperimentalAnalyzer(Path("data/experimental/results/20240101_120000/experiment_results.csv"))
+analyzer = ExperimentalAnalyzer(Path("data/experimental/results/20240101_120000/results.csv"))
 
 # Compare strategies
 comparisons = analyzer.compare_strategies()

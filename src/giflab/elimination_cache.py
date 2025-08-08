@@ -106,9 +106,45 @@ class PipelineResultsCache:
         """Generate a unique cache key for a pipeline test combination."""
         import hashlib
         
-        # Create a deterministic key from all parameters
-        key_data = f"{pipeline_id}|{gif_name}|{params['colors']}|{params['lossy']}|{params.get('frame_ratio', 1.0)}|{self.git_commit}"
+        # Include PNG optimization potential in cache key to differentiate connection methods
+        png_potential = self._determine_png_optimization_potential(pipeline_id)
+        
+        # Create a deterministic key from all parameters including PNG optimization
+        key_data = f"{pipeline_id}|{gif_name}|{params['colors']}|{params['lossy']}|{params.get('frame_ratio', 1.0)}|{png_potential}|{self.git_commit}"
         return hashlib.sha256(key_data.encode()).hexdigest()
+    
+    def _determine_png_optimization_potential(self, pipeline_id: str) -> str:
+        """Determine if pipeline has potential for PNG sequence optimization.
+        
+        This checks the pipeline structure to see if:
+        1. The final step supports PNG input (animately-advanced, gifski)  
+        2. Previous steps support PNG export (imagemagick, ffmpeg, animately tools)
+        
+        Returns:
+            'png_capable' if PNG optimization is possible, 'gif_only' otherwise
+        """
+        # Parse pipeline tools from pipeline_id
+        parts = pipeline_id.split('__')
+        if len(parts) < 2:
+            return 'gif_only'
+        
+        # Check if final step supports PNG input
+        final_step = parts[-1].lower()
+        supports_png_input = 'animately-advanced-lossy' in final_step or 'gifski' in final_step
+        
+        if not supports_png_input:
+            return 'gif_only'
+        
+        # Check if any preceding step can export PNG sequences
+        for part in parts[:-1]:  # All steps except final
+            part_lower = part.lower()
+            can_export_png = ('imagemagick' in part_lower or 
+                            'ffmpeg' in part_lower or 
+                            'animately' in part_lower)
+            if can_export_png:
+                return 'png_capable'
+        
+        return 'gif_only'
     
     def get_cached_result(self, pipeline_id: str, gif_name: str, params: dict) -> Optional[dict]:
         """Retrieve cached result if it exists and is valid.
@@ -284,7 +320,7 @@ class PipelineResultsCache:
             result: Test result dict to cache
         """
         self.queue_result(pipeline_id, gif_name, params, result)
-        self.flush_batch()  # Auto-flush when batch is ready
+        self.flush_batch(force=True)  # Force flush for immediate storage (legacy behavior)
     
     def clear_cache(self):
         """Clear all cached results and failures."""

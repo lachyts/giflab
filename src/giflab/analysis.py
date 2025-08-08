@@ -513,7 +513,7 @@ class ExperimentalAnalyzer:
         return recommendations
 
 
-def analyze_experiment_results(results_csv: Path, output_dir: Path | None = None) -> dict[str, Any]:
+def analyze_results(results_csv: Path, output_dir: Path | None = None) -> dict[str, Any]:
     """Analyze experimental results and generate comprehensive report.
 
     Args:

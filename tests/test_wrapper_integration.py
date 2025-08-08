@@ -695,7 +695,7 @@ class TestDitheringComparison:
         scale_expectations = [
             (FFmpegColorReducerBayerScale0, "elimination candidate", "poor quality"),
             (FFmpegColorReducerBayerScale1, "tier 2", "higher quality"),
-            (FFmpegColorReducerBayerScale2, "tier 2", "better quality, larger files"),
+            (FFmpegColorReducerBayerScale2, "tier 2", "medium pattern from research"),
             (FFmpegColorReducerBayerScale3, "tier 2", "good balance"),
             (FFmpegColorReducerBayerScale4, "tier 1", "best compression"),
             (FFmpegColorReducerBayerScale5, "tier 1", "maximum compression"),

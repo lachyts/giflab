@@ -1,10 +1,13 @@
-# Data directory - exclude everything except CSV
-data/*
+# Data directory - exclude all large binary files and results
+data/**/*.gif
+data/**/results/
+data/tmp/**/*
+
+# Keep only essential data structure
 !data/csv/
 !data/csv/*
-
-# Keep .gitignore files if they exist in data subdirectories
 !data/*/.gitignore
+!data/*/README.md
 
 # Python
 __pycache__/
@@ -83,9 +86,8 @@ Thumbs.db
 # Logs
 logs/*.log
 
-# Test results and experimental analysis outputs
-elimination_results/
-experiment_results/
+# Results and experimental analysis outputs
+results/
 test_debug/
 test_fixes/
 test_enhanced/
@@ -117,6 +119,7 @@ debug_*.gif
 *.log
 temp_*
 
+
 # Performance monitoring history (CI artifacts handle persistence)
 test-performance-history.json
 
@@ -127,14 +130,20 @@ tests/fixtures/*.gif
 pipeline_results_cache.db
 **/pipeline_results_cache.db
 
-# Test workspace (keep structure, ignore temporary content and GIF files)
+# Test workspace - comprehensive exclusions
+test-workspace/**/*.gif
+test-workspace/**/*.csv
+test-workspace/**/*.json
+test-workspace/**/*.db
+test-workspace/**/latest
+test-workspace/**/run_*/
 test-workspace/temp/
 test-workspace/manual/*/
 test-workspace/debug/*/
-test-workspace/samples/*.gif
 !test-workspace/manual/.gitkeep
 !test-workspace/debug/.gitkeep
 !test-workspace/temp/.gitkeep
+!test-workspace/README.md
 
 # Root directory testing pollution (should not exist, but just in case)
 debug_*
@@ -155,3 +164,15 @@ pipeline_*.gif
 *png_sequence*
 *png_from_*
 *png_fix*
+
+# Archives and documentation
+docs/archive/
+.claude/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Additional experimental outputs (legacy)
+elimination_results

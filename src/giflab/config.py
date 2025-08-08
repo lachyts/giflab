@@ -61,10 +61,36 @@ class MetricsConfig:
     POSITIONAL_METRICS: list[str] = None  # Will be set in __post_init__
 
     # Composite quality weights (must sum to 1.0)
+    # Legacy 4-metric weights (for backward compatibility)
     SSIM_WEIGHT: float = 0.30
     MS_SSIM_WEIGHT: float = 0.35
     PSNR_WEIGHT: float = 0.25
     TEMPORAL_WEIGHT: float = 0.10
+    
+    # Enhanced 11-metric composite quality weights (comprehensive approach)
+    # Core structural similarity metrics (40% total)
+    ENHANCED_SSIM_WEIGHT: float = 0.18
+    ENHANCED_MS_SSIM_WEIGHT: float = 0.22
+    
+    # Signal quality metrics (25% total)
+    ENHANCED_PSNR_WEIGHT: float = 0.15
+    ENHANCED_MSE_WEIGHT: float = 0.10
+    
+    # Advanced structural metrics (20% total)
+    ENHANCED_FSIM_WEIGHT: float = 0.08
+    ENHANCED_EDGE_WEIGHT: float = 0.07
+    ENHANCED_GMSD_WEIGHT: float = 0.05
+    
+    # Perceptual quality metrics (10% total)
+    ENHANCED_CHIST_WEIGHT: float = 0.04
+    ENHANCED_SHARPNESS_WEIGHT: float = 0.03
+    ENHANCED_TEXTURE_WEIGHT: float = 0.03
+    
+    # Temporal consistency (5% total)
+    ENHANCED_TEMPORAL_WEIGHT: float = 0.05
+    
+    # Enable enhanced composite quality calculation
+    USE_ENHANCED_COMPOSITE_QUALITY: bool = True
 
     # PSNR normalisation upper bound (dB) – values ≥ this map to 1.0
     PSNR_MAX_DB: float = 50.0
@@ -74,17 +100,34 @@ class MetricsConfig:
     EDGE_CANNY_THRESHOLD2: int = 150
 
     def __post_init__(self) -> None:
-        # Validate weights sum to 1.0 with proper floating point tolerance
-        total_weight = (self.SSIM_WEIGHT + self.MS_SSIM_WEIGHT +
+        # Validate legacy weights sum to 1.0 with proper floating point tolerance
+        legacy_total = (self.SSIM_WEIGHT + self.MS_SSIM_WEIGHT +
                        self.PSNR_WEIGHT + self.TEMPORAL_WEIGHT)
         tolerance = 1e-6  # More restrictive tolerance for configuration validation
-        if abs(total_weight - 1.0) > tolerance:
-            raise ValueError(f"Composite quality weights must sum to 1.0 (±{tolerance}), got {total_weight:.10f}")
+        if abs(legacy_total - 1.0) > tolerance:
+            raise ValueError(f"Legacy composite quality weights must sum to 1.0 (±{tolerance}), got {legacy_total:.10f}")
 
-        # Validate individual weights are non-negative
-        weights = [self.SSIM_WEIGHT, self.MS_SSIM_WEIGHT, self.PSNR_WEIGHT, self.TEMPORAL_WEIGHT]
-        if any(w < 0 for w in weights):
-            raise ValueError(f"All weights must be non-negative, got {weights}")
+        # Validate enhanced weights sum to 1.0
+        enhanced_total = (self.ENHANCED_SSIM_WEIGHT + self.ENHANCED_MS_SSIM_WEIGHT +
+                         self.ENHANCED_PSNR_WEIGHT + self.ENHANCED_MSE_WEIGHT +
+                         self.ENHANCED_FSIM_WEIGHT + self.ENHANCED_EDGE_WEIGHT +
+                         self.ENHANCED_GMSD_WEIGHT + self.ENHANCED_CHIST_WEIGHT +
+                         self.ENHANCED_SHARPNESS_WEIGHT + self.ENHANCED_TEXTURE_WEIGHT +
+                         self.ENHANCED_TEMPORAL_WEIGHT)
+        if abs(enhanced_total - 1.0) > tolerance:
+            raise ValueError(f"Enhanced composite quality weights must sum to 1.0 (±{tolerance}), got {enhanced_total:.10f}")
+
+        # Validate all weights are non-negative
+        legacy_weights = [self.SSIM_WEIGHT, self.MS_SSIM_WEIGHT, self.PSNR_WEIGHT, self.TEMPORAL_WEIGHT]
+        enhanced_weights = [self.ENHANCED_SSIM_WEIGHT, self.ENHANCED_MS_SSIM_WEIGHT,
+                          self.ENHANCED_PSNR_WEIGHT, self.ENHANCED_MSE_WEIGHT,
+                          self.ENHANCED_FSIM_WEIGHT, self.ENHANCED_EDGE_WEIGHT,
+                          self.ENHANCED_GMSD_WEIGHT, self.ENHANCED_CHIST_WEIGHT,
+                          self.ENHANCED_SHARPNESS_WEIGHT, self.ENHANCED_TEXTURE_WEIGHT,
+                          self.ENHANCED_TEMPORAL_WEIGHT]
+        all_weights = legacy_weights + enhanced_weights
+        if any(w < 0 for w in all_weights):
+            raise ValueError(f"All weights must be non-negative, got negatives in {all_weights}")
 
         # Note: Frame alignment is always content-based (most robust approach)
 

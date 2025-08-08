@@ -54,11 +54,21 @@ All scope documents must be organized into clearly defined phases with trackable
 **Progress:** X% Complete
 **Current Focus:** Brief description of current work
 
-#### Subtask: Subtask Name ✅ COMPLETE
+#### Subtask N.1: Subtask Name ✅ COMPLETE
 - [x] Completed task
 - [ ] Pending task
 - [x] Another completed task
+
+#### Subtask N.2: Another Subtask Name ⏳ PLANNED
+- [ ] Pending task
+- [ ] Another pending task
 ```
+
+#### Subtask Numbering Convention
+- Use hierarchical numbering: `Phase.Subtask` (e.g., 1.1, 1.2, 2.1, 2.2, etc.)
+- Phase numbers correspond to the main phase number
+- Subtask numbers increment sequentially within each phase
+- This enables precise referencing and progress tracking
 
 ### Status Legend
 
@@ -181,19 +191,24 @@ When creating new scope documents:
 ### When You Complete a Subtask:
 1. Update the checkbox: `- [x] Completed task`
 2. Adjust the phase's **Progress:** percentage
-3. Update **Current Focus:** to reflect next priority
+3. Update **Current Focus:** to reflect next priority (e.g., "Moving to Subtask 1.3")
 4. If the phase hits 100%, change its status icon to ✅ COMPLETE
 5. Add completion date: `**Completed:** 2025-01-15`
 
 ### When You Start a New Phase:
 1. Change status from ⏳ PLANNED to 🔄 IN PROGRESS
 2. Set initial **Progress:** percentage (typically 0-10%)
-3. Set **Current Focus:** to first major subtask
+3. Set **Current Focus:** to first major subtask (e.g., "Working on Subtask 2.1")
 4. Mark first subtask as in progress if applicable
+
+### Referencing Subtasks:
+- Use the numbered format when discussing specific tasks: "Subtask 3.2 is blocked"  
+- This enables precise communication about progress and dependencies
+- Claude Code can efficiently update specific subtasks using these references
 
 ## Examples
 
-See `modular-experiment-presets.md` in this directory for a comprehensive example of a large-scale feature scope document following these standards.
+See the modular-experiment-presets.md file in this directory for a comprehensive example of a large-scale feature scope document following these standards (when available).
 
 ---
 

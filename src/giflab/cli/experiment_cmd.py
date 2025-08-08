@@ -11,13 +11,138 @@ from .utils import (
 )
 
 
+def create_custom_preset_from_cli(variable_slots, lock_slots, slot_params_list):
+    """Create a custom experiment preset from CLI arguments.
+    
+    Args:
+        variable_slots: Tuple of variable slot specifications
+        lock_slots: Tuple of lock slot specifications
+        slot_params_list: Tuple of parameter specifications
+        
+    Returns:
+        ExperimentPreset object created from CLI arguments
+        
+    Raises:
+        ValueError: If slot specifications are invalid
+    """
+    from ast import literal_eval
+    
+    # Import preset classes
+    from giflab.experimental.targeted_presets import ExperimentPreset, SlotConfiguration
+    
+    # Initialize slot configurations with defaults (all locked to common implementations)
+    slots = {
+        'frame': SlotConfiguration(type="locked", implementation="animately-frame", parameters={}),
+        'color': SlotConfiguration(type="locked", implementation="ffmpeg-color", parameters={"colors": 32}),
+        'lossy': SlotConfiguration(type="locked", implementation="animately-advanced-lossy", parameters={"level": 40})
+    }
+    
+    # Parse variable slot specifications
+    for slot_spec in variable_slots:
+        if '=' not in slot_spec:
+            raise ValueError(f"Invalid variable slot format: {slot_spec}. Expected 'slot=scope'")
+        
+        slot_name, scope_str = slot_spec.split('=', 1)
+        slot_name = slot_name.strip()
+        
+        if slot_name not in ['frame', 'color', 'lossy']:
+            raise ValueError(f"Invalid slot name: {slot_name}. Must be 'frame', 'color', or 'lossy'")
+        
+        # Parse scope
+        if scope_str.strip() == '*':
+            scope = ['*']
+        else:
+            scope = [tool.strip() for tool in scope_str.split(',')]
+        
+        slots[slot_name] = SlotConfiguration(type="variable", scope=scope, parameters={})
+    
+    # Parse lock slot specifications
+    for slot_spec in lock_slots:
+        if '=' not in slot_spec:
+            raise ValueError(f"Invalid lock slot format: {slot_spec}. Expected 'slot=implementation'")
+        
+        slot_name, implementation = slot_spec.split('=', 1)
+        slot_name = slot_name.strip()
+        implementation = implementation.strip()
+        
+        if slot_name not in ['frame', 'color', 'lossy']:
+            raise ValueError(f"Invalid slot name: {slot_name}. Must be 'frame', 'color', or 'lossy'")
+        
+        slots[slot_name] = SlotConfiguration(type="locked", implementation=implementation, parameters={})
+    
+    # Parse slot parameters
+    for param_spec in slot_params_list:
+        if '=' not in param_spec:
+            raise ValueError(f"Invalid slot parameter format: {param_spec}. Expected 'slot=param:value'")
+        
+        slot_name, param_str = param_spec.split('=', 1)
+        slot_name = slot_name.strip()
+        
+        if slot_name not in ['frame', 'color', 'lossy']:
+            raise ValueError(f"Invalid slot name: {slot_name}. Must be 'frame', 'color', or 'lossy'")
+        
+        if ':' not in param_str:
+            raise ValueError(f"Invalid parameter format: {param_str}. Expected 'param:value'")
+        
+        param_name, value_str = param_str.split(':', 1)
+        param_name = param_name.strip()
+        value_str = value_str.strip()
+        
+        # Parse parameter value
+        try:
+            if value_str.startswith('[') and value_str.endswith(']'):
+                # List parameter
+                param_value = literal_eval(value_str)
+            elif value_str.startswith('{') and value_str.endswith('}'):
+                # Dict parameter
+                param_value = literal_eval(value_str)
+            elif value_str.lower() in ['true', 'false']:
+                # Boolean parameter
+                param_value = value_str.lower() == 'true'
+            elif '.' in value_str:
+                # Float parameter
+                param_value = float(value_str)
+            else:
+                # Try int, fallback to string
+                try:
+                    param_value = int(value_str)
+                except ValueError:
+                    param_value = value_str
+        except (ValueError, SyntaxError) as e:
+            raise ValueError(f"Invalid parameter value '{value_str}': {e}")
+        
+        # Add parameter to slot configuration
+        slots[slot_name].parameters[param_name] = param_value
+    
+    # Validate that at least one slot is variable
+    variable_count = sum(1 for slot in slots.values() if slot.type == "variable")
+    if variable_count == 0:
+        raise ValueError("At least one slot must be variable. Use --variable-slot to specify variable slots.")
+    
+    # Create preset name from slot configurations
+    variable_slots_names = [name for name, slot in slots.items() if slot.type == "variable"]
+    preset_name = f"Custom {'+'.join(variable_slots_names).title()} Study"
+    preset_description = f"Custom experiment varying {', '.join(variable_slots_names)} slots"
+    
+    # Create and return the preset
+    return ExperimentPreset(
+        name=preset_name,
+        description=preset_description,
+        frame_slot=slots['frame'],
+        color_slot=slots['color'],
+        lossy_slot=slots['lossy'],
+        tags=['custom', 'cli-generated'],
+        author='CLI User'
+    )
+
+
 @click.command()
 @click.option(
     "--output-dir",
     "-o",
     type=click.Path(path_type=Path),
-    default=Path("experiment_results"),
-    help="Base directory for timestamped experiment results (default: experiment_results)",
+    default=Path("results/experiments"),
+    help="Base directory for timestamped experiment results (default: results/experiments)",
 )
 @click.option(
     "--sampling",
@@ -27,7 +152,7 @@ from .utils import (
 )
 @click.option(
     "--threshold",
-    "-t", 
+    "-t",
     type=float,
     default=0.3,
     help="Quality threshold for pipeline elimination (default: 0.3, lower = stricter)",
@@ -63,6 +188,33 @@ from .utils import (
     is_flag=True,
     help="Clear the pipeline results cache before running (forces fresh start)",
 )
+@click.option(
+    "--preset",
+    "-p",
+    type=str,
+    default=None,
+    help="Use targeted experiment preset (e.g., 'frame-focus', 'color-optimization'). Use 'list' to see available presets.",
+)
+@click.option(
+    "--list-presets",
+    is_flag=True,
+    help="List all available experiment presets and exit",
+)
+@click.option(
+    "--variable-slot",
+    multiple=True,
+    help="Define variable slot: 'frame=*' or 'color=ffmpeg-color,gifsicle-color'. Can be used multiple times.",
+)
+@click.option(
+    "--lock-slot",
+    multiple=True,
+    help="Lock slot to specific implementation: 'frame=animately-frame' or 'lossy=animately-advanced-lossy'. Can be used multiple times.",
+)
+@click.option(
+    "--slot-params",
+    multiple=True,
+    help="Specify slot parameters: 'frame=ratios:[1.0,0.8,0.5]' or 'color=colors:[64,32]'. Can be used multiple times.",
+)
 def experiment(
     output_dir: Path,
     sampling: str,
@@ -73,6 +225,11 @@ def experiment(
     use_gpu: bool,
     no_cache: bool,
     clear_cache: bool,
+    preset: str,
+    list_presets: bool,
+    variable_slot: tuple,
+    lock_slot: tuple,
+    slot_params: tuple,
 ):
     """Run comprehensive experimental pipeline testing with intelligent sampling.
 
@@ -84,46 +241,94 @@ def experiment(
     Smart caching avoids re-running identical pipeline tests.
     """
     try:
-        # Import from experimental.py file directly (not the directory)
-        import sys
-        from pathlib import Path
-        _parent_dir = Path(__file__).parent.parent
-        sys.path.insert(0, str(_parent_dir))
-        try:
-            import experimental
-            ExperimentalRunner = experimental.ExperimentalRunner
-        finally:
-            sys.path.remove(str(_parent_dir))
-        
+        # Import from experimental module
         from giflab.dynamic_pipeline import generate_all_pipelines
+        from giflab.experimental import ExperimentalRunner
+        from giflab.experimental.sampling import SAMPLING_STRATEGIES
 
         # Create pipeline runner with cache settings
         use_cache = not no_cache  # Invert the no_cache flag
         runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+        
+        # Handle preset listing request
+        if list_presets:
+            try:
+                presets = runner.list_available_presets()
+                click.echo("🎯 Available Experiment Presets:")
+                click.echo()
+                for preset_id, description in presets.items():
+                    click.echo(f"  {preset_id}")
+                    click.echo(f"    {description}")
+                    click.echo()
+                return
+            except Exception as e:
+                click.echo(f"❌ Error listing presets: {e}")
+                return
         
         # Clear cache if requested
         if clear_cache and runner.cache:
             click.echo("🗑️ Clearing pipeline results cache...")
             runner.cache.clear_cache()
         
-        # Get pipeline count for estimation
-        all_pipelines = generate_all_pipelines()
+        # Determine pipeline generation approach
+        has_custom_slots = bool(variable_slot or lock_slot or slot_params)
         
-        # Apply intelligent sampling strategy
-        if sampling != 'full':
-            test_pipelines = runner.select_pipelines_intelligently(all_pipelines, sampling)
-            strategy_info = runner.SAMPLING_STRATEGIES[sampling]
-            click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
-            click.echo(f"📋 {strategy_info.description}")
-        elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
-            test_pipelines = all_pipelines[:max_pipelines]
-            click.echo(f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+        if preset and has_custom_slots:
+            click.echo("❌ Error: Cannot use both --preset and custom slot options (--variable-slot, --lock-slot, --slot-params)")
+            click.echo("💡 Use either --preset for predefined configurations or slot options for custom experiments")
+            return
+        elif preset:
+            # Predefined preset approach
+            try:
+                test_pipelines = runner.generate_targeted_pipelines(preset)
+                click.echo(f"🎯 Using targeted preset: {preset}")
+                click.echo(f"🔬 Generated {len(test_pipelines)} targeted pipelines")
+                testing_approach = "targeted_preset"
+            except Exception as e:
+                click.echo(f"❌ Error with preset '{preset}': {e}")
+                click.echo("💡 Use --list-presets to see available presets")
+                return
+        elif has_custom_slots:
+            # Custom preset approach
+            try:
+                custom_preset = create_custom_preset_from_cli(variable_slot, lock_slot, slot_params)
+                click.echo(f"🔧 Creating custom preset: {custom_preset.name}")
+                click.echo(f"📋 {custom_preset.description}")
+                
+                # Generate pipelines using custom preset
+                from giflab.experimental.targeted_generator import (
+                    TargetedPipelineGenerator,
+                )
+                generator = TargetedPipelineGenerator()
+                test_pipelines = generator.generate_targeted_pipelines(custom_preset)
+                
+                click.echo(f"🔬 Generated {len(test_pipelines)} custom targeted pipelines")
+                testing_approach = "custom_targeted"
+            except Exception as e:
+                click.echo(f"❌ Error creating custom preset: {e}")
+                click.echo("💡 Check your slot configuration syntax")
+                return
         else:
-            test_pipelines = all_pipelines
-            click.echo("🔬 Full comprehensive testing: Using all available pipelines")
+            # Traditional approach with sampling
+            all_pipelines = generate_all_pipelines()
+            
+            if sampling != 'full':
+                test_pipelines = runner.select_pipelines_intelligently(all_pipelines, sampling)
+                strategy_info = runner.SAMPLING_STRATEGIES[sampling]
+                click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
+                click.echo(f"📋 {strategy_info.description}")
+                testing_approach = f"sampling_{sampling}"
+            elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
+                test_pipelines = all_pipelines[:max_pipelines]
+                click.echo(f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+                testing_approach = "limited_testing"
+            else:
+                test_pipelines = all_pipelines
+                click.echo("🔬 Full comprehensive testing: Using all available pipelines")
+                testing_approach = "full_comprehensive"
         
         # Calculate total job estimates
-        if sampling == 'targeted':
+        if sampling == 'targeted' or (preset and 'targeted' in preset.lower()) or has_custom_slots:
             synthetic_gifs = runner.get_targeted_synthetic_gifs()
         else:
             synthetic_gifs = runner.generate_synthetic_gifs()
@@ -136,6 +341,12 @@ def experiment(
         click.echo(f"📊 Total jobs: {total_jobs:,}")
         click.echo(f"⏱️  Estimated time: {estimated_time}")
         click.echo(f"🔄 Resume enabled: {resume}")
+        if preset:
+            click.echo(f"🎯 Testing approach: Targeted preset ({preset})")
+        elif has_custom_slots:
+            click.echo("🔧 Testing approach: Custom targeted configuration")
+        else:
+            click.echo(f"🧠 Testing approach: {testing_approach.replace('_', ' ').title()}")
         
         # Display GPU status
         click.echo(check_gpu_availability(use_gpu))
@@ -147,15 +358,25 @@ def experiment(
         click.echo("\n🚀 Running comprehensive experimental pipeline testing...")
         
         # Run the experimental analysis
-        use_targeted_gifs = (sampling == 'targeted')
-        elimination_result = runner.run_experimental_analysis(
-                test_pipelines=test_pipelines,
-                elimination_threshold=threshold,
+        use_targeted_gifs = (sampling == 'targeted' or (preset and 'targeted' in preset.lower()) or has_custom_slots)
+        
+        if preset:
+            # Use targeted experiment method for presets (includes parameter locking)
+            elimination_result = runner.run_targeted_experiment(
+                preset_id=preset,
+                quality_threshold=threshold,
                 use_targeted_gifs=use_targeted_gifs
-        )
+            )
+        else:
+            # Use traditional experimental analysis for non-preset experiments
+            elimination_result = runner.run_experimental_analysis(
+                test_pipelines=test_pipelines,
+                quality_threshold=threshold,
+                use_targeted_gifs=use_targeted_gifs
+            )
 
         # Display results
-        click.echo(f"\n📊 Experimental Results Summary:")
+        click.echo("\n📊 Experimental Results Summary:")
         click.echo(f"   📉 Eliminated pipelines: {len(elimination_result.eliminated_pipelines)}")
         click.echo(f"   ✅ Retained pipelines: {len(elimination_result.retained_pipelines)}")
         total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
@@ -165,11 +386,11 @@ def experiment(
         
         # Show top performers
         if elimination_result.retained_pipelines:
-            click.echo(f"\n🏆 Top performing pipelines:")
+            click.echo("\n🏆 Top performing pipelines:")
             for i, pipeline in enumerate(list(elimination_result.retained_pipelines)[:5], 1):
                 click.echo(f"   {i}. {pipeline}")
         
-        click.echo(f"\n✅ Experimental analysis complete!")
+        click.echo("\n✅ Experimental analysis complete!")
         click.echo(f"📁 Results saved to: {output_dir}")
         click.echo(f"💡 Use 'giflab select-pipelines {output_dir}/latest/results.csv --top 3' to get production configs")
 

@@ -960,14 +960,14 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
         result['temporal_consistency_post'] = float(temporal_post)
         result['temporal_consistency_delta'] = float(temporal_delta)
 
-        # Calculate composite quality using traditional metrics only
-        composite_quality = (
-            config.SSIM_WEIGHT * result['ssim'] +
-            config.MS_SSIM_WEIGHT * result['ms_ssim'] +
-            config.PSNR_WEIGHT * result['psnr'] +
-            config.TEMPORAL_WEIGHT * result['temporal_consistency']
-        )
-        result['composite_quality'] = float(composite_quality)
+        # Calculate composite quality using enhanced metrics system
+        from .enhanced_metrics import process_metrics_with_enhanced_quality
+        
+        # Add compression ratio for efficiency calculation
+        result['compression_ratio'] = original_path.stat().st_size / compressed_path.stat().st_size if compressed_path.stat().st_size > 0 else 1.0
+        
+        # Process with enhanced quality system (adds enhanced_composite_quality and efficiency)
+        result = process_metrics_with_enhanced_quality(result, config)
 
         # Add system metrics
         result['kilobytes'] = float(calculate_file_size_kb(compressed_path))

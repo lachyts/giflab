@@ -105,6 +105,19 @@ If performance alerts trigger:
    - Review `tests/conftest.py` for proper mock application
    - Ensure external engine mocking is working correctly
 
+## Analysis Scripts
+
+### `analysis/`
+
+Contains comprehensive analysis scripts for processing experimental results:
+
+- **Enhanced Metrics Analysis**: Complete analysis suite for 11-metric enhanced quality system
+- **Frame Reduction Studies**: Deep dive analysis of frame reduction algorithm behavior  
+- **Efficiency Insights**: Focused analysis of efficiency scoring and performance
+- **Dataset Breakdowns**: Comprehensive dataset analysis with enhanced metrics
+
+See [analysis/README.md](analysis/README.md) for detailed usage instructions.
+
 ## Experimental Scripts
 
 ### `experimental/`
