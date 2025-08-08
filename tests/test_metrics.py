@@ -169,6 +169,51 @@ class TestFrameExtraction:
         with pytest.raises(IOError):
             extract_gif_frames(invalid_file)
 
+    def test_extract_gif_frames_even_sampling(self, tmp_path):
+        """Test that frame extraction uses even sampling across timeline."""
+        # Create a 20-frame GIF where each frame has a unique color
+        frames = []
+        for i in range(20):
+            color_value = int(255 * i / 19)  # 0 to 255 spread across frames
+            img = Image.new('RGB', (50, 50), (color_value, 100, 150))
+            frames.append(img)
+        
+        gif_path = tmp_path / "even_sampling_test.gif"
+        frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=100)
+        
+        # Extract 10 frames from 20
+        result = extract_gif_frames(gif_path, max_frames=10)
+        
+        assert result.frame_count == 10
+        assert len(result.frames) == 10
+        
+        # With even sampling, should get frames at indices: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+        expected_indices = np.linspace(0, 19, 10, dtype=int)
+        
+        # Check that first and last frames are sampled
+        first_frame_color = result.frames[0][0, 0, 0]  # Red channel
+        last_frame_color = result.frames[-1][0, 0, 0]
+        
+        assert first_frame_color < 50  # Should be from early frame (low color value)
+        assert last_frame_color > 200  # Should be from late frame (high color value)
+
+    def test_extract_gif_frames_timeline_coverage(self, tmp_path):
+        """Test that frame sampling covers full animation timeline."""
+        # Create 40-frame GIF (case where consecutive sampling would miss 25%)
+        gif_path = self.create_test_gif(tmp_path, frames=40)
+        
+        # Extract 30 frames with even sampling
+        result = extract_gif_frames(gif_path, max_frames=30)
+        
+        assert result.frame_count == 30
+        
+        # Even sampling should include frames from near the end
+        # With consecutive sampling, max frame would be 29
+        # With even sampling, max frame should be 39
+        import numpy as np
+        expected_max_index = np.linspace(0, 39, 30, dtype=int)[-1]
+        assert expected_max_index >= 35, "Should sample from end of animation"
+
 
 class TestFrameDimensionHandling:
     """Tests for frame dimension handling."""

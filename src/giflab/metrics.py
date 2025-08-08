@@ -76,7 +76,16 @@ def extract_gif_frames(gif_path: Path, max_frames: int | None = None) -> FrameEx
             frames = []
             total_duration = 0
 
-            for i in range(frames_to_extract):
+            # Use even frame sampling across entire animation for better quality assessment
+            if frames_to_extract >= total_frames:
+                # Use all frames if we're not hitting the limit
+                frame_indices = range(total_frames)
+            else:
+                # Sample evenly across the entire animation to capture quality issues
+                # that may appear later in the animation
+                frame_indices = np.linspace(0, total_frames - 1, frames_to_extract, dtype=int)
+
+            for i in frame_indices:
                 img.seek(i)
                 frame = np.array(img.convert('RGB'))
                 frames.append(frame)

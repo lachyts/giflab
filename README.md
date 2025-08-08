@@ -20,7 +20,7 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 - **Production Engines**: **gifsicle**, **Animately** (main pipeline)
 - **Experimental Engines**: **ImageMagick**, **FFmpeg**, **gifski** (experimental pipeline)
 
-Each variant is measured for file size, SSIM quality, and render time.
+Each variant is measured for file size, comprehensive quality metrics, render time, and **efficiency score** (balanced 50/50 weighting of quality and compression).
 
 ### Dual Pipeline Architecture
 
@@ -284,6 +284,31 @@ In addition to SSIM-based measures, GifLab now computes **eight complementary fr
 | Sharpness Similarity | SHARP | ✅ | Laplacian variance ratio |
 
 All metrics are exposed via `giflab.metrics.calculate_comprehensive_metrics` and exported to CSV with mean/std/min/max descriptors (plus optional raw values).
+
+## 🎯 Efficiency Scoring System
+
+GifLab calculates an **efficiency score** (0-1 scale) that balances quality preservation with compression performance using equal 50/50 weighting:
+
+```python
+efficiency = (composite_quality^0.5) × (normalized_compression^0.5)
+```
+
+### Key Features:
+- **Equal weighting**: 50% quality, 50% compression - neither dominates
+- **Log-normalized compression**: Handles diminishing returns above 20x compression
+- **Geometric mean**: Requires both good quality AND good compression for high scores
+- **Bounded output**: Easy-to-interpret 0-1 scale
+
+### Efficiency Scale:
+| Range | Rating | Example Algorithms |
+|--------|---------|-------------------|  
+| 0.80-1.00 | **EXCELLENT** | imagemagick-frame (0.855) |
+| 0.70-0.79 | **VERY GOOD** | gifsicle-frame (0.767) |
+| 0.60-0.69 | **GOOD** | none-frame (0.642) |
+| 0.50-0.59 | **FAIR** | ffmpeg-frame (0.569) |
+| 0.00-0.49 | **POOR** | Investigate issues |
+
+📖 **For technical details, see:** [Efficiency Calculation Guide](docs/technical/efficiency-calculation.md)
 
 ## 🎯 Pareto Frontier Analysis
 

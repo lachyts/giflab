@@ -384,6 +384,7 @@ Each row in your results CSV represents one compressed variant of one GIF:
 | `color_keep_count` | Number of colors in palette | `128` |
 | `kilobytes` | Size of compressed file | `245.3` |
 | `ssim` | Quality score (0-1, higher=better) | `0.936` |
+| `efficiency` | Overall efficiency score (0-1, higher=better) | `0.785` |
 | `render_ms` | Time to compress (milliseconds) | `1250` |
 
 ### Quality Metrics Explained
@@ -392,6 +393,15 @@ Each row in your results CSV represents one compressed variant of one GIF:
 - Measures how similar the compressed GIF looks to the original
 - Range: 0.0 to 1.0 (1.0 = identical, 0.0 = completely different)
 - Good values: >0.8 (>0.9 for high quality needs)
+
+**Efficiency Score** 🎯
+- **Single balanced metric** combining quality and compression (50/50 weighting)
+- Range: 0.0 to 1.0 (higher = better balance of quality and file size reduction)
+- **0.8-1.0**: Excellent (production-ready)
+- **0.7-0.8**: Very good (great for most uses) 
+- **0.6-0.7**: Good (acceptable balance)
+- **0.5-0.6**: Fair (room for improvement)
+- **<0.5**: Poor (investigate issues)
 
 **Compression Ratio**
 - Calculate as: `orig_kilobytes / kilobytes`
@@ -419,13 +429,26 @@ Each row in your results CSV represents one compressed variant of one GIF:
 
 ### Finding the Best Settings
 
+**For best overall efficiency (recommended):**
+```sql
+SELECT * FROM results 
+ORDER BY efficiency DESC 
+LIMIT 10
+```
+
+**For best efficiency per GIF:**
+```sql
+SELECT * FROM results 
+WHERE efficiency = (SELECT MAX(efficiency) FROM results WHERE gif_sha = 'your_gif_sha')
+```
+
 **For maximum compression:**
 ```sql
 SELECT * FROM results 
 WHERE kilobytes = (SELECT MIN(kilobytes) FROM results WHERE gif_sha = 'your_gif_sha')
 ```
 
-**For best quality/size balance:**
+**For best quality/size balance (manual approach):**
 ```sql
 SELECT * FROM results 
 WHERE ssim > 0.9 

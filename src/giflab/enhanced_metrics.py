@@ -196,24 +196,43 @@ def calculate_efficiency_metric(
     compression_ratio: float, 
     composite_quality: float
 ) -> float:
-    """Calculate the user-requested efficiency metric.
+    """Calculate balanced efficiency metric with 50% quality, 50% compression weighting.
     
-    Efficiency = compression_ratio × composite_quality
-    
-    This balances compression performance with quality retention.
-    Higher values indicate better overall efficiency.
+    This approach provides a more balanced assessment of GIF compression efficiency by:
+    - Log-normalizing compression ratio to handle diminishing returns above 20x
+    - Using geometric mean with balanced weights (50% quality, 50% compression)
+    - Preventing extreme compression ratios from dominating the score
+    - Providing equal weighting between quality preservation and compression efficiency
     
     Args:
         compression_ratio: Compression ratio (original_size / compressed_size)
         composite_quality: Composite quality score (0-1)
         
     Returns:
-        Efficiency score (higher is better)
+        Balanced efficiency score (0-1 range, higher is better)
     """
     if compression_ratio <= 0 or composite_quality < 0:
         return 0.0
     
-    return compression_ratio * composite_quality
+    # Log-normalize compression ratio to 0-1 scale
+    # Cap at 20x as practical maximum (beyond this has diminishing user value)
+    max_practical_compression = 20.0
+    normalized_compression = min(
+        np.log(1 + compression_ratio) / np.log(1 + max_practical_compression),
+        1.0
+    )
+    
+    # Weighted geometric mean: 50% quality, 50% compression
+    quality_weight = 0.5
+    compression_weight = 0.5
+    
+    # Use geometric mean to prevent one-dimensional dominance
+    efficiency = (
+        (composite_quality ** quality_weight) * 
+        (normalized_compression ** compression_weight)
+    )
+    
+    return efficiency
 
 
 def process_metrics_with_enhanced_quality(

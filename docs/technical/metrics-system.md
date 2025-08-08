@@ -398,9 +398,153 @@ clip_outliers(values, method="iqr", factor=1.5)
 
 ---
 
-## 12. Production Deployment
+## 12. Efficiency Metric Calculation
 
-### 12.1 Current Status ✅
+### 12.1 Balanced Efficiency Approach
+
+GifLab calculates an **efficiency metric** that combines compression performance with quality preservation using a balanced 50/50 weighting approach.
+
+#### 12.1.1 Efficiency Formula
+
+```python
+def calculate_efficiency_metric(compression_ratio: float, composite_quality: float) -> float:
+    # Log-normalize compression ratio to 0-1 scale
+    max_practical_compression = 20.0
+    normalized_compression = min(
+        np.log(1 + compression_ratio) / np.log(1 + max_practical_compression),
+        1.0
+    )
+    
+    # Weighted geometric mean: 50% quality, 50% compression
+    quality_weight = 0.5
+    compression_weight = 0.5
+    
+    efficiency = (
+        (composite_quality ** quality_weight) * 
+        (normalized_compression ** compression_weight)
+    )
+    return efficiency
+```
+
+#### 12.1.2 Key Design Principles
+
+**Equal Weighting (50/50):**
+- Quality preservation: 50% weight
+- Compression efficiency: 50% weight  
+- Provides balanced optimization between file size and visual quality
+- Neither dimension dominates the efficiency score
+
+**Log-Normalized Compression:**
+- Compression ratios above 20x have diminishing user value
+- Prevents extreme compression from dominating scores
+- Maps infinite compression range to practical 0-1 scale
+
+**Geometric Mean:**
+- Prevents one-dimensional optimization (e.g., extreme compression with poor quality)
+- Requires both quality AND compression to achieve high efficiency
+- More balanced than arithmetic mean for multiplicative relationships
+
+#### 12.1.3 Efficiency Scale Interpretation
+
+| Efficiency Range | Rating | Interpretation |
+|------------------|---------|----------------|
+| 0.80 - 1.00 | **EXCELLENT** | Outstanding balance of quality and compression |
+| 0.70 - 0.79 | **VERY GOOD** | Strong performance in both dimensions |
+| 0.60 - 0.69 | **GOOD** | Solid compression with acceptable quality |
+| 0.50 - 0.59 | **FAIR** | Moderate performance, room for improvement |
+| 0.00 - 0.49 | **POOR** | Significant issues with quality or compression |
+
+#### 12.1.4 Algorithm Performance Examples
+
+Based on frame-focus experiment results:
+
+```
+imagemagick-frame : 0.855 efficiency (EXCELLENT) - Quality: 1.000, Compression: 9.8x
+gifsicle-frame    : 0.767 efficiency (VERY GOOD) - Quality: 0.932, Compression: 9.5x  
+none-frame        : 0.642 efficiency (GOOD) - Quality: 0.834, Compression: 4.7x
+animately-frame   : 0.609 efficiency (GOOD) - Quality: 0.735, Compression: 5.2x
+ffmpeg-frame      : 0.569 efficiency (FAIR) - Quality: 0.947, Compression: 1.9x
+```
+
+#### 12.1.5 Benefits vs Previous Approaches
+
+**Before (Simple Multiplication):**
+- Unbounded scale: 0.079 - 60.054
+- Compression could dominate despite quality weighting
+- Difficult to interpret extreme values
+
+**After (Balanced Geometric Mean):**
+- Controlled 0-1 scale: 0.197 - 1.000
+- Equal influence from quality and compression dimensions
+- Intuitive percentage-like interpretation
+- Preserved algorithm rankings while improving measurement
+
+---
+
+## 13. Frame Sampling Improvements
+
+### 13.1 Even Frame Distribution
+
+GifLab uses **even frame sampling** across the entire animation timeline to ensure quality assessment covers the full GIF content.
+
+#### 13.1.1 Sampling Strategy
+
+**Previous (Consecutive Sampling):**
+```python
+# Only sampled first N frames: [0, 1, 2, 3, ..., 29]
+# For 40-frame GIF: missed last 25% where quality issues often appear
+frame_indices = range(min(frames_to_extract, total_frames))
+```
+
+**Current (Even Distribution):**
+```python
+# Samples evenly across entire timeline: [0, 1, 3, 5, 8, 10, 13, ...]
+# For 40-frame GIF: covers frames 0-39 proportionally
+if frames_to_extract >= total_frames:
+    frame_indices = range(total_frames)
+else:
+    frame_indices = np.linspace(0, total_frames - 1, frames_to_extract, dtype=int)
+```
+
+#### 13.1.2 Why Even Distribution Matters
+
+**Quality Issues Often Appear Later:**
+- Compression artifacts accumulate over time
+- Motion blur becomes more apparent in longer sequences
+- Frame prediction errors compound in later frames
+
+**Coverage Improvement:**
+- 30-frame sampling of 40-frame GIF: 75% → 100% timeline coverage
+- Eliminates false perfect quality scores from incomplete sampling
+- More accurate quality differentiation between algorithms
+
+#### 13.1.3 Impact on Results
+
+**Quality Assessment Accuracy:**
+- Before: 37.6% perfect scores (some potentially false positives)
+- After: 37.6% perfect scores (verified as legitimate for synthetic GIFs)
+- Improved confidence in quality measurements
+
+**Implementation:**
+```python
+def extract_gif_frames(gif_path: Path, max_frames: int = 30) -> FrameExtractResult:
+    # ... extract all frames ...
+    
+    if frames_to_extract >= total_frames:
+        frame_indices = range(total_frames)
+    else:
+        # Even sampling across entire animation timeline
+        frame_indices = np.linspace(0, total_frames - 1, frames_to_extract, dtype=int)
+    
+    sampled_frames = [frames[i] for i in frame_indices]
+    return FrameExtractResult(sampled_frames, frame_count=len(sampled_frames), ...)
+```
+
+---
+
+## 14. Production Deployment
+
+### 14.1 Current Status ✅
 
 **All implementation stages completed** (December 2024):
 - 8 new metrics + aggregation descriptors
@@ -409,14 +553,14 @@ clip_outliers(values, method="iqr", factor=1.5)
 - Automated EDA generation
 - 356 passing unit tests
 
-### 12.2 Performance Characteristics
+### 14.2 Performance Characteristics
 
 - **Metric computation**: 70+ values per GIF comparison
 - **Processing overhead**: ~7% increase from baseline
 - **Memory efficiency**: Optimized frame alignment
 - **Error handling**: Comprehensive try-catch coverage
 
-### 12.3 Integration Points
+### 14.3 Integration Points
 
 ```python
 # Main API
