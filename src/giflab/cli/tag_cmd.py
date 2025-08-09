@@ -20,32 +20,32 @@ from .utils import (
 )
 @click.argument(
     "raw_dir",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path)
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(dir_okay=False, path_type=Path),
-    help="Output CSV path (default: auto-timestamped in same directory)"
+    help="Output CSV path (default: auto-timestamped in same directory)",
 )
 @click.option(
     "--workers",
     "-j",
     type=int,
     default=1,
-    help="Number of worker processes (default: 1, parallel tagging not yet implemented)"
+    help="Number of worker processes (default: 1, parallel tagging not yet implemented)",
 )
 @click.option(
     "--validate-only",
     is_flag=True,
-    help="Only validate CSV structure, don't run tagging"
+    help="Only validate CSV structure, don't run tagging",
 )
 def tag(
     csv_file: Path,
     raw_dir: Path,
     output: Path | None,
     workers: int,
-    validate_only: bool
+    validate_only: bool,
 ):
     """Add comprehensive tagging scores to existing compression results.
 
@@ -79,15 +79,21 @@ def tag(
 
             if validation_report["valid"]:
                 click.echo("✅ CSV structure is valid")
-                click.echo(f"   • {validation_report['tagging_columns_present']}/25 tagging columns present")
+                click.echo(
+                    f"   • {validation_report['tagging_columns_present']}/25 tagging columns present"
+                )
             else:
                 click.echo("❌ CSV validation failed")
                 if "error" in validation_report:
                     click.echo(f"   • Error: {validation_report['error']}")
                 else:
-                    click.echo(f"   • Missing {validation_report['tagging_columns_missing']} tagging columns")
-                    if validation_report['missing_columns']:
-                        click.echo(f"   • Missing: {', '.join(validation_report['missing_columns'][:5])}...")
+                    click.echo(
+                        f"   • Missing {validation_report['tagging_columns_missing']} tagging columns"
+                    )
+                    if validation_report["missing_columns"]:
+                        click.echo(
+                            f"   • Missing: {', '.join(validation_report['missing_columns'][:5])}..."
+                        )
             return
 
         if output:
@@ -95,7 +101,9 @@ def tag(
         else:
             click.echo("📄 Output CSV: auto-timestamped in same directory")
 
-        click.echo(f"👥 Workers: {validated_workers} (parallel processing not yet implemented)")
+        click.echo(
+            f"👥 Workers: {validated_workers} (parallel processing not yet implemented)"
+        )
         click.echo("🎯 Will add 25 comprehensive tagging scores")
 
         # Initialize tagging pipeline
@@ -127,7 +135,9 @@ def tag(
 
         if status == "completed":
             click.echo("✅ Comprehensive tagging completed successfully!")
-            click.echo("\n🎯 Added 25 continuous scores for ML-ready compression optimization:")
+            click.echo(
+                "\n🎯 Added 25 continuous scores for ML-ready compression optimization:"
+            )
             click.echo("   • Content classification (CLIP): 6 scores")
             click.echo("   • Quality assessment (Classical CV): 4 scores")
             click.echo("   • Technical characteristics (Classical CV): 5 scores")
@@ -136,7 +146,9 @@ def tag(
             click.echo("⚠️  No compression results found in CSV")
         elif status == "no_original_gifs":
             click.echo("⚠️  No original GIFs found (engine='original')")
-            click.echo("   💡 Tagging requires original records from compression pipeline")
+            click.echo(
+                "   💡 Tagging requires original records from compression pipeline"
+            )
         elif status == "no_successful_tags":
             click.echo("❌ No GIFs could be successfully tagged")
         else:
@@ -146,7 +158,9 @@ def tag(
         handle_keyboard_interrupt("Tagging")
     except ImportError as e:
         click.echo(f"❌ Missing dependencies for tagging: {e}", err=True)
-        click.echo("💡 Run: poetry install (to install torch and open-clip-torch)", err=True)
+        click.echo(
+            "💡 Run: poetry install (to install torch and open-clip-torch)", err=True
+        )
         raise SystemExit(1)
     except Exception as e:
         handle_generic_error("Tagging", e)

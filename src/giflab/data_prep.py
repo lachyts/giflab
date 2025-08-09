@@ -28,6 +28,7 @@ __all__ = [
 # Scaling helpers
 # --------------------------------------------------------------------------- #
 
+
 def _to_array(values: Iterable[float] | np.ndarray) -> np.ndarray:
     """Convert *values* to a 1-D ``np.ndarray`` of type ``float64``."""
     arr = np.asarray(list(values), dtype=np.float64)
@@ -36,7 +37,10 @@ def _to_array(values: Iterable[float] | np.ndarray) -> np.ndarray:
     return arr
 
 
-def minmax_scale(values: Iterable[float] | np.ndarray, feature_range: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
+def minmax_scale(
+    values: Iterable[float] | np.ndarray,
+    feature_range: tuple[float, float] = (0.0, 1.0),
+) -> np.ndarray:
     """Scale *values* to the provided *feature_range* using min-max scaling.
 
     Identical values (zero range) return an array of mid-range constants.
@@ -104,9 +108,11 @@ def normalise_metrics(
 
     return out
 
+
 # --------------------------------------------------------------------------- #
 # Confidence weighting
 # --------------------------------------------------------------------------- #
+
 
 def apply_confidence_weights(
     metrics: Mapping[str, float],
@@ -128,9 +134,11 @@ def apply_confidence_weights(
             out[key] = float(value) * conf
     return out
 
+
 # --------------------------------------------------------------------------- #
 # Outlier clipping
 # --------------------------------------------------------------------------- #
+
 
 def clip_outliers(
     values: Iterable[float] | np.ndarray,

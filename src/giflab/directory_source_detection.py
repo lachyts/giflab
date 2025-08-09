@@ -20,7 +20,9 @@ from typing import Any
 from .source_tracking import SourcePlatform
 
 
-def detect_source_from_directory(gif_path: Path, raw_dir: Path) -> tuple[str, dict[str, Any] | None]:
+def detect_source_from_directory(
+    gif_path: Path, raw_dir: Path
+) -> tuple[str, dict[str, Any] | None]:
     """Detect source platform and metadata from directory structure.
 
     Args:
@@ -107,7 +109,9 @@ def _extract_tenor_metadata_from_path(path_parts: tuple[str, ...]) -> dict[str, 
     return metadata
 
 
-def _extract_animately_metadata_from_path(path_parts: tuple[str, ...]) -> dict[str, Any]:
+def _extract_animately_metadata_from_path(
+    path_parts: tuple[str, ...]
+) -> dict[str, Any]:
     """Extract Animately-specific metadata from directory path.
 
     Expected structure: animately/file.gif (flat structure)
@@ -255,7 +259,9 @@ GIFs in this directory will have:
 """,
     }
 
-    return content_map.get(directory_name, "# Source Directory\n\nGIFs organized by source.")
+    return content_map.get(
+        directory_name, "# Source Directory\n\nGIFs organized by source."
+    )
 
 
 def get_directory_organization_help() -> str:

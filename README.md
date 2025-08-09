@@ -29,13 +29,13 @@ GifLab uses a **two-pipeline approach** to balance stability and innovation:
 #### 🏭 **Production Pipeline** (`run` command)
 - **Engines**: gifsicle, Animately (proven, reliable)
 - **Purpose**: Large-scale processing, production workflows
-- **Usage**: `python -m giflab run data/raw`
+- **Usage**: `poetry run python -m giflab run data/raw`
 
 #### 🧪 **Experimental Pipeline** (`experiment` command)  
 - **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
 - **Purpose**: Comprehensive testing, pipeline elimination, finding optimal combinations
-- **Traditional Usage**: `python -m giflab experiment --sampling representative`
-- **🆕 Targeted Presets**: `python -m giflab experiment --preset frame-focus` (**93-99% more efficient!**)
+- **Traditional Usage**: `poetry run python -m giflab experiment --sampling representative`
+- **🆕 Targeted Presets**: `poetry run python -m giflab experiment --preset frame-focus` (**93-99% more efficient!**)
 
 | Engine | Pipeline | Color | Frame | Lossy | Best For |
 |--------|----------|-------|-------|--------|----------|
@@ -55,16 +55,16 @@ Instead of generating all 935 possible pipeline combinations and sampling from t
 
 ```bash
 # List all available presets
-python -m giflab experiment --list-presets
+poetry run python -m giflab experiment --list-presets
 
 # Compare all frame reduction algorithms (5 pipelines vs 935)
-python -m giflab experiment --preset frame-focus
+poetry run python -m giflab experiment --preset frame-focus
 
 # Compare color quantization methods (17 pipelines vs 935)  
-python -m giflab experiment --preset color-optimization
+poetry run python -m giflab experiment --preset color-optimization
 
 # Quick testing preset (2 pipelines)
-python -m giflab experiment --preset quick-test
+poetry run python -m giflab experiment --preset quick-test
 ```
 
 ### Efficiency Comparison
@@ -194,16 +194,16 @@ data/raw/
 ### Quick Start
 ```bash
 # 1. Create directory structure
-python -m giflab organize-directories data/raw/
+poetry run python -m giflab organize-directories data/raw/
 
 # 2. Move GIFs to appropriate directories
 # (manually or via collection scripts)
 
 # 3. Run analysis with automatic source detection
-python -m giflab run data/raw/
+poetry run python -m giflab run data/raw/
 
 # 4. Optional: Disable source detection
-python -m giflab run data/raw/ --no-detect-source-from-directory
+poetry run python -m giflab run data/raw/ --no-detect-source-from-directory
 ```
 
 ### CSV Output
@@ -650,7 +650,7 @@ Cache statistics are automatically shown in pipeline elimination output.
 ### 🔍 Debug Pipeline Failures
 View detailed failure information:
 ```bash
-poetry run python -m giflab debug-failures --summary
+poetry run python -m giflab view-failures --summary
 ```
 
 **📚 For more details:** See [Experimental Testing Guide](docs/guides/experimental-testing.md)

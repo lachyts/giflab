@@ -1,12 +1,13 @@
 import os
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Auto-generate deleted GIF fixtures so legacy tests still pass
 # ---------------------------------------------------------------------------
 from pathlib import Path as _P
+
+import pytest
 from PIL import Image as _PILImage
+
 
 def _create_dummy_gif(path: _P, frames: int = 1, colors: int = 2) -> None:  # noqa: WPS110
     """Create a small dummy GIF at *path* with *frames* and *colors*.
@@ -36,6 +37,7 @@ def _ensure_required_gif_fixtures() -> None:  # noqa: D401
         if not gif_path.exists():
             _create_dummy_gif(gif_path, frames=frames, colors=colors)
 
+
 # Run at import time so all downstream fixtures see the files
 _ensure_required_gif_fixtures()
 
@@ -59,7 +61,6 @@ except ModuleNotFoundError:
 # Apply the optimisations unless the caller explicitly requests the full
 # parameter matrix via an environment variable.
 if os.getenv("GIFLAB_FULL_MATRIX") != "1" and _dp is not None:
-
     # 1. Cap the dynamic-pipeline cartesian product ---------------------------------
     _orig_generate = _dp.generate_all_pipelines  # type: ignore[attr-defined]
 
@@ -84,21 +85,22 @@ def _apply_ultra_fast_patches():
 
 def _apply_global_engine_mocking():
     """Mock all external engines globally."""
-    import giflab.lossy
-    import giflab.meta
-    import giflab.external_engines.imagemagick
     import shutil
     from pathlib import Path
     from unittest.mock import Mock
-    
+
+    import giflab.external_engines.imagemagick
+    import giflab.lossy
+    import giflab.meta
+
     def _global_noop_copy(input_path, output_path, *args, **kwargs):
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(input_path, output_path)
-        
+
         return {
             "render_ms": kwargs.get("render_ms", 1),
-            "engine": "noop", 
+            "engine": "noop",
             "command": "noop-copy",
             "kilobytes": output_path.stat().st_size / 1024.0,
             "ssim": 1.0,
@@ -106,12 +108,12 @@ def _apply_global_engine_mocking():
             "frame_keep_ratio": kwargs.get("frame_keep_ratio", 1.0),
             "color_keep_count": kwargs.get("color_keep_count", None),
         }
-    
+
     def _mock_advanced_lossy(input_path, output_path, *args, **kwargs):
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(input_path, output_path)
-        
+
         return {
             "render_ms": kwargs.get("render_ms", 150),
             "engine": "animately-advanced",
@@ -122,7 +124,7 @@ def _apply_global_engine_mocking():
             "frame_keep_ratio": kwargs.get("frame_keep_ratio", 1.0),
             "color_keep_count": kwargs.get("color_keep_count", None),
         }
-    
+
     def _mock_metadata_extract(input_path):
         return {
             "orig_frames": 10,
@@ -131,38 +133,41 @@ def _apply_global_engine_mocking():
             "orig_n_colors": 256,
             "entropy": 7.5,
             "width": 100,
-            "height": 100
+            "height": 100,
         }
-    
+
     def _mock_validate_animately_availability(binary_path):
         # Always raise error for fast tests to test error handling
         raise RuntimeError("Animately launcher not found")
-    
+
     def _mock_export_png_sequence(input_path, output_dir):
         # Mock the PNG sequence export
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         return {"frame_count": 10, "export_dir": str(output_dir)}
-    
+
     # Apply global mocking to all compression functions
     giflab.lossy.compress_with_gifsicle = _global_noop_copy
     giflab.lossy.compress_with_animately = _global_noop_copy
     giflab.lossy.compress_with_animately_advanced_lossy = _mock_advanced_lossy
-    
+
     # Mock internal functions
     giflab.lossy._extract_gif_metadata = _mock_metadata_extract
-    giflab.lossy._validate_animately_availability = _mock_validate_animately_availability
-    
+    giflab.lossy._validate_animately_availability = (
+        _mock_validate_animately_availability
+    )
+
     # Mock external engine functions
     giflab.external_engines.imagemagick.export_png_sequence = _mock_export_png_sequence
-    
+
     # Mock system tools discovery to return proper strings
     import giflab.system_tools
+
     mock_tool_info = Mock()
     mock_tool_info.path = "/mock/path"
     mock_tool_info.version = "1.0.0"
     giflab.system_tools.discover_tool = Mock(return_value=mock_tool_info)
-    
+
     # Also mock the version extraction functions to return strings
     giflab.system_tools._run_version_cmd = Mock(return_value="1.0.0")
     giflab.system_tools._extract_version = Mock(return_value="1.0.0")
@@ -172,7 +177,7 @@ def _apply_global_engine_mocking():
 if os.getenv("GIFLAB_ULTRA_FAST") == "1":
     _apply_ultra_fast_patches()
 
-# Apply global engine mocking  
+# Apply global engine mocking
 if os.getenv("GIFLAB_MOCK_ALL_ENGINES") == "1":
     _apply_global_engine_mocking()
 
@@ -183,12 +188,10 @@ if os.getenv("GIFLAB_MOCK_ALL_ENGINES") == "1":
     # -----------------------------------------------------------------------
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # Session-wide fixtures / helpers (can be extended as needed)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _assert_fast_suite_limits():
@@ -203,6 +206,7 @@ def _assert_fast_suite_limits():
 # ---------------------------------------------------------------------------
 # Collection hook to mark/skip heavy tests automatically
 # ---------------------------------------------------------------------------
+
 
 def pytest_collection_modifyitems(config, items):  # noqa: D401
     """Dynamically skip heavy tests unless full suite is requested.
@@ -274,6 +278,7 @@ def pytest_ignore_collect(collection_path: _Path, config):  # noqa: D401
 # Helper fixture: fast_compress – monkey-patch heavy compression binaries
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fast_compress(monkeypatch):
     """Stub out gifsicle / Animately invocations for lightning-fast unit tests.
@@ -303,8 +308,8 @@ def fast_compress(monkeypatch):
             "engine": "noop",
             "command": "noop-copy",
             # Size/quality placeholders
-            "kilobytes": size_kb,   # align with metrics.calculate_file_size_kb
-            "ssim": 1.0,            # identical copy => perfect similarity
+            "kilobytes": size_kb,  # align with metrics.calculate_file_size_kb
+            "ssim": 1.0,  # identical copy => perfect similarity
             # Preserve commonly-inspected kwargs so callers don’t break
             "lossy_level": kwargs.get("lossy_level", 0),
             "frame_keep_ratio": kwargs.get("frame_keep_ratio", 1.0),
@@ -313,11 +318,17 @@ def fast_compress(monkeypatch):
 
     # Patch primary implementations in giflab.lossy
     monkeypatch.setattr("giflab.lossy.compress_with_gifsicle", _noop_copy, raising=True)
-    monkeypatch.setattr("giflab.lossy.compress_with_animately", _noop_copy, raising=True)
+    monkeypatch.setattr(
+        "giflab.lossy.compress_with_animately", _noop_copy, raising=True
+    )
 
     # Also patch re-exports from giflab.tool_wrappers (safe if missing)
-    monkeypatch.setattr("giflab.tool_wrappers.compress_with_gifsicle", _noop_copy, raising=False)
-    monkeypatch.setattr("giflab.tool_wrappers.compress_with_animately", _noop_copy, raising=False)
+    monkeypatch.setattr(
+        "giflab.tool_wrappers.compress_with_gifsicle", _noop_copy, raising=False
+    )
+    monkeypatch.setattr(
+        "giflab.tool_wrappers.compress_with_animately", _noop_copy, raising=False
+    )
 
     yield
 
@@ -326,11 +337,12 @@ def fast_compress(monkeypatch):
 # Auto-apply fast mocking to fast tests (Task 2.2)
 # ---------------------------------------------------------------------------
 
+
 def pytest_runtest_setup(item):
     """Auto-apply fast mocking to fast tests."""
     if item.get_closest_marker("fast"):
         # Auto-apply fast_compress behavior when not already using the fixture
-        if hasattr(item, 'fixturenames') and 'fast_compress' not in item.fixturenames:
+        if hasattr(item, "fixturenames") and "fast_compress" not in item.fixturenames:
             # Simply ensure the GIFLAB_MOCK_ALL_ENGINES behavior is applied
             # The global mocking from GIFLAB_MOCK_ALL_ENGINES should handle this
             pass

@@ -56,11 +56,15 @@ from .lossy_extended import (
 
 
 @register("gifsicle")
-def _combine_gifsicle(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+def _combine_gifsicle(
+    input_path: Path, output_path: Path, params: dict[str, Any]
+) -> dict[str, Any]:
     lossy = int(params.get("lossy_level", 0) or 0)
     ratio = float(params.get("ratio", 1.0) or 1.0)
     colors = params.get("colors")  # may be None
-    opt_level: GifsicleOptimizationLevel = params.get("_opt_level", GifsicleOptimizationLevel.BASIC)
+    opt_level: GifsicleOptimizationLevel = params.get(
+        "_opt_level", GifsicleOptimizationLevel.BASIC
+    )
 
     return compress_with_gifsicle_extended(
         input_path=input_path,
@@ -79,7 +83,9 @@ from .lossy import LossyEngine, apply_compression_with_all_params
 
 
 @register("animately")
-def _combine_animately(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+def _combine_animately(
+    input_path: Path, output_path: Path, params: dict[str, Any]
+) -> dict[str, Any]:
     lossy = int(params.get("lossy_level", 0) or 0)
     ratio = float(params.get("ratio", 1.0) or 1.0)
     colors = params.get("colors")
@@ -93,12 +99,13 @@ def _combine_animately(input_path: Path, output_path: Path, params: dict[str, An
         engine=LossyEngine.ANIMATELY,
     )
 
+
 # ---------------------------------------------------------------------------
 # Generic placeholder combiners for other tool families (copy pass-through)
 # ---------------------------------------------------------------------------
 
-from shutil import copy
 import time
+from shutil import copy
 
 
 def _noop_copy(input_path: Path, output_path: Path, engine: str) -> dict[str, Any]:
@@ -109,15 +116,21 @@ def _noop_copy(input_path: Path, output_path: Path, engine: str) -> dict[str, An
 
 
 @register("imagemagick")
-def _combine_imagemagick(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+def _combine_imagemagick(
+    input_path: Path, output_path: Path, params: dict[str, Any]
+) -> dict[str, Any]:
     return _noop_copy(input_path, output_path, "imagemagick")
 
 
 @register("ffmpeg")
-def _combine_ffmpeg(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+def _combine_ffmpeg(
+    input_path: Path, output_path: Path, params: dict[str, Any]
+) -> dict[str, Any]:
     return _noop_copy(input_path, output_path, "ffmpeg")
 
 
 @register("gifski")
-def _combine_gifski(input_path: Path, output_path: Path, params: dict[str, Any]) -> dict[str, Any]:
+def _combine_gifski(
+    input_path: Path, output_path: Path, params: dict[str, Any]
+) -> dict[str, Any]:
     return _noop_copy(input_path, output_path, "gifski")

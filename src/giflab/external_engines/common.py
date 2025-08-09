@@ -11,7 +11,9 @@ __all__ = [
 ]
 
 
-def run_command(cmd: list[str], *, engine: str, output_path: Path, timeout: int | None = 60) -> dict[str, Any]:
+def run_command(
+    cmd: list[str], *, engine: str, output_path: Path, timeout: int | None = 60
+) -> dict[str, Any]:
     """Execute *cmd* and return GifLab-style metadata.
 
     The helper blocks until *cmd* completes, raises *RuntimeError* on non-zero

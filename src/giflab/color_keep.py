@@ -58,7 +58,9 @@ def validate_color_keep_count(color_count: int) -> None:
         )
 
 
-def build_gifsicle_color_args(color_count: int, original_colors: int, dithering: bool = False) -> list[str]:
+def build_gifsicle_color_args(
+    color_count: int, original_colors: int, dithering: bool = False
+) -> list[str]:
     """Build gifsicle command arguments for color reduction.
 
     Reference: https://www.lcdf.org/gifsicle/
@@ -144,19 +146,21 @@ def count_gif_colors(image_path: Path) -> int:
 
     try:
         with Image.open(image_path) as img:
-            if img.format != 'GIF':
+            if img.format != "GIF":
                 raise ValueError(f"File is not a GIF: {image_path}")
 
             # Get the first frame for color analysis
             img.seek(0)
 
-            if img.mode == 'P':
+            if img.mode == "P":
                 # Palette mode - count unique palette entries
                 palette = img.getpalette()
                 if palette:
                     # Convert palette to RGB tuples and count unique colors
-                    rgb_palette = [(palette[i], palette[i+1], palette[i+2])
-                                   for i in range(0, len(palette), 3)]
+                    rgb_palette = [
+                        (palette[i], palette[i + 1], palette[i + 2])
+                        for i in range(0, len(palette), 3)
+                    ]
                     unique_colors = len(set(rgb_palette))
                     return min(unique_colors, 256)  # GIF max is 256
                 else:
@@ -166,8 +170,10 @@ def count_gif_colors(image_path: Path) -> int:
                 quantized = img.quantize(colors=256)
                 palette = quantized.getpalette()
                 if palette:
-                    rgb_palette = [(palette[i], palette[i+1], palette[i+2])
-                                   for i in range(0, len(palette), 3)]
+                    rgb_palette = [
+                        (palette[i], palette[i + 1], palette[i + 2])
+                        for i in range(0, len(palette), 3)
+                    ]
                     unique_colors = len(set(rgb_palette))
                     return min(unique_colors, 256)
                 else:
@@ -215,15 +221,23 @@ def get_color_reduction_info(input_path: Path, color_count: int) -> dict[str, An
             "target_colors": target_colors,
             "color_keep_count": color_count,
             "reduction_needed": reduction_needed,
-            "reduction_percent": ((original_colors - target_colors) / original_colors * 100.0) if original_colors > 0 else 0.0,
-            "compression_ratio": (original_colors / target_colors) if target_colors > 0 and original_colors > 0 else 1.0
+            "reduction_percent": (
+                (original_colors - target_colors) / original_colors * 100.0
+            )
+            if original_colors > 0
+            else 0.0,
+            "compression_ratio": (original_colors / target_colors)
+            if target_colors > 0 and original_colors > 0
+            else 1.0,
         }
 
     except Exception as e:
         raise OSError(f"Error analyzing GIF {input_path}: {str(e)}") from e
 
 
-def extract_dominant_colors(image: Image.Image, n_colors: int) -> list[tuple[int, int, int]]:
+def extract_dominant_colors(
+    image: Image.Image, n_colors: int
+) -> list[tuple[int, int, int]]:
     """Extract the most dominant colors from an image.
 
     Args:
@@ -240,8 +254,8 @@ def extract_dominant_colors(image: Image.Image, n_colors: int) -> list[tuple[int
         raise ValueError(f"n_colors must be positive, got {n_colors}")
 
     # Convert image to RGB if needed
-    if image.mode != 'RGB':
-        rgb_image = image.convert('RGB')
+    if image.mode != "RGB":
+        rgb_image = image.convert("RGB")
     else:
         rgb_image = image
 
@@ -282,7 +296,7 @@ def analyze_gif_palette(image_path: Path) -> dict[str, Any]:
 
     try:
         with Image.open(image_path) as img:
-            if img.format != 'GIF':
+            if img.format != "GIF":
                 raise ValueError(f"File is not a GIF: {image_path}")
 
             # Analyze first frame
@@ -296,19 +310,20 @@ def analyze_gif_palette(image_path: Path) -> dict[str, Any]:
 
             # Get palette info if available
             palette_info = {}
-            if img.mode == 'P':
+            if img.mode == "P":
                 palette = img.getpalette()
                 if palette:
                     palette_info = {
                         "mode": "palette",
                         "palette_size": len(palette) // 3,
-                        "has_transparency": "transparency" in img.info
+                        "has_transparency": "transparency" in img.info,
                     }
             else:
                 palette_info = {
                     "mode": img.mode,
                     "palette_size": None,
-                    "has_transparency": img.mode in ('RGBA', 'LA') or 'transparency' in img.info
+                    "has_transparency": img.mode in ("RGBA", "LA")
+                    or "transparency" in img.info,
                 }
 
             return {
@@ -317,8 +332,11 @@ def analyze_gif_palette(image_path: Path) -> dict[str, Any]:
                 "palette_info": palette_info,
                 "reduction_candidates": {
                     count: color_count > count
-                    for count in (DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or [256, 128, 64, 32, 16, 8])
-                }
+                    for count in (
+                        DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS
+                        or [256, 128, 64, 32, 16, 8]
+                    )
+                },
             }
 
     except Exception as e:
@@ -340,7 +358,9 @@ def get_optimal_color_count(image_path: Path, quality_threshold: float = 0.95) -
         ValueError: If quality_threshold is invalid
     """
     if not 0.0 <= quality_threshold <= 1.0:
-        raise ValueError(f"Quality threshold must be between 0.0 and 1.0, got {quality_threshold}")
+        raise ValueError(
+            f"Quality threshold must be between 0.0 and 1.0, got {quality_threshold}"
+        )
 
     try:
         # Analyze the GIF
@@ -348,7 +368,10 @@ def get_optimal_color_count(image_path: Path, quality_threshold: float = 0.95) -
         original_colors = analysis["total_colors"]
 
         # Find the largest supported color count that provides meaningful reduction
-        valid_counts = sorted(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or [256, 128, 64, 32, 16, 8], reverse=True)
+        valid_counts = sorted(
+            DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or [256, 128, 64, 32, 16, 8],
+            reverse=True,
+        )
 
         for count in valid_counts:
             if count < original_colors:
@@ -361,6 +384,6 @@ def get_optimal_color_count(image_path: Path, quality_threshold: float = 0.95) -
         return min(valid_counts)
 
     except Exception as e:
-        raise OSError(f"Error determining optimal color count for {image_path}: {str(e)}") from e
-
-
+        raise OSError(
+            f"Error determining optimal color count for {image_path}: {str(e)}"
+        ) from e

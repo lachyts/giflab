@@ -11,8 +11,8 @@ from abc import ABC
 from collections.abc import Iterator
 
 from .tool_interfaces import (
-    ExternalTool,
     ColorReductionTool,
+    ExternalTool,
     FrameReductionTool,
     LossyCompressionTool,
 )
@@ -20,6 +20,7 @@ from .tool_interfaces import (
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
+
 
 def _iter_all_wrapper_subclasses() -> Iterator[type[ExternalTool]]:
     """Yield every subclass defined in *giflab.tool_wrappers* (import side-effect)."""
@@ -33,16 +34,16 @@ def _iter_all_wrapper_subclasses() -> Iterator[type[ExternalTool]]:
                 # import logging
                 # logging.getLogger(__name__).debug(f"Filtered base class: {obj.__name__}")
                 continue
-            
+
             yield obj  # type: ignore[arg-type]
 
 
 def _is_base_class(cls: type) -> bool:
     """Comprehensive check to determine if a class is a base class rather than a concrete tool.
-    
+
     Args:
         cls: Class to check
-        
+
     Returns:
         True if the class should be excluded as a base class
     """
@@ -53,32 +54,32 @@ def _is_base_class(cls: type) -> bool:
         FrameReductionTool,
         LossyCompressionTool,
     }
-    
+
     if cls in EXCLUDED_BASE_CLASSES:
         return True
-    
+
     # 2. Abstract base classes (ABC)
-    if getattr(cls, '__abstractmethods__', None):
+    if getattr(cls, "__abstractmethods__", None):
         return True
-    
+
     # 3. Classes that directly inherit from ABC (not through tool interfaces)
     # Only filter classes that directly inherit from ABC, not through tool interfaces
     if ABC in cls.__bases__:
         return True
-    
+
     # 4. Classes with underscore prefix (naming convention for base classes)
     if cls.__name__.startswith("_"):
         return True
-    
+
     # 5. Classes with "base" in the name (case-insensitive)
     if "base" in cls.__name__.lower():
         return True
-    
+
     # 6. Classes with generic/template naming patterns
     generic_patterns = ["template", "mixin", "abstract", "interface", "proto"]
     if any(pattern in cls.__name__.lower() for pattern in generic_patterns):
         return True
-    
+
     # 7. Check NAME attribute for base class indicators
     class_name = getattr(cls, "NAME", "")
     if class_name:
@@ -88,28 +89,37 @@ def _is_base_class(cls: type) -> bool:
             "abstract-tool",
             "template-tool",
         }
-        
+
         if class_name in base_name_patterns:
             return True
-        
+
         # Check for generic patterns in NAME
-        if any(pattern in class_name.lower() for pattern in ["base", "abstract", "template"]):
+        if any(
+            pattern in class_name.lower()
+            for pattern in ["base", "abstract", "template"]
+        ):
             return True
-    
+
     # 8. Check for missing required concrete implementations
     # A concrete tool should have a valid NAME and VARIABLE
     if not hasattr(cls, "NAME") or not getattr(cls, "NAME", "").strip():
         return True
-    
+
     if not hasattr(cls, "VARIABLE") or not getattr(cls, "VARIABLE", "").strip():
         return True
-    
+
     # 9. Check docstring for base class indicators
     docstring = cls.__doc__ or ""
-    base_doc_patterns = ["base class", "abstract class", "template class", "mixin", "interface"]
+    base_doc_patterns = [
+        "base class",
+        "abstract class",
+        "template class",
+        "mixin",
+        "interface",
+    ]
     if any(pattern in docstring.lower() for pattern in base_doc_patterns):
         return True
-    
+
     # 10. Check for placeholder/stub implementations
     # Look for methods that just raise NotImplementedError
     for method_name in ["apply", "available"]:
@@ -120,11 +130,14 @@ def _is_base_class(cls: type) -> bool:
                 try:
                     source_lines = inspect.getsourcelines(method)[0]
                     source = "".join(source_lines).strip()
-                    if "notimplementederror" in source.lower() and len(source_lines) <= 3:
+                    if (
+                        "notimplementederror" in source.lower()
+                        and len(source_lines) <= 3
+                    ):
                         return True
                 except (OSError, TypeError):
                     pass  # Can't get source, skip this check
-    
+
     # If none of the base class indicators are found, it's likely a concrete class
     return False
 
@@ -143,6 +156,7 @@ for cls in _iter_all_wrapper_subclasses():
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def tools_for(variable: str) -> list[type[ExternalTool]]:
     """Return *available* tool wrapper classes for *variable*."""

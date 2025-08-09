@@ -29,6 +29,7 @@ _BASE_METRICS: list[str] = [
 # Metric record schema
 # --------------------------------------------------------------------------- #
 
+
 class MetricRecordV1(BaseModel):
     """Validated record for a single GIF comparison / metric extraction.
 
@@ -46,9 +47,11 @@ class MetricRecordV1(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+
 # --------------------------------------------------------------------------- #
 # Convenience helpers
 # --------------------------------------------------------------------------- #
+
 
 def validate_metric_record(data: dict) -> MetricRecordV1:
     """Validate *data* against :class:`MetricRecordV1`.

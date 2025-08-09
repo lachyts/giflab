@@ -12,6 +12,7 @@ from typing import Any
 
 class ValidationError(ValueError):
     """Raised when input validation fails."""
+
     pass
 
 
@@ -77,25 +78,29 @@ def validate_path_security(path: str | Path) -> Path:
     path_str = str(path)  # Check original string first
 
     # Check for null bytes before calling resolve()
-    if '\x00' in path_str:
+    if "\x00" in path_str:
         raise ValidationError(f"Path contains null bytes: {path_str}")
 
     # Now resolve the path
     resolved_path_str = str(path_obj.resolve())
 
     # Check for shell injection characters
-    dangerous_chars = [';', '&', '|', '`', '$', '$(', '`', '\n', '\r']
+    dangerous_chars = [";", "&", "|", "`", "$", "$(", "`", "\n", "\r"]
     for char in dangerous_chars:
         if char in resolved_path_str:
-            raise ValidationError(f"Path contains potentially dangerous characters: {resolved_path_str}")
+            raise ValidationError(
+                f"Path contains potentially dangerous characters: {resolved_path_str}"
+            )
 
     # Check for path traversal attempts
-    if '..' in path_obj.parts:
+    if ".." in path_obj.parts:
         raise ValidationError(f"Path contains directory traversal: {resolved_path_str}")
 
     # Check for excessively long paths (platform-dependent but generally safe limit)
     if len(resolved_path_str) > 4096:
-        raise ValidationError(f"Path too long ({len(resolved_path_str)} chars): {resolved_path_str[:100]}...")
+        raise ValidationError(
+            f"Path too long ({len(resolved_path_str)} chars): {resolved_path_str[:100]}..."
+        )
 
     return path_obj
 
@@ -157,6 +162,7 @@ def validate_worker_count(workers: int) -> int:
 
     # Cap at reasonable maximum (4x CPU count)
     import multiprocessing
+
     max_workers = multiprocessing.cpu_count() * 4
     if workers > max_workers:
         raise ValidationError(f"Worker count too high: {workers} (max: {max_workers})")
@@ -182,13 +188,15 @@ def validate_file_extension(path: str | Path, expected_extensions: list[str]) ->
     # Normalize extensions (ensure they start with dot)
     normalized_exts = []
     for ext in expected_extensions:
-        if not ext.startswith('.'):
-            ext = '.' + ext
+        if not ext.startswith("."):
+            ext = "." + ext
         normalized_exts.append(ext.lower())
 
     file_ext = path_obj.suffix.lower()
     if file_ext not in normalized_exts:
-        raise ValidationError(f"Invalid file extension: {file_ext} (expected: {normalized_exts})")
+        raise ValidationError(
+            f"Invalid file extension: {file_ext} (expected: {normalized_exts})"
+        )
 
     return path_obj
 
@@ -208,7 +216,7 @@ def validate_config_paths(config_dict: dict[str, Any]) -> dict[str, Path]:
     validated_paths = {}
 
     for key, value in config_dict.items():
-        if key.endswith('_DIR') or key.endswith('_PATH'):
+        if key.endswith("_DIR") or key.endswith("_PATH"):
             if value is not None:
                 try:
                     validated_paths[key] = validate_path_security(value)
@@ -218,7 +226,7 @@ def validate_config_paths(config_dict: dict[str, Any]) -> dict[str, Path]:
     return validated_paths
 
 
-def sanitize_filename(filename: str, replacement: str = '_') -> str:
+def sanitize_filename(filename: str, replacement: str = "_") -> str:
     """Sanitize filename for safe filesystem usage.
 
     Args:
@@ -238,7 +246,7 @@ def sanitize_filename(filename: str, replacement: str = '_') -> str:
     sanitized = re.sub(invalid_chars, replacement, filename)
 
     # Remove leading/trailing dots and spaces
-    sanitized = sanitized.strip('. ')
+    sanitized = sanitized.strip(". ")
 
     # Ensure not empty after sanitization
     if not sanitized:

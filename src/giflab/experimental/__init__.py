@@ -13,15 +13,15 @@ The ExperimentalRunner can now be imported from either:
 """
 
 # Import modular components
-from .pareto import ParetoAnalyzer
-from .sampling import PipelineSampler, SAMPLING_STRATEGIES, SamplingStrategy
-from .runner import ExperimentalRunner, ExperimentResult
-
 # Import cache and error components that were already extracted
 from ..elimination_cache import PipelineResultsCache, get_git_commit
 from ..elimination_errors import ErrorTypes
+
 # Import synthetic GIF components for backward compatibility
 from ..synthetic_gifs import SyntheticGifSpec
+from .pareto import ParetoAnalyzer
+from .runner import ExperimentalRunner, ExperimentResult
+from .sampling import SAMPLING_STRATEGIES, PipelineSampler, SamplingStrategy
 
 # Re-export key components
 __all__ = [
@@ -32,12 +32,10 @@ __all__ = [
     "SamplingStrategy",
     "ExperimentalRunner",
     "ExperimentResult",
-
     # Cache and error handling
     "PipelineResultsCache",
     "ErrorTypes",
     "get_git_commit",
-    
     # Synthetic GIF components (backward compatibility)
     "SyntheticGifSpec",
 ]

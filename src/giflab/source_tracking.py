@@ -8,7 +8,7 @@ def create_source_metadata(
     platform: str,
     query: str | None = None,
     collection_context: str | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> tuple[str, dict[str, Any]]:
     """Create standardized source metadata for GIF collection.
 
@@ -30,10 +30,7 @@ def create_source_metadata(
             popularity=0.85
         )
     """
-    metadata = {
-        "collected_at": datetime.now().isoformat(),
-        **kwargs
-    }
+    metadata = {"collected_at": datetime.now().isoformat(), **kwargs}
 
     if query:
         metadata["query"] = query
@@ -49,7 +46,7 @@ def create_tenor_metadata(
     collection_context: str | None = None,
     tenor_id: str | None = None,
     popularity: float | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> tuple[str, dict[str, Any]]:
     """Create standardized metadata for Tenor GIF collection.
 
@@ -63,7 +60,7 @@ def create_tenor_metadata(
     Returns:
         Tuple of (platform, metadata_dict)
     """
-    metadata_kwargs = {}
+    metadata_kwargs: dict[str, Any] = {}
 
     if tenor_id:
         metadata_kwargs["tenor_id"] = tenor_id
@@ -76,11 +73,8 @@ def create_tenor_metadata(
         platform="tenor",
         query=query,
         collection_context=collection_context,
-        **metadata_kwargs
+        **metadata_kwargs,
     )
-
-
-
 
 
 def create_animately_metadata(
@@ -88,7 +82,7 @@ def create_animately_metadata(
     upload_intent: str | None = None,
     original_size_kb: float | None = None,
     user_agent: str | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> tuple[str, dict[str, Any]]:
     """Create standardized metadata for Animately platform uploads.
 
@@ -102,7 +96,7 @@ def create_animately_metadata(
     Returns:
         Tuple of (platform, metadata_dict)
     """
-    metadata_kwargs = {}
+    metadata_kwargs: dict[str, Any] = {}
 
     if user_id:
         metadata_kwargs["user_id"] = user_id
@@ -115,17 +109,14 @@ def create_animately_metadata(
 
     metadata_kwargs.update(kwargs)
 
-    return create_source_metadata(
-        platform="animately",
-        **metadata_kwargs
-    )
+    return create_source_metadata(platform="animately", **metadata_kwargs)
 
 
 def create_tgif_metadata(
     tgif_id: str | None = None,
     description: str | None = None,
     category: str | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> tuple[str, dict[str, Any]]:
     """Create standardized metadata for TGIF dataset.
 
@@ -138,7 +129,7 @@ def create_tgif_metadata(
     Returns:
         Tuple of (platform, metadata_dict)
     """
-    metadata_kwargs = {}
+    metadata_kwargs: dict[str, Any] = {}
 
     if tgif_id:
         metadata_kwargs["tgif_id"] = tgif_id
@@ -149,15 +140,13 @@ def create_tgif_metadata(
 
     metadata_kwargs.update(kwargs)
 
-    return create_source_metadata(
-        platform="tgif_dataset",
-        **metadata_kwargs
-    )
+    return create_source_metadata(platform="tgif_dataset", **metadata_kwargs)
 
 
 # Common platform constants for easy reference
 class SourcePlatform:
     """Constants for common source platforms."""
+
     TENOR = "tenor"
     ANIMATELY = "animately"
     TGIF_DATASET = "tgif_dataset"

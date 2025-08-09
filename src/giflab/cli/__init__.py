@@ -33,7 +33,7 @@ main.add_command(debug_failures)
 
 __all__ = [
     "debug_failures",
-    "experiment", 
+    "experiment",
     "main",
     "organize_directories",
     "run",

@@ -129,7 +129,9 @@ def run(
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
         if pipelines:
             click.echo(f"🎛️  Selected pipelines: {len(selected_pipes)} from {pipelines}")
-        click.echo(f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}")
+        click.echo(
+            f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}"
+        )
 
         if dry_run:
             click.echo("🔍 DRY RUN MODE - Analysis only")

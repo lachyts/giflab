@@ -193,15 +193,18 @@ def validate_frame_keep_ratio(keep_ratio: float) -> None:
         ValueError: If frame keep ratio is not supported
     """
     if not 0.0 <= keep_ratio <= 1.0:
-        raise ValueError(f"Frame keep ratio must be between 0.0 and 1.0, got {keep_ratio}")
+        raise ValueError(
+            f"Frame keep ratio must be between 0.0 and 1.0, got {keep_ratio}"
+        )
 
     # Check against configured valid ratios
     valid_ratios = DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS
 
     # Allow small floating point differences
     tolerance = 1e-6
-    is_valid = any(abs(keep_ratio - valid_ratio) < tolerance
-                   for valid_ratio in valid_ratios)
+    is_valid = any(
+        abs(keep_ratio - valid_ratio) < tolerance for valid_ratio in valid_ratios
+    )
 
     if not is_valid:
         raise ValueError(
@@ -230,14 +233,14 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> dict[str, A
 
     try:
         with Image.open(input_path) as img:
-            if img.format != 'GIF':
+            if img.format != "GIF":
                 raise ValueError(f"File is not a GIF: {input_path}")
 
             # Count frames using safer method
             frame_count = 0
             try:
                 # Use PIL's built-in frame counting if available
-                if hasattr(img, 'n_frames'):
+                if hasattr(img, "n_frames"):
                     frame_count = img.n_frames
                 else:
                     # Fallback to manual counting with better error handling
@@ -255,7 +258,9 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> dict[str, A
 
                         # Safety limit to prevent infinite loops with corrupted files
                         if current_frame > 10000:  # Reasonable upper limit
-                            raise ValueError(f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted")
+                            raise ValueError(
+                                f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted"
+                            )
             except EOFError:
                 pass  # Normal end of frames
             except Exception as e:
@@ -275,7 +280,7 @@ def get_frame_reduction_info(input_path: Path, keep_ratio: float) -> dict[str, A
                 "keep_ratio": keep_ratio,
                 "frames_kept": len(frame_indices),
                 "frame_indices": frame_indices,
-                "reduction_percent": (1.0 - keep_ratio) * 100.0
+                "reduction_percent": (1.0 - keep_ratio) * 100.0,
             }
 
     except ValueError:

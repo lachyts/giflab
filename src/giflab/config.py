@@ -66,29 +66,29 @@ class MetricsConfig:
     MS_SSIM_WEIGHT: float = 0.35
     PSNR_WEIGHT: float = 0.25
     TEMPORAL_WEIGHT: float = 0.10
-    
+
     # Enhanced 11-metric composite quality weights (comprehensive approach)
     # Core structural similarity metrics (40% total)
     ENHANCED_SSIM_WEIGHT: float = 0.18
     ENHANCED_MS_SSIM_WEIGHT: float = 0.22
-    
+
     # Signal quality metrics (25% total)
     ENHANCED_PSNR_WEIGHT: float = 0.15
     ENHANCED_MSE_WEIGHT: float = 0.10
-    
+
     # Advanced structural metrics (20% total)
     ENHANCED_FSIM_WEIGHT: float = 0.08
     ENHANCED_EDGE_WEIGHT: float = 0.07
     ENHANCED_GMSD_WEIGHT: float = 0.05
-    
+
     # Perceptual quality metrics (10% total)
     ENHANCED_CHIST_WEIGHT: float = 0.04
     ENHANCED_SHARPNESS_WEIGHT: float = 0.03
     ENHANCED_TEXTURE_WEIGHT: float = 0.03
-    
+
     # Temporal consistency (5% total)
     ENHANCED_TEMPORAL_WEIGHT: float = 0.05
-    
+
     # Enable enhanced composite quality calculation
     USE_ENHANCED_COMPOSITE_QUALITY: bool = True
 
@@ -101,33 +101,62 @@ class MetricsConfig:
 
     def __post_init__(self) -> None:
         # Validate legacy weights sum to 1.0 with proper floating point tolerance
-        legacy_total = (self.SSIM_WEIGHT + self.MS_SSIM_WEIGHT +
-                       self.PSNR_WEIGHT + self.TEMPORAL_WEIGHT)
+        legacy_total = (
+            self.SSIM_WEIGHT
+            + self.MS_SSIM_WEIGHT
+            + self.PSNR_WEIGHT
+            + self.TEMPORAL_WEIGHT
+        )
         tolerance = 1e-6  # More restrictive tolerance for configuration validation
         if abs(legacy_total - 1.0) > tolerance:
-            raise ValueError(f"Legacy composite quality weights must sum to 1.0 (±{tolerance}), got {legacy_total:.10f}")
+            raise ValueError(
+                f"Legacy composite quality weights must sum to 1.0 (±{tolerance}), got {legacy_total:.10f}"
+            )
 
         # Validate enhanced weights sum to 1.0
-        enhanced_total = (self.ENHANCED_SSIM_WEIGHT + self.ENHANCED_MS_SSIM_WEIGHT +
-                         self.ENHANCED_PSNR_WEIGHT + self.ENHANCED_MSE_WEIGHT +
-                         self.ENHANCED_FSIM_WEIGHT + self.ENHANCED_EDGE_WEIGHT +
-                         self.ENHANCED_GMSD_WEIGHT + self.ENHANCED_CHIST_WEIGHT +
-                         self.ENHANCED_SHARPNESS_WEIGHT + self.ENHANCED_TEXTURE_WEIGHT +
-                         self.ENHANCED_TEMPORAL_WEIGHT)
+        enhanced_total = (
+            self.ENHANCED_SSIM_WEIGHT
+            + self.ENHANCED_MS_SSIM_WEIGHT
+            + self.ENHANCED_PSNR_WEIGHT
+            + self.ENHANCED_MSE_WEIGHT
+            + self.ENHANCED_FSIM_WEIGHT
+            + self.ENHANCED_EDGE_WEIGHT
+            + self.ENHANCED_GMSD_WEIGHT
+            + self.ENHANCED_CHIST_WEIGHT
+            + self.ENHANCED_SHARPNESS_WEIGHT
+            + self.ENHANCED_TEXTURE_WEIGHT
+            + self.ENHANCED_TEMPORAL_WEIGHT
+        )
         if abs(enhanced_total - 1.0) > tolerance:
-            raise ValueError(f"Enhanced composite quality weights must sum to 1.0 (±{tolerance}), got {enhanced_total:.10f}")
+            raise ValueError(
+                f"Enhanced composite quality weights must sum to 1.0 (±{tolerance}), got {enhanced_total:.10f}"
+            )
 
         # Validate all weights are non-negative
-        legacy_weights = [self.SSIM_WEIGHT, self.MS_SSIM_WEIGHT, self.PSNR_WEIGHT, self.TEMPORAL_WEIGHT]
-        enhanced_weights = [self.ENHANCED_SSIM_WEIGHT, self.ENHANCED_MS_SSIM_WEIGHT,
-                          self.ENHANCED_PSNR_WEIGHT, self.ENHANCED_MSE_WEIGHT,
-                          self.ENHANCED_FSIM_WEIGHT, self.ENHANCED_EDGE_WEIGHT,
-                          self.ENHANCED_GMSD_WEIGHT, self.ENHANCED_CHIST_WEIGHT,
-                          self.ENHANCED_SHARPNESS_WEIGHT, self.ENHANCED_TEXTURE_WEIGHT,
-                          self.ENHANCED_TEMPORAL_WEIGHT]
+        legacy_weights = [
+            self.SSIM_WEIGHT,
+            self.MS_SSIM_WEIGHT,
+            self.PSNR_WEIGHT,
+            self.TEMPORAL_WEIGHT,
+        ]
+        enhanced_weights = [
+            self.ENHANCED_SSIM_WEIGHT,
+            self.ENHANCED_MS_SSIM_WEIGHT,
+            self.ENHANCED_PSNR_WEIGHT,
+            self.ENHANCED_MSE_WEIGHT,
+            self.ENHANCED_FSIM_WEIGHT,
+            self.ENHANCED_EDGE_WEIGHT,
+            self.ENHANCED_GMSD_WEIGHT,
+            self.ENHANCED_CHIST_WEIGHT,
+            self.ENHANCED_SHARPNESS_WEIGHT,
+            self.ENHANCED_TEXTURE_WEIGHT,
+            self.ENHANCED_TEMPORAL_WEIGHT,
+        ]
         all_weights = legacy_weights + enhanced_weights
         if any(w < 0 for w in all_weights):
-            raise ValueError(f"All weights must be non-negative, got negatives in {all_weights}")
+            raise ValueError(
+                f"All weights must be non-negative, got negatives in {all_weights}"
+            )
 
         # Note: Frame alignment is always content-based (most robust approach)
 
@@ -138,7 +167,9 @@ class MetricsConfig:
 
         # Validate frame limit is reasonable
         if self.SSIM_MAX_FRAMES <= 0 or self.SSIM_MAX_FRAMES > 1000:
-            raise ValueError(f"SSIM_MAX_FRAMES must be between 1 and 1000, got {self.SSIM_MAX_FRAMES}")
+            raise ValueError(
+                f"SSIM_MAX_FRAMES must be between 1 and 1000, got {self.SSIM_MAX_FRAMES}"
+            )
 
         # Validate PSNR max dB
         if self.PSNR_MAX_DB <= 0:
@@ -175,13 +206,13 @@ class PathConfig:
         try:
             # Convert dataclass to dict for validation
             config_dict = {
-                'RAW_DIR': self.RAW_DIR,
-                'RENDERS_DIR': self.RENDERS_DIR,
-                'CSV_DIR': self.CSV_DIR,
-                'BAD_GIFS_DIR': self.BAD_GIFS_DIR,
-                'TMP_DIR': self.TMP_DIR,
-                'SEED_DIR': self.SEED_DIR,
-                'LOGS_DIR': self.LOGS_DIR,
+                "RAW_DIR": self.RAW_DIR,
+                "RENDERS_DIR": self.RENDERS_DIR,
+                "CSV_DIR": self.CSV_DIR,
+                "BAD_GIFS_DIR": self.BAD_GIFS_DIR,
+                "TMP_DIR": self.TMP_DIR,
+                "SEED_DIR": self.SEED_DIR,
+                "LOGS_DIR": self.LOGS_DIR,
             }
 
             # Validate paths for security
@@ -231,17 +262,17 @@ class EngineConfig:
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
         import os
-        
+
         # Environment variable mapping
         env_overrides = {
-            'GIFSICLE_PATH': 'GIFLAB_GIFSICLE_PATH',
-            'ANIMATELY_PATH': 'GIFLAB_ANIMATELY_PATH',
-            'IMAGEMAGICK_PATH': 'GIFLAB_IMAGEMAGICK_PATH',
-            'FFMPEG_PATH': 'GIFLAB_FFMPEG_PATH',
-            'FFPROBE_PATH': 'GIFLAB_FFPROBE_PATH',
-            'GIFSKI_PATH': 'GIFLAB_GIFSKI_PATH',
+            "GIFSICLE_PATH": "GIFLAB_GIFSICLE_PATH",
+            "ANIMATELY_PATH": "GIFLAB_ANIMATELY_PATH",
+            "IMAGEMAGICK_PATH": "GIFLAB_IMAGEMAGICK_PATH",
+            "FFMPEG_PATH": "GIFLAB_FFMPEG_PATH",
+            "FFPROBE_PATH": "GIFLAB_FFPROBE_PATH",
+            "GIFSKI_PATH": "GIFLAB_GIFSKI_PATH",
         }
-        
+
         # Apply overrides from environment variables
         for attr_name, env_var_name in env_overrides.items():
             env_value = os.getenv(env_var_name)

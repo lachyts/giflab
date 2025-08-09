@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import glob
 import os
-from shutil import copy
 import time
 from pathlib import Path
+from shutil import copy
 from typing import Any
 
 from ..system_tools import discover_tool
-
 from .common import run_command
 
 __all__ = [
@@ -23,6 +22,7 @@ __all__ = [
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _magick_binary() -> str:
     """Return the preferred ImageMagick binary (``magick`` or ``convert``)."""
     info = discover_tool("imagemagick")
@@ -33,6 +33,7 @@ def _magick_binary() -> str:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def color_reduce(
     input_path: Path,
@@ -142,44 +143,46 @@ def export_png_sequence(
     frame_pattern: str = "frame_%04d.png",
 ) -> dict[str, Any]:
     """Export GIF frames as PNG sequence for gifski pipeline optimization.
-    
+
     Args:
         input_path: Input GIF file
-        output_dir: Directory to store PNG sequence  
+        output_dir: Directory to store PNG sequence
         frame_pattern: Pattern for PNG filenames (default: frame_%04d.png)
-        
+
     Returns:
         Metadata dict with execution info and PNG sequence details
-        
+
     Note:
         ImageMagick uses -coalesce which properly handles frame timing and prevents
         the over-extraction issues that can occur with FFmpeg on animately-processed GIFs.
     """
     magick = _magick_binary()
-    
+
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Build output path with pattern
     output_pattern = output_dir / frame_pattern
-    
+
     cmd = [
         magick,
         str(input_path),
         "-coalesce",  # Ensure frames are properly separated and handle timing correctly
         str(output_pattern),
     ]
-    
+
     metadata = run_command(cmd, engine="imagemagick", output_path=output_pattern)
-    
+
     # Count generated PNG files
     png_files = glob.glob(str(output_dir / "frame_*.png"))
-    
+
     # Add PNG sequence info to metadata
-    metadata.update({
-        "png_sequence_dir": str(output_dir),
-        "frame_count": len(png_files),
-        "frame_pattern": frame_pattern,
-    })
-    
+    metadata.update(
+        {
+            "png_sequence_dir": str(output_dir),
+            "frame_count": len(png_files),
+            "frame_pattern": frame_pattern,
+        }
+    )
+
     return metadata

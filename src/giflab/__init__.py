@@ -41,10 +41,10 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
         if mse == 0:
             return 1.0
         # Scale to 0-1 where lower mse ⇒ higher similarity.
-        return float(1.0 / (1.0 + mse / (data_range ** 2)))
+        return float(1.0 / (1.0 + mse / (data_range**2)))
 
     metrics_stub.peak_signal_noise_ratio = _psnr  # type: ignore[attr-defined]
-    metrics_stub.structural_similarity = _ssim    # type: ignore[attr-defined]
+    metrics_stub.structural_similarity = _ssim  # type: ignore[attr-defined]
 
     # Local Binary Pattern surrogate – returns zeros array to keep shape.
     def _local_binary_pattern(image, P=8, R=1, method="default"):  # noqa: D401
@@ -60,16 +60,16 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
             img = img.mean(axis=2).astype(_np.uint8)
 
         # Quick-and-dirty 4-neighbour pattern encoding to capture local changes
-        up    = _np.roll(img, -1, axis=0)
-        down  = _np.roll(img, 1, axis=0)
-        left  = _np.roll(img, -1, axis=1)
+        up = _np.roll(img, -1, axis=0)
+        down = _np.roll(img, 1, axis=0)
+        left = _np.roll(img, -1, axis=1)
         right = _np.roll(img, 1, axis=1)
 
         pattern = (
-            ((up > img).astype(_np.uint8)) +
-            (2 * (down > img).astype(_np.uint8)) +
-            (4 * (left > img).astype(_np.uint8)) +
-            (8 * (right > img).astype(_np.uint8))
+            ((up > img).astype(_np.uint8))
+            + (2 * (down > img).astype(_np.uint8))
+            + (4 * (left > img).astype(_np.uint8))
+            + (8 * (right > img).astype(_np.uint8))
         )
 
         return pattern.astype(_np.float32)
@@ -135,26 +135,11 @@ from .tool_interfaces import (
 
 # Stage-2: capability wrappers ------------------------------------------------
 from .tool_wrappers import (
+    AnimatelyAdvancedLossyCompressor,
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     AnimatelyLossyCompressor,
-    AnimatelyAdvancedLossyCompressor,
     FFmpegColorReducer,
-    FFmpegFrameReducer,
-    FFmpegLossyCompressor,
-    GifsicleColorReducer,
-    GifsicleFrameReducer,
-    GifsicleLossyCompressor,
-    GifskiLossyCompressor,
-    ImageMagickColorReducer,
-    ImageMagickFrameReducer,
-    ImageMagickLossyCompressor,
-    # Dithering-specific wrappers (research-based)
-    ImageMagickColorReducerRiemersma,
-    ImageMagickColorReducerFloydSteinberg,
-    ImageMagickColorReducerNone,
-    FFmpegColorReducerSierra2,
-    FFmpegColorReducerFloydSteinberg,
     # All Bayer scale variations for systematic elimination testing
     FFmpegColorReducerBayerScale0,
     FFmpegColorReducerBayerScale1,
@@ -162,5 +147,20 @@ from .tool_wrappers import (
     FFmpegColorReducerBayerScale3,
     FFmpegColorReducerBayerScale4,
     FFmpegColorReducerBayerScale5,
+    FFmpegColorReducerFloydSteinberg,
     FFmpegColorReducerNone,
+    FFmpegColorReducerSierra2,
+    FFmpegFrameReducer,
+    FFmpegLossyCompressor,
+    GifsicleColorReducer,
+    GifsicleFrameReducer,
+    GifsicleLossyCompressor,
+    GifskiLossyCompressor,
+    ImageMagickColorReducer,
+    ImageMagickColorReducerFloydSteinberg,
+    ImageMagickColorReducerNone,
+    # Dithering-specific wrappers (research-based)
+    ImageMagickColorReducerRiemersma,
+    ImageMagickFrameReducer,
+    ImageMagickLossyCompressor,
 )

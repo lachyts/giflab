@@ -10,17 +10,25 @@ except ImportError:  # pragma: no cover
     yaml = None  # PyYAML is optional for core runtime
 
 
-def _require_yaml():
+def _require_yaml() -> None:
     if yaml is None:
-        raise RuntimeError("PyYAML not installed. Run `poetry add pyyaml` or `pip install pyyaml`.")
+        raise RuntimeError(
+            "PyYAML not installed. Run `poetry add pyyaml` or `pip install pyyaml`."
+        )
 
 
 def read_pipelines_yaml(path: Path) -> list[str]:
     """Return list of pipeline identifiers from YAML file."""
     _require_yaml()
     data = yaml.safe_load(path.read_text())
-    if not isinstance(data, dict) or "pipelines" not in data or not isinstance(data["pipelines"], list):
-        raise ValueError("Invalid pipelines YAML format – expected key 'pipelines: [list]'")
+    if (
+        not isinstance(data, dict)
+        or "pipelines" not in data
+        or not isinstance(data["pipelines"], list)
+    ):
+        raise ValueError(
+            "Invalid pipelines YAML format – expected key 'pipelines: [list]'"
+        )
     return [str(x) for x in data["pipelines"]]
 
 

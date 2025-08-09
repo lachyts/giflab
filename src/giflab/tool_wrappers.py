@@ -30,6 +30,19 @@ from pathlib import Path
 from typing import Any
 
 from .config import DEFAULT_ENGINE_CONFIG
+
+# External engine imports - centralized at top level for consistency
+from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
+from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
+from .external_engines.ffmpeg_enhanced import (
+    color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering,
+)
+from .external_engines.gifski import lossy_compress as gifski_lossy_compress
+from .external_engines.imagemagick import frame_reduce as imagemagick_frame_reduce
+from .external_engines.imagemagick import lossy_compress as imagemagick_lossy_compress
+from .external_engines.imagemagick_enhanced import (
+    color_reduce_with_dithering as imagemagick_color_reduce_with_dithering,
+)
 from .lossy import (
     _is_executable,  # pyright: ignore [private-use]
     compress_with_animately,
@@ -44,6 +57,7 @@ from .lossy_extended import (
     GifsicleOptimizationLevel,
     compress_with_gifsicle_extended,
 )
+from .meta import extract_gif_metadata
 from .system_tools import discover_tool
 from .tool_interfaces import (
     ColorReductionTool,
@@ -52,19 +66,10 @@ from .tool_interfaces import (
     LossyCompressionTool,
 )
 
-# External engine imports - centralized at top level for consistency
-from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
-from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
-from .external_engines.ffmpeg_enhanced import color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering
-from .external_engines.gifski import lossy_compress as gifski_lossy_compress
-from .external_engines.imagemagick import frame_reduce as imagemagick_frame_reduce
-from .external_engines.imagemagick import lossy_compress as imagemagick_lossy_compress
-from .external_engines.imagemagick_enhanced import color_reduce_with_dithering as imagemagick_color_reduce_with_dithering
-from .meta import extract_gif_metadata
-
 # ---------------------------------------------------------------------------
 # GIFSICLE
 # ---------------------------------------------------------------------------
+
 
 class GifsicleColorReducer(ColorReductionTool):
     NAME = "gifsicle-color"
@@ -81,7 +86,13 @@ class GifsicleColorReducer(ColorReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
@@ -112,7 +123,13 @@ class GifsicleFrameReducer(FrameReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
@@ -143,7 +160,13 @@ class GifsicleLossyCompressor(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
@@ -157,6 +180,7 @@ class GifsicleLossyCompressor(LossyCompressionTool):
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
+
 
 # ---------------------------------------------------------------------------
 # Gifsicle lossy wrappers per optimisation level
@@ -181,7 +205,13 @@ class _BaseGifsicleLossyOptim(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         # lossy_level required even though optimisation level is fixed per class
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
@@ -225,9 +255,11 @@ class GifsicleLossyO3(_BaseGifsicleLossyOptim):
     NAME = "gifsicle-lossy-O3"
     _OPT_LEVEL = GifsicleOptimizationLevel.LEVEL3
 
+
 # ---------------------------------------------------------------------------
 # ANIMATELY
 # ---------------------------------------------------------------------------
+
 
 class AnimatelyColorReducer(ColorReductionTool):
     NAME = "animately-color"
@@ -244,7 +276,13 @@ class AnimatelyColorReducer(ColorReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
@@ -275,7 +313,13 @@ class AnimatelyFrameReducer(FrameReductionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
@@ -306,7 +350,13 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
@@ -337,35 +387,41 @@ class AnimatelyAdvancedLossyCompressor(LossyCompressionTool):
         except Exception:
             return "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Apply Animately's advanced lossy compression with PNG sequence input.
-        
+
         This uses the PNG sequence pipeline for superior compression quality,
         particularly effective for gradients and mixed content types.
-        
+
         Args:
             input_path: Path to input GIF file
             output_path: Path to save compressed GIF
             params: Dict containing 'lossy_level', optionally 'colors' and 'png_sequence_dir'
-            
+
         Returns:
             Dictionary with compression metadata
         """
         from .lossy import compress_with_animately_advanced_lossy
-        
+
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
-        
+
         lossy_level = int(params["lossy_level"])
         color_keep_count = params.get("colors", None)
         if color_keep_count is not None:
             color_keep_count = int(color_keep_count)
-        
+
         # Check if PNG sequence directory was provided by previous pipeline step
         png_sequence_dir = params.get("png_sequence_dir", None)
         if png_sequence_dir is not None:
             png_sequence_dir = Path(png_sequence_dir)
-        
+
         return compress_with_animately_advanced_lossy(
             input_path,
             output_path,
@@ -377,9 +433,11 @@ class AnimatelyAdvancedLossyCompressor(LossyCompressionTool):
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
 
+
 # ---------------------------------------------------------------------------
 # ImageMagick (stub)
 # ---------------------------------------------------------------------------
+
 
 class ImageMagickColorReducer(ColorReductionTool):
     NAME = "imagemagick-color"
@@ -393,13 +451,19 @@ class ImageMagickColorReducer(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         dithering_method = params.get("dithering_method", "None")
-        
+
         return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -420,12 +484,18 @@ class ImageMagickFrameReducer(FrameReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
-        
+
         keep_ratio = float(params["ratio"])
-        
+
         return imagemagick_frame_reduce(
             input_path,
             output_path,
@@ -445,20 +515,28 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         quality = 85  # default quality
         if params and "quality" in params:
             quality = int(params["quality"])
-        
+
         return imagemagick_lossy_compress(
             input_path,
             output_path,
             quality=quality,
         )
 
+
 # ---------------------------------------------------------------------------
 # FFmpeg (stub)
 # ---------------------------------------------------------------------------
+
 
 class FFmpegColorReducer(ColorReductionTool):
     NAME = "ffmpeg-color"
@@ -472,11 +550,17 @@ class FFmpegColorReducer(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         colors = 256  # default color count
-        fps = 15.0    # default fps for palette generation
+        fps = 15.0  # default fps for palette generation
         dithering_method = "none"  # default no dithering
-        
+
         if params:
             if "colors" in params:
                 colors = int(params["colors"])
@@ -484,7 +568,7 @@ class FFmpegColorReducer(ColorReductionTool):
                 fps = float(params["fps"])
             if "dithering_method" in params:
                 dithering_method = params["dithering_method"]
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -506,12 +590,18 @@ class FFmpegFrameReducer(FrameReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
-        
+
         ratio = float(params["ratio"])
-        
+
         # Get original FPS to calculate target FPS
         try:
             metadata = extract_gif_metadata(input_path)
@@ -519,13 +609,13 @@ class FFmpegFrameReducer(FrameReductionTool):
         except Exception:
             # Fallback to default FPS if metadata extraction fails
             original_fps = 10.0
-        
+
         # Calculate target FPS based on ratio
         target_fps = original_fps * ratio
-        
+
         # Ensure minimum FPS to avoid issues
         target_fps = max(target_fps, 0.1)
-        
+
         return ffmpeg_frame_reduce(
             input_path,
             output_path,
@@ -545,9 +635,15 @@ class FFmpegLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         q_scale = 4  # default quantiser value (1-31 range)
-        
+
         if params:
             # Map lossy_level (0-100) to q_scale (1-31)
             if "lossy_level" in params:
@@ -556,19 +652,22 @@ class FFmpegLossyCompressor(LossyCompressionTool):
                 q_scale = max(1, min(31, 31 - int(lossy_level * 30 / 100)))
             elif "q_scale" in params:
                 q_scale = int(params["q_scale"])
-        
+
         return ffmpeg_lossy_compress(
             input_path,
             output_path,
             q_scale=q_scale,
         )
 
+
 # ---------------------------------------------------------------------------
 # ImageMagick Dithering-Specific Wrappers (Research-Based)
 # ---------------------------------------------------------------------------
 
+
 class ImageMagickColorReducerRiemersma(ColorReductionTool):
     """ImageMagick color reducer with Riemersma dithering (best all-around performer from research)."""
+
     NAME = "imagemagick-color-riemersma"
     COMBINE_GROUP = "imagemagick"
 
@@ -580,12 +679,18 @@ class ImageMagickColorReducerRiemersma(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
-        
+
         return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -596,6 +701,7 @@ class ImageMagickColorReducerRiemersma(ColorReductionTool):
 
 class ImageMagickColorReducerFloydSteinberg(ColorReductionTool):
     """ImageMagick color reducer with Floyd-Steinberg dithering (standard high-quality baseline)."""
+
     NAME = "imagemagick-color-floyd"
     COMBINE_GROUP = "imagemagick"
 
@@ -607,12 +713,18 @@ class ImageMagickColorReducerFloydSteinberg(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
-        
+
         return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -623,6 +735,7 @@ class ImageMagickColorReducerFloydSteinberg(ColorReductionTool):
 
 class ImageMagickColorReducerNone(ColorReductionTool):
     """ImageMagick color reducer with no dithering (size priority baseline)."""
+
     NAME = "imagemagick-color-none"
     COMBINE_GROUP = "imagemagick"
 
@@ -634,12 +747,18 @@ class ImageMagickColorReducerNone(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("imagemagick").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
-        
+
         return imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -652,8 +771,10 @@ class ImageMagickColorReducerNone(ColorReductionTool):
 # FFmpeg Dithering-Specific Wrappers (Research-Based)
 # ---------------------------------------------------------------------------
 
+
 class FFmpegColorReducerSierra2(ColorReductionTool):
     """FFmpeg color reducer with Sierra2 dithering (excellent quality/size balance from research)."""
+
     NAME = "ffmpeg-color-sierra2"
     COMBINE_GROUP = "ffmpeg"
 
@@ -665,13 +786,19 @@ class FFmpegColorReducerSierra2(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -683,6 +810,7 @@ class FFmpegColorReducerSierra2(ColorReductionTool):
 
 class FFmpegColorReducerFloydSteinberg(ColorReductionTool):
     """FFmpeg color reducer with Floyd-Steinberg dithering (quality baseline)."""
+
     NAME = "ffmpeg-color-floyd"
     COMBINE_GROUP = "ffmpeg"
 
@@ -694,13 +822,19 @@ class FFmpegColorReducerFloydSteinberg(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -712,6 +846,7 @@ class FFmpegColorReducerFloydSteinberg(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale0(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 0 (2×2 matrix, poor quality from research - elimination candidate)."""
+
     NAME = "ffmpeg-color-bayer0"
     COMBINE_GROUP = "ffmpeg"
 
@@ -723,13 +858,19 @@ class FFmpegColorReducerBayerScale0(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -741,6 +882,7 @@ class FFmpegColorReducerBayerScale0(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale1(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 1 (4×4 matrix, higher quality Bayer variant from research)."""
+
     NAME = "ffmpeg-color-bayer1"
     COMBINE_GROUP = "ffmpeg"
 
@@ -752,13 +894,19 @@ class FFmpegColorReducerBayerScale1(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -770,6 +918,7 @@ class FFmpegColorReducerBayerScale1(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale2(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 2 (8×8 matrix, medium pattern from research)."""
+
     NAME = "ffmpeg-color-bayer2"
     COMBINE_GROUP = "ffmpeg"
 
@@ -781,13 +930,19 @@ class FFmpegColorReducerBayerScale2(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -799,6 +954,7 @@ class FFmpegColorReducerBayerScale2(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale3(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 3 (16×16 matrix, good balance from research)."""
+
     NAME = "ffmpeg-color-bayer3"
     COMBINE_GROUP = "ffmpeg"
 
@@ -810,13 +966,19 @@ class FFmpegColorReducerBayerScale3(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -828,6 +990,7 @@ class FFmpegColorReducerBayerScale3(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale4(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 4 (32×32 matrix, best compression for noisy content from research)."""
+
     NAME = "ffmpeg-color-bayer4"
     COMBINE_GROUP = "ffmpeg"
 
@@ -839,13 +1002,19 @@ class FFmpegColorReducerBayerScale4(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -857,6 +1026,7 @@ class FFmpegColorReducerBayerScale4(ColorReductionTool):
 
 class FFmpegColorReducerBayerScale5(ColorReductionTool):
     """FFmpeg color reducer with Bayer Scale 5 (64×64 matrix, maximum compression for noisy content from research)."""
+
     NAME = "ffmpeg-color-bayer5"
     COMBINE_GROUP = "ffmpeg"
 
@@ -868,13 +1038,19 @@ class FFmpegColorReducerBayerScale5(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -886,6 +1062,7 @@ class FFmpegColorReducerBayerScale5(ColorReductionTool):
 
 class FFmpegColorReducerNone(ColorReductionTool):
     """FFmpeg color reducer with no dithering (size priority baseline)."""
+
     NAME = "ffmpeg-color-none"
     COMBINE_GROUP = "ffmpeg"
 
@@ -897,13 +1074,19 @@ class FFmpegColorReducerNone(ColorReductionTool):
     def version(cls) -> str:
         return discover_tool("ffmpeg").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
-        
+
         colors = int(params["colors"])
         fps = params.get("fps", 15.0)
-        
+
         return ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
@@ -917,6 +1100,7 @@ class FFmpegColorReducerNone(ColorReductionTool):
 # gifski (stub)
 # ---------------------------------------------------------------------------
 
+
 class GifskiLossyCompressor(LossyCompressionTool):
     NAME = "gifski-lossy"
     COMBINE_GROUP = "gifski"
@@ -929,16 +1113,22 @@ class GifskiLossyCompressor(LossyCompressionTool):
     def version(cls) -> str:
         return discover_tool("gifski").version or "unknown"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         quality = 60  # default quality
         if params and "quality" in params:
             quality = int(params["quality"])
-        
+
         # Check if PNG sequence was provided by previous pipeline step
         png_sequence_dir = None
         if params and "png_sequence_dir" in params:
             png_sequence_dir = Path(params["png_sequence_dir"])
-        
+
         return gifski_lossy_compress(
             input_path,
             output_path,
@@ -946,12 +1136,13 @@ class GifskiLossyCompressor(LossyCompressionTool):
             png_sequence_dir=png_sequence_dir,
         )
 
+
 # ---------------------------------------------------------------------------
 # No-Operation fallbacks (always available)
 # ---------------------------------------------------------------------------
 
-from shutil import copy
 import time
+from shutil import copy
 
 
 class _BaseNoOpTool:
@@ -979,7 +1170,13 @@ class NoOpColorReducer(_BaseNoOpTool, ColorReductionTool):
 
     NAME = "none-color"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return self._copy_file(input_path, output_path)
 
 
@@ -988,7 +1185,13 @@ class NoOpFrameReducer(_BaseNoOpTool, FrameReductionTool):
 
     NAME = "none-frame"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return self._copy_file(input_path, output_path)
 
 
@@ -997,5 +1200,11 @@ class NoOpLossyCompressor(_BaseNoOpTool, LossyCompressionTool):
 
     NAME = "none-lossy"
 
-    def apply(self, input_path: Path, output_path: Path, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def apply(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return self._copy_file(input_path, output_path)

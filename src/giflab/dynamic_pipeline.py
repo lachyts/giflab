@@ -17,6 +17,7 @@ from .tool_interfaces import ExternalTool
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class PipelineStep:
     variable: str  # "frame_reduction" | "color_reduction" | "lossy_compression"

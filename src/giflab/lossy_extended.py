@@ -27,23 +27,23 @@ from .validation import validate_path_security
 
 def validate_lossy_level_for_engine(lossy_level: int, engine_name: str) -> None:
     """Validate lossy level for specific engine with engine-aware ranges.
-    
+
     Engine ranges:
     - Gifsicle: 0-300
-    - Animately: 0-100  
+    - Animately: 0-100
     - FFmpeg: 0-100
     - Gifski: 0-100
     - ImageMagick: 0-100
-    
+
     Args:
         lossy_level: Lossy compression level to validate
         engine_name: Name of the engine (case-insensitive)
-        
+
     Raises:
         ValueError: If lossy level is outside valid range for the engine
     """
     engine_name_lower = engine_name.lower()
-    
+
     if "gifsicle" in engine_name_lower:
         max_lossy = 300
         engine_display = "Gifsicle"
@@ -51,28 +51,27 @@ def validate_lossy_level_for_engine(lossy_level: int, engine_name: str) -> None:
         # Most engines use 0-100 range
         max_lossy = 100
         engine_display = engine_name
-    
+
     if lossy_level < 0 or lossy_level > max_lossy:
         raise ValueError(
             f"lossy_level must be between 0 and {max_lossy} for {engine_display}, got {lossy_level}"
         )
 
 
-
-
-
 class GifsicleOptimizationLevel(Enum):
     """Gifsicle optimization levels."""
-    BASIC = "basic"      # --optimize
-    LEVEL1 = "level1"    # -O1
-    LEVEL2 = "level2"    # -O2
-    LEVEL3 = "level3"    # -O3
+
+    BASIC = "basic"  # --optimize
+    LEVEL1 = "level1"  # -O1
+    LEVEL2 = "level2"  # -O2
+    LEVEL3 = "level3"  # -O3
 
 
 class GifsicleDitheringMode(Enum):
     """Gifsicle dithering modes."""
-    NONE = "none"        # --no-dither
-    FLOYD = "floyd"      # --dither (default Floyd-Steinberg)
+
+    NONE = "none"  # --no-dither
+    FLOYD = "floyd"  # --dither (default Floyd-Steinberg)
     ORDERED = "ordered"  # --dither=ordered
 
 
@@ -120,7 +119,7 @@ def build_gifsicle_color_args_extended(
     color_count: int,
     original_colors: int,
     dither_mode: GifsicleDitheringMode = GifsicleDitheringMode.NONE,
-    color_method: str | None = None
+    color_method: str | None = None,
 ) -> list[str]:
     """Build extended gifsicle color reduction arguments.
 
@@ -158,7 +157,7 @@ def compress_with_gifsicle_extended(
     optimization_level: GifsicleOptimizationLevel = GifsicleOptimizationLevel.BASIC,
     dithering_mode: GifsicleDitheringMode = GifsicleDitheringMode.NONE,
     color_method: str | None = None,
-    extra_args: list[str] | None = None
+    extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Compress GIF using gifsicle with extended options.
 
@@ -257,11 +256,7 @@ def compress_with_gifsicle_extended(
 
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=300
+            cmd, capture_output=True, text=True, check=True, timeout=300
         )
 
         end_time = time.time()
@@ -278,9 +273,9 @@ def compress_with_gifsicle_extended(
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=5
+                timeout=5,
             )
-            engine_version = version_result.stdout.strip().split('\n')[0]
+            engine_version = version_result.stdout.strip().split("\n")[0]
         except Exception:
             engine_version = "unknown"
 
@@ -297,7 +292,7 @@ def compress_with_gifsicle_extended(
             "original_frames": total_frames,
             "original_colors": original_colors,
             "command": " ".join(cmd),
-            "stderr": result.stderr if result.stderr else None
+            "stderr": result.stderr if result.stderr else None,
         }
 
     except subprocess.CalledProcessError as e:
@@ -315,7 +310,7 @@ def apply_compression_strategy(
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
     color_keep_count: int | None = 256,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """Apply compression using a named strategy.
 
@@ -343,44 +338,64 @@ def apply_compression_strategy(
     """
     if strategy == "pure_gifsicle":
         return compress_with_gifsicle_extended(
-            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
+            input_path,
+            output_path,
+            lossy_level,
+            frame_keep_ratio,
+            color_keep_count,
             optimization_level=GifsicleOptimizationLevel.BASIC,
-            dithering_mode=GifsicleDitheringMode.NONE
+            dithering_mode=GifsicleDitheringMode.NONE,
         )
 
     elif strategy == "gifsicle_dithered":
         return compress_with_gifsicle_extended(
-            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
+            input_path,
+            output_path,
+            lossy_level,
+            frame_keep_ratio,
+            color_keep_count,
             optimization_level=GifsicleOptimizationLevel.BASIC,
-            dithering_mode=GifsicleDitheringMode.FLOYD
+            dithering_mode=GifsicleDitheringMode.FLOYD,
         )
 
     elif strategy == "gifsicle_optimized":
         return compress_with_gifsicle_extended(
-            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
+            input_path,
+            output_path,
+            lossy_level,
+            frame_keep_ratio,
+            color_keep_count,
             optimization_level=GifsicleOptimizationLevel.LEVEL3,
-            dithering_mode=GifsicleDitheringMode.NONE
+            dithering_mode=GifsicleDitheringMode.NONE,
         )
 
     elif strategy == "gifsicle_ordered_dither":
         return compress_with_gifsicle_extended(
-            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
+            input_path,
+            output_path,
+            lossy_level,
+            frame_keep_ratio,
+            color_keep_count,
             optimization_level=GifsicleOptimizationLevel.BASIC,
-            dithering_mode=GifsicleDitheringMode.ORDERED
+            dithering_mode=GifsicleDitheringMode.ORDERED,
         )
 
     elif strategy == "gifsicle_custom":
-        opt_level = kwargs.get('optimization_level', GifsicleOptimizationLevel.BASIC)
-        dither_mode = kwargs.get('dithering_mode', GifsicleDitheringMode.NONE)
-        color_method = kwargs.get('color_method', None)
-        extra_args = kwargs.get('extra_args', None)
+        opt_level = kwargs.get("optimization_level", GifsicleOptimizationLevel.BASIC)
+        dither_mode = kwargs.get("dithering_mode", GifsicleDitheringMode.NONE)
+        color_method = kwargs.get("color_method", None)
+        extra_args = kwargs.get("extra_args", None)
 
         return compress_with_gifsicle_extended(
-            input_path, output_path, lossy_level, frame_keep_ratio, color_keep_count,
+            input_path,
+            output_path,
+            lossy_level,
+            frame_keep_ratio,
+            color_keep_count,
             optimization_level=opt_level,
             dithering_mode=dither_mode,
             color_method=color_method,
-            extra_args=extra_args
+            extra_args=extra_args,
         )
 
     else:
@@ -393,7 +408,7 @@ def compare_compression_strategies(
     strategies: list[str],
     lossy_level: int = 0,
     frame_keep_ratio: float = 1.0,
-    color_keep_count: int | None = 256
+    color_keep_count: int | None = 256,
 ) -> dict[str, dict[str, Any]]:
     """Compare multiple compression strategies on the same input.
 
@@ -414,8 +429,12 @@ def compare_compression_strategies(
         try:
             output_path = output_dir / f"{strategy}_output.gif"
             result = apply_compression_strategy(
-                input_path, output_path, strategy,
-                lossy_level, frame_keep_ratio, color_keep_count
+                input_path,
+                output_path,
+                strategy,
+                lossy_level,
+                frame_keep_ratio,
+                color_keep_count,
             )
             results[strategy] = result
         except Exception as e:
@@ -435,7 +454,7 @@ def get_available_strategies() -> list[str]:
         "gifsicle_dithered",
         "gifsicle_optimized",
         "gifsicle_ordered_dither",
-        "gifsicle_custom"
+        "gifsicle_custom",
     ]
 
 
@@ -453,6 +472,6 @@ def get_strategy_description(strategy: str) -> str:
         "gifsicle_dithered": "Gifsicle with Floyd-Steinberg dithering",
         "gifsicle_optimized": "Gifsicle with -O3 optimization",
         "gifsicle_ordered_dither": "Gifsicle with ordered dithering",
-        "gifsicle_custom": "Custom gifsicle options"
+        "gifsicle_custom": "Custom gifsicle options",
     }
     return descriptions.get(strategy, "Unknown strategy")

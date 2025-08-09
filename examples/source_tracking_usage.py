@@ -33,14 +33,12 @@ def example_tenor_collection():
             collection_context="email_marketing_campaign",
             tenor_id="12345",
             popularity=0.85,
-            search_rank=1
+            search_rank=1,
         )
 
         # Extract GIF metadata with source tracking
         gif_metadata = extract_gif_metadata(
-            gif_path,
-            source_platform=platform,
-            source_metadata=metadata
+            gif_path, source_platform=platform, source_metadata=metadata
         )
 
         print("✅ Tenor GIF processed:")
@@ -56,9 +54,6 @@ def example_tenor_collection():
         return None
 
 
-
-
-
 def example_animately_upload():
     """Example of processing user uploads from Animately platform."""
 
@@ -71,21 +66,21 @@ def example_animately_upload():
             user_id="user_456",
             upload_intent="compression",
             original_size_kb=1024.5,
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         )
 
         # Extract GIF metadata with source tracking
         gif_metadata = extract_gif_metadata(
-            gif_path,
-            source_platform=platform,
-            source_metadata=metadata
+            gif_path, source_platform=platform, source_metadata=metadata
         )
 
         print("✅ Animately Upload processed:")
         print(f"   Platform: {gif_metadata.source_platform}")
         print(f"   User ID: {gif_metadata.source_metadata.get('user_id', 'N/A')}")
         print(f"   Intent: {gif_metadata.source_metadata.get('upload_intent', 'N/A')}")
-        print(f"   Original Size: {gif_metadata.source_metadata.get('original_size_kb', 'N/A')} KB")
+        print(
+            f"   Original Size: {gif_metadata.source_metadata.get('original_size_kb', 'N/A')} KB"
+        )
         print()
 
         return gif_metadata
@@ -103,22 +98,20 @@ def example_tgif_dataset():
     if gif_path.exists():
         # Create TGIF dataset metadata
         platform, metadata = create_tgif_metadata(
-            tgif_id="tgif_001",
-            description="a man is dancing",
-            category="human_action"
+            tgif_id="tgif_001", description="a man is dancing", category="human_action"
         )
 
         # Extract GIF metadata with source tracking
         gif_metadata = extract_gif_metadata(
-            gif_path,
-            source_platform=platform,
-            source_metadata=metadata
+            gif_path, source_platform=platform, source_metadata=metadata
         )
 
         print("✅ TGIF Dataset GIF processed:")
         print(f"   Platform: {gif_metadata.source_platform}")
         print(f"   TGIF ID: {gif_metadata.source_metadata.get('tgif_id', 'N/A')}")
-        print(f"   Description: {gif_metadata.source_metadata.get('description', 'N/A')}")
+        print(
+            f"   Description: {gif_metadata.source_metadata.get('description', 'N/A')}"
+        )
         print(f"   Category: {gif_metadata.source_metadata.get('category', 'N/A')}")
         print()
 
@@ -151,7 +144,7 @@ def example_directory_based_detection():
             raw_dir / "tenor" / "marketing" / "business_chart.gif",
             raw_dir / "animately" / "user_uploads" / "animation.gif",
             raw_dir / "tgif_dataset" / "human_action" / "dancing.gif",
-            raw_dir / "unknown" / "misc.gif"
+            raw_dir / "unknown" / "misc.gif",
         ]
 
         print("📄 Creating test GIF files...")
@@ -217,8 +210,8 @@ def example_mixed_dataset_analysis():
         # Show search queries
         queries = set()
         for gif in all_gifs:
-            if gif.source_metadata and 'query' in gif.source_metadata:
-                queries.add(gif.source_metadata['query'])
+            if gif.source_metadata and "query" in gif.source_metadata:
+                queries.add(gif.source_metadata["query"])
 
         if queries:
             print(f"   Search Queries: {', '.join(sorted(queries))}")
@@ -260,7 +253,7 @@ def example_csv_output():
         "entropy": 4.2,
         "source_platform": "tenor",
         "source_metadata": '{"query":"love","collection_context":"email_marketing","tenor_id":"12345","popularity":0.85,"detected_from":"directory","collected_at":"2024-01-15T10:30:00Z"}',
-        "timestamp": "2024-01-15T10:30:15Z"
+        "timestamp": "2024-01-15T10:30:15Z",
     }
 
     print("Sample CSV row with source tracking:")
@@ -270,11 +263,15 @@ def example_csv_output():
     print()
     print("📊 SQL Analysis Examples:")
     print("   # Platform performance comparison")
-    print("   SELECT source_platform, AVG(kilobytes) as avg_size, AVG(ssim) as avg_quality")
+    print(
+        "   SELECT source_platform, AVG(kilobytes) as avg_size, AVG(ssim) as avg_quality"
+    )
     print("   FROM results GROUP BY source_platform;")
     print()
     print("   # Query-specific analysis")
-    print("   SELECT JSON_EXTRACT(source_metadata, '$.query') as query, COUNT(*) as count")
+    print(
+        "   SELECT JSON_EXTRACT(source_metadata, '$.query') as query, COUNT(*) as count"
+    )
     print("   FROM results WHERE source_platform = 'tenor' GROUP BY query;")
 
 

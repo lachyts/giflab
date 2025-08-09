@@ -22,13 +22,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FrameExtractResult:
     """Result of frame extraction from a GIF."""
+
     frames: list[np.ndarray]
     frame_count: int
     dimensions: tuple[int, int]  # (width, height)
     duration_ms: int
 
 
-def extract_gif_frames(gif_path: Path, max_frames: int | None = None) -> FrameExtractResult:
+def extract_gif_frames(
+    gif_path: Path, max_frames: int | None = None
+) -> FrameExtractResult:
     """Extract frames from a GIF file.
 
     Args:
@@ -44,14 +47,14 @@ def extract_gif_frames(gif_path: Path, max_frames: int | None = None) -> FrameEx
     """
     try:
         with Image.open(gif_path) as img:
-            if not hasattr(img, 'n_frames') or img.n_frames == 1:
+            if not hasattr(img, "n_frames") or img.n_frames == 1:
                 # Single frame image (PNG, JPEG, etc.) or single-frame GIF
-                frame = np.array(img.convert('RGB'))
+                frame = np.array(img.convert("RGB"))
                 return FrameExtractResult(
                     frames=[frame],
                     frame_count=1,
                     dimensions=(img.width, img.height),
-                    duration_ms=0
+                    duration_ms=0,
                 )
 
             total_frames = img.n_frames
@@ -83,29 +86,33 @@ def extract_gif_frames(gif_path: Path, max_frames: int | None = None) -> FrameEx
             else:
                 # Sample evenly across the entire animation to capture quality issues
                 # that may appear later in the animation
-                frame_indices = np.linspace(0, total_frames - 1, frames_to_extract, dtype=int)
+                frame_indices = np.linspace(
+                    0, total_frames - 1, frames_to_extract, dtype=int
+                )
 
             for i in frame_indices:
                 img.seek(i)
-                frame = np.array(img.convert('RGB'))
+                frame = np.array(img.convert("RGB"))
                 frames.append(frame)
 
                 # Get frame duration
-                duration = img.info.get('duration', 100)  # Default 100ms
+                duration = img.info.get("duration", 100)  # Default 100ms
                 total_duration += duration
 
             return FrameExtractResult(
                 frames=frames,
                 frame_count=len(frames),
                 dimensions=(img.width, img.height),
-                duration_ms=total_duration
+                duration_ms=total_duration,
             )
 
     except Exception as e:
         raise OSError(f"Failed to extract frames from {gif_path}: {e}") from e
 
 
-def resize_to_common_dimensions(frames1: list[np.ndarray], frames2: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]:
+def resize_to_common_dimensions(
+    frames1: list[np.ndarray], frames2: list[np.ndarray]
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Resize frames to common dimensions (smallest common size).
 
     Args:
@@ -146,7 +153,9 @@ def resize_to_common_dimensions(frames1: list[np.ndarray], frames2: list[np.ndar
 
         if frame.shape[:2] != (target_h, target_w):
             try:
-                resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                resized = cv2.resize(
+                    frame, (target_w, target_h), interpolation=cv2.INTER_AREA
+                )
                 resized_frames1.append(resized)
             except Exception as e:
                 raise ValueError(f"Failed to resize frame: {e}") from e
@@ -160,7 +169,9 @@ def resize_to_common_dimensions(frames1: list[np.ndarray], frames2: list[np.ndar
 
         if frame.shape[:2] != (target_h, target_w):
             try:
-                resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                resized = cv2.resize(
+                    frame, (target_w, target_h), interpolation=cv2.INTER_AREA
+                )
                 resized_frames2.append(resized)
             except Exception as e:
                 raise ValueError(f"Failed to resize frame: {e}") from e
@@ -168,9 +179,6 @@ def resize_to_common_dimensions(frames1: list[np.ndarray], frames2: list[np.ndar
             resized_frames2.append(frame)
 
     return resized_frames1, resized_frames2
-
-
-
 
 
 def calculate_frame_mse(frame1: np.ndarray, frame2: np.ndarray) -> float:
@@ -181,7 +189,9 @@ def calculate_frame_mse(frame1: np.ndarray, frame2: np.ndarray) -> float:
     return float(np.mean((frame1.astype(np.float32) - frame2.astype(np.float32)) ** 2))
 
 
-def calculate_safe_psnr(frame1: np.ndarray, frame2: np.ndarray, data_range: float = 255.0) -> float:
+def calculate_safe_psnr(
+    frame1: np.ndarray, frame2: np.ndarray, data_range: float = 255.0
+) -> float:
     """Calculate PSNR with proper handling of perfect matches (MSE = 0).
 
     Args:
@@ -208,7 +218,9 @@ def calculate_safe_psnr(frame1: np.ndarray, frame2: np.ndarray, data_range: floa
         return 0.0
 
 
-def align_frames_content_based(original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]) -> list[tuple[np.ndarray, np.ndarray]]:
+def align_frames_content_based(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> list[tuple[np.ndarray, np.ndarray]]:
     """Content-based alignment - find most similar frames using MSE.
 
     This is the most robust alignment method as it finds actual visual matches
@@ -221,7 +233,7 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
 
     for orig_frame in original_frames:
         best_match_idx = -1
-        best_mse = float('inf')
+        best_mse = float("inf")
 
         for comp_idx, comp_frame in enumerate(compressed_frames):
             if comp_idx in used_compressed_indices:
@@ -238,7 +250,9 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
 
                 # Validate MSE is finite and reasonable
                 if not np.isfinite(mse) or mse < 0:
-                    logger.warning(f"Invalid MSE calculated for frame pair {comp_idx}: {mse}")
+                    logger.warning(
+                        f"Invalid MSE calculated for frame pair {comp_idx}: {mse}"
+                    )
                     continue
 
                 if mse < best_mse:
@@ -254,7 +268,9 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
             used_compressed_indices.add(best_match_idx)
         else:
             # Only warn if we genuinely couldn't find any valid match
-            logger.debug(f"No valid frame match found for original frame (best_mse={best_mse})")
+            logger.debug(
+                f"No valid frame match found for original frame (best_mse={best_mse})"
+            )
             # For robustness, try to match with the first available frame if no perfect match found
             if compressed_frames and not used_compressed_indices:
                 logger.debug("Falling back to first available frame for alignment")
@@ -264,8 +280,9 @@ def align_frames_content_based(original_frames: list[np.ndarray], compressed_fra
     return aligned_pairs
 
 
-
-def align_frames(original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]) -> list[tuple[np.ndarray, np.ndarray]]:
+def align_frames(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> list[tuple[np.ndarray, np.ndarray]]:
     """Align frames using content-based matching (most robust approach).
 
     Args:
@@ -321,17 +338,24 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         # Downsample for next scale (if not the last scale)
         if scale < max_possible_scales - 1:
             prev_shape = current_frame1.shape
-            current_frame1 = cv2.resize(current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-            current_frame2 = cv2.resize(current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+            current_frame1 = cv2.resize(
+                current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
+            )
+            current_frame2 = cv2.resize(
+                current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
+            )
 
             # Stop if frames become too small OR if size didn't change (safety check)
-            if (current_frame1.shape[0] < 8 or current_frame1.shape[1] < 8 or
-                current_frame1.shape == prev_shape):
+            if (
+                current_frame1.shape[0] < 8
+                or current_frame1.shape[1] < 8
+                or current_frame1.shape == prev_shape
+            ):
                 break
 
     # Weighted average of SSIM values across scales
     if ssim_values:
-        weights = [0.4, 0.25, 0.15, 0.1, 0.1][:len(ssim_values)]
+        weights = [0.4, 0.25, 0.15, 0.1, 0.1][: len(ssim_values)]
         weights = np.array(weights)
 
         # Protect against division by zero in weight normalization
@@ -456,14 +480,16 @@ def compare_gif_frames(gif1_path: Path, gif2_path: Path) -> dict[str, Any]:
         return {
             "frame_count_original": len(extract_gif_frames(gif1_path).frames),
             "frame_count_compressed": len(extract_gif_frames(gif2_path).frames),
-            "quality_metrics": metrics
+            "quality_metrics": metrics,
         }
     except Exception as e:
         logger.error(f"Frame comparison failed: {e}")
         return {"error": str(e)}
 
 
-def calculate_compression_ratio(original_size_kb: float, compressed_size_kb: float) -> float:
+def calculate_compression_ratio(
+    original_size_kb: float, compressed_size_kb: float
+) -> float:
     """Calculate compression ratio between original and compressed files.
 
     Args:
@@ -478,9 +504,13 @@ def calculate_compression_ratio(original_size_kb: float, compressed_size_kb: flo
 
     return original_size_kb / compressed_size_kb
 
+
 # ---------------- New helper and metric functions (Stage-1) ---------------- #
 
-def _resize_if_needed(frame1: np.ndarray, frame2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+
+def _resize_if_needed(
+    frame1: np.ndarray, frame2: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """Resize both frames to the smallest common size if their shapes differ.
 
     The function keeps the aspect ratio by simply resizing to the *minimum* of the
@@ -494,8 +524,12 @@ def _resize_if_needed(frame1: np.ndarray, frame2: np.ndarray) -> tuple[np.ndarra
     target_w = min(frame1.shape[1], frame2.shape[1])
 
     try:
-        frame1_resized = cv2.resize(frame1, (target_w, target_h), interpolation=cv2.INTER_AREA)
-        frame2_resized = cv2.resize(frame2, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        frame1_resized = cv2.resize(
+            frame1, (target_w, target_h), interpolation=cv2.INTER_AREA
+        )
+        frame2_resized = cv2.resize(
+            frame2, (target_w, target_h), interpolation=cv2.INTER_AREA
+        )
     except Exception as exc:  # pragma: no cover – surface as ValueError for callers
         raise ValueError(f"Failed to resize frames to common size: {exc}") from exc
 
@@ -540,7 +574,7 @@ def fsim(frame1: np.ndarray, frame2: np.ndarray) -> float:
     def _grad_mag(img: np.ndarray) -> np.ndarray:
         gx = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
         gy = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
-        return np.sqrt(gx ** 2 + gy ** 2)
+        return np.sqrt(gx**2 + gy**2)
 
     G1 = _grad_mag(gray1)
     G2 = _grad_mag(gray2)
@@ -551,8 +585,8 @@ def fsim(frame1: np.ndarray, frame2: np.ndarray) -> float:
 
     T1 = 1e-3
     T2 = 1e-3
-    gradient_sim = (2 * G1 * G2 + T1) / (G1 ** 2 + G2 ** 2 + T1)
-    pc_sim = (2 * PC1 * PC2 + T2) / (PC1 ** 2 + PC2 ** 2 + T2)
+    gradient_sim = (2 * G1 * G2 + T1) / (G1**2 + G2**2 + T1)
+    pc_sim = (2 * PC1 * PC2 + T2) / (PC1**2 + PC2**2 + T2)
 
     fsim_map = gradient_sim * pc_sim
 
@@ -579,13 +613,13 @@ def gmsd(frame1: np.ndarray, frame2: np.ndarray) -> float:
     def _prewitt(img: np.ndarray) -> np.ndarray:
         gx = cv2.filter2D(img, -1, prewitt_x)
         gy = cv2.filter2D(img, -1, prewitt_y)
-        return np.sqrt(gx ** 2 + gy ** 2)
+        return np.sqrt(gx**2 + gy**2)
 
     M1 = _prewitt(gray1)
     M2 = _prewitt(gray2)
 
     C = 1e-3  # stability constant
-    gms_map = (2 * M1 * M2 + C) / (M1 ** 2 + M2 ** 2 + C)
+    gms_map = (2 * M1 * M2 + C) / (M1**2 + M2**2 + C)
 
     return float(np.std(gms_map))
 
@@ -605,7 +639,9 @@ def chist(frame1: np.ndarray, frame2: np.ndarray, bins: int = 32) -> float:
     return float(np.clip((np.mean(scores) + 1) / 2.0, 0.0, 1.0))
 
 
-def edge_similarity(frame1: np.ndarray, frame2: np.ndarray, threshold1: int = 50, threshold2: int = 150) -> float:
+def edge_similarity(
+    frame1: np.ndarray, frame2: np.ndarray, threshold1: int = 50, threshold2: int = 150
+) -> float:
     """Edge-Map Jaccard similarity (0-1, higher is better).
 
     Args:
@@ -647,8 +683,12 @@ def texture_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
     lbp1 = local_binary_pattern(gray1, n_points, radius, "uniform")
     lbp2 = local_binary_pattern(gray2, n_points, radius, "uniform")
 
-    hist1, _ = np.histogram(lbp1.ravel(), bins=10, range=(0, n_points + 2), density=True)
-    hist2, _ = np.histogram(lbp2.ravel(), bins=10, range=(0, n_points + 2), density=True)
+    hist1, _ = np.histogram(
+        lbp1.ravel(), bins=10, range=(0, n_points + 2), density=True
+    )
+    hist2, _ = np.histogram(
+        lbp2.ravel(), bins=10, range=(0, n_points + 2), density=True
+    )
 
     if np.std(hist1) == 0 or np.std(hist2) == 0:
         return 1.0  # completely uniform textures
@@ -677,6 +717,7 @@ def sharpness_similarity(frame1: np.ndarray, frame2: np.ndarray) -> float:
         return 0.0
 
     return float(min(var1, var2) / max(var1, var2))
+
 
 # --------------------------------------------------------------------------- #
 
@@ -718,7 +759,9 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
     }
 
 
-def _calculate_positional_samples(aligned_pairs: list, metric_func, metric_name: str) -> dict[str, float]:
+def _calculate_positional_samples(
+    aligned_pairs: list, metric_func, metric_name: str
+) -> dict[str, float]:
     """Calculate metrics for first, middle, and last frames to understand positional effects.
 
     This function provides insights into how frame position affects quality metrics,
@@ -775,7 +818,9 @@ def _calculate_positional_samples(aligned_pairs: list, metric_func, metric_name:
         }
 
 
-def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, config: MetricsConfig | None = None) -> dict[str, float]:
+def calculate_comprehensive_metrics(
+    original_path: Path, compressed_path: Path, config: MetricsConfig | None = None
+) -> dict[str, float]:
     """Calculate comprehensive quality metrics between original and compressed GIFs.
 
     This is the main function that addresses the frame alignment problem and provides
@@ -822,22 +867,22 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
         # Calculate all frame-level metrics
         metric_values = {
-            'ssim': [],
-            'ms_ssim': [],
-            'psnr': [],
-            'mse': [],
-            'rmse': [],
-            'fsim': [],
-            'gmsd': [],
-            'chist': [],
-            'edge_similarity': [],
-            'texture_similarity': [],
-            'sharpness_similarity': [],
+            "ssim": [],
+            "ms_ssim": [],
+            "psnr": [],
+            "mse": [],
+            "rmse": [],
+            "fsim": [],
+            "gmsd": [],
+            "chist": [],
+            "edge_similarity": [],
+            "texture_similarity": [],
+            "sharpness_similarity": [],
         }
 
         # Store raw (un-normalised) metric values where necessary
         raw_metric_values = {
-            'psnr': [],  # PSNR is normalised for main reporting; keep raw values separately
+            "psnr": [],  # PSNR is normalised for main reporting; keep raw values separately
         }
 
         for orig_frame, comp_frame in aligned_pairs:
@@ -851,95 +896,99 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                     comp_gray = comp_frame
 
                 frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
-                metric_values['ssim'].append(max(0.0, min(1.0, frame_ssim)))
+                metric_values["ssim"].append(max(0.0, min(1.0, frame_ssim)))
             except Exception as e:
                 logger.warning(f"SSIM calculation failed for frame: {e}")
-                metric_values['ssim'].append(0.0)
+                metric_values["ssim"].append(0.0)
 
             # MS-SSIM calculation
             try:
                 frame_ms_ssim = calculate_ms_ssim(orig_frame, comp_frame)
-                metric_values['ms_ssim'].append(frame_ms_ssim)
+                metric_values["ms_ssim"].append(frame_ms_ssim)
             except Exception as e:
                 logger.warning(f"MS-SSIM calculation failed for frame: {e}")
-                metric_values['ms_ssim'].append(0.0)
+                metric_values["ms_ssim"].append(0.0)
 
             # PSNR calculation
             try:
                 frame_psnr = calculate_safe_psnr(orig_frame, comp_frame)
                 # Keep un-scaled PSNR for optional raw metrics output
-                raw_metric_values['psnr'].append(frame_psnr)
+                raw_metric_values["psnr"].append(frame_psnr)
 
                 # Normalize PSNR using configurable upper bound
                 normalized_psnr = min(frame_psnr / float(config.PSNR_MAX_DB), 1.0)
-                metric_values['psnr'].append(max(0.0, normalized_psnr))
+                metric_values["psnr"].append(max(0.0, normalized_psnr))
             except Exception as e:
                 logger.warning(f"PSNR calculation failed for frame: {e}")
-                metric_values['psnr'].append(0.0)
-                raw_metric_values['psnr'].append(0.0)
+                metric_values["psnr"].append(0.0)
+                raw_metric_values["psnr"].append(0.0)
 
             # New metrics - MSE and RMSE
             try:
                 frame_mse = mse(orig_frame, comp_frame)
-                metric_values['mse'].append(frame_mse)
+                metric_values["mse"].append(frame_mse)
 
                 frame_rmse = rmse(orig_frame, comp_frame)
-                metric_values['rmse'].append(frame_rmse)
+                metric_values["rmse"].append(frame_rmse)
             except Exception as e:
                 logger.warning(f"MSE/RMSE calculation failed for frame: {e}")
-                metric_values['mse'].append(0.0)
-                metric_values['rmse'].append(0.0)
+                metric_values["mse"].append(0.0)
+                metric_values["rmse"].append(0.0)
 
             # FSIM calculation
             try:
                 frame_fsim = fsim(orig_frame, comp_frame)
-                metric_values['fsim'].append(frame_fsim)
+                metric_values["fsim"].append(frame_fsim)
             except Exception as e:
                 logger.warning(f"FSIM calculation failed for frame: {e}")
-                metric_values['fsim'].append(0.0)
+                metric_values["fsim"].append(0.0)
 
             # GMSD calculation
             try:
                 frame_gmsd = gmsd(orig_frame, comp_frame)
-                metric_values['gmsd'].append(frame_gmsd)
+                metric_values["gmsd"].append(frame_gmsd)
             except Exception as e:
                 logger.warning(f"GMSD calculation failed for frame: {e}")
-                metric_values['gmsd'].append(0.0)
+                metric_values["gmsd"].append(0.0)
 
             # Color histogram correlation
             try:
                 frame_chist = chist(orig_frame, comp_frame)
-                metric_values['chist'].append(frame_chist)
+                metric_values["chist"].append(frame_chist)
             except Exception as e:
                 logger.warning(f"Color histogram calculation failed for frame: {e}")
-                metric_values['chist'].append(0.0)
+                metric_values["chist"].append(0.0)
 
             # Edge similarity
             try:
                 frame_edge = edge_similarity(
-                    orig_frame, comp_frame,
+                    orig_frame,
+                    comp_frame,
                     config.EDGE_CANNY_THRESHOLD1,
-                    config.EDGE_CANNY_THRESHOLD2)
-                metric_values['edge_similarity'].append(frame_edge)
+                    config.EDGE_CANNY_THRESHOLD2,
+                )
+                metric_values["edge_similarity"].append(frame_edge)
             except Exception as e:
                 logger.warning(f"Edge similarity calculation failed for frame: {e}")
-                metric_values['edge_similarity'].append(0.0)
+                metric_values["edge_similarity"].append(0.0)
 
             # Texture similarity
             try:
                 frame_texture = texture_similarity(orig_frame, comp_frame)
-                metric_values['texture_similarity'].append(frame_texture)
+                metric_values["texture_similarity"].append(frame_texture)
             except Exception as e:
                 logger.warning(f"Texture similarity calculation failed for frame: {e}")
-                metric_values['texture_similarity'].append(0.0)
+                metric_values["texture_similarity"].append(0.0)
 
             # Sharpness similarity
             try:
                 frame_sharpness = sharpness_similarity(orig_frame, comp_frame)
-                metric_values['sharpness_similarity'].append(frame_sharpness)
+                metric_values["sharpness_similarity"].append(frame_sharpness)
             except Exception as e:
-                logger.warning(f"Sharpness similarity calculation failed for frame: {e}")
-                metric_values['sharpness_similarity'].append(0.0)
+                logger.warning(
+                    f"Sharpness similarity calculation failed for frame: {e}"
+                )
+                metric_values["sharpness_similarity"].append(0.0)
 
         # Calculate temporal consistency for original and compressed GIFs
         temporal_pre = 0.0
@@ -959,53 +1008,56 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
 
         # Add temporal consistency (single value, not frame-level)
         # Keep legacy key pointing to *post*-compression value for backward compatibility
-        result['temporal_consistency'] = float(temporal_post)
-        result['temporal_consistency_std'] = 0.0
-        result['temporal_consistency_min'] = float(temporal_post)
-        result['temporal_consistency_max'] = float(temporal_post)
+        result["temporal_consistency"] = float(temporal_post)
+        result["temporal_consistency_std"] = 0.0
+        result["temporal_consistency_min"] = float(temporal_post)
+        result["temporal_consistency_max"] = float(temporal_post)
 
         # New keys: pre, post (explicit) and delta
-        result['temporal_consistency_pre'] = float(temporal_pre)
-        result['temporal_consistency_post'] = float(temporal_post)
-        result['temporal_consistency_delta'] = float(temporal_delta)
+        result["temporal_consistency_pre"] = float(temporal_pre)
+        result["temporal_consistency_post"] = float(temporal_post)
+        result["temporal_consistency_delta"] = float(temporal_delta)
 
         # Calculate composite quality using enhanced metrics system
         from .enhanced_metrics import process_metrics_with_enhanced_quality
-        
+
         # Add compression ratio for efficiency calculation
-        result['compression_ratio'] = original_path.stat().st_size / compressed_path.stat().st_size if compressed_path.stat().st_size > 0 else 1.0
-        
+        result["compression_ratio"] = (
+            original_path.stat().st_size / compressed_path.stat().st_size
+            if compressed_path.stat().st_size > 0
+            else 1.0
+        )
+
         # Process with enhanced quality system (adds enhanced_composite_quality and efficiency)
         result = process_metrics_with_enhanced_quality(result, config)
 
         # Add system metrics
-        result['kilobytes'] = float(calculate_file_size_kb(compressed_path))
+        result["kilobytes"] = float(calculate_file_size_kb(compressed_path))
 
         # Calculate processing time
         end_time = time.perf_counter()
         elapsed_seconds = end_time - start_time
-        result['render_ms'] = min(int(elapsed_seconds * 1000), 86400000)
+        result["render_ms"] = min(int(elapsed_seconds * 1000), 86400000)
 
         # Add positional sampling if enabled
         if config.ENABLE_POSITIONAL_SAMPLING:
             # Map metric names to their functions
             metric_functions = {
-                'ssim': lambda f1, f2: ssim(
+                "ssim": lambda f1, f2: ssim(
                     cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY) if len(f1.shape) == 3 else f1,
                     cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY) if len(f2.shape) == 3 else f2,
-                    data_range=255.0
+                    data_range=255.0,
                 ),
-                'mse': mse,
-                'rmse': rmse,
-                'fsim': fsim,
-                'gmsd': gmsd,
-                'chist': chist,
-                'edge_similarity': lambda f1, f2: edge_similarity(
-                    f1, f2,
-                    config.EDGE_CANNY_THRESHOLD1,
-                    config.EDGE_CANNY_THRESHOLD2),
-                'texture_similarity': texture_similarity,
-                'sharpness_similarity': sharpness_similarity,
+                "mse": mse,
+                "rmse": rmse,
+                "fsim": fsim,
+                "gmsd": gmsd,
+                "chist": chist,
+                "edge_similarity": lambda f1, f2: edge_similarity(
+                    f1, f2, config.EDGE_CANNY_THRESHOLD1, config.EDGE_CANNY_THRESHOLD2
+                ),
+                "texture_similarity": texture_similarity,
+                "sharpness_similarity": sharpness_similarity,
             }
 
             # Calculate positional samples for configured metrics
@@ -1013,37 +1065,51 @@ def calculate_comprehensive_metrics(original_path: Path, compressed_path: Path, 
                 if metric_name in metric_functions:
                     try:
                         positional_data = _calculate_positional_samples(
-                            aligned_pairs,
-                            metric_functions[metric_name],
-                            metric_name
+                            aligned_pairs, metric_functions[metric_name], metric_name
                         )
                         result.update(positional_data)
                     except Exception as e:
-                        logger.warning(f"Failed to calculate positional samples for {metric_name}: {e}")
+                        logger.warning(
+                            f"Failed to calculate positional samples for {metric_name}: {e}"
+                        )
 
         # Add raw metrics if requested
         if config.RAW_METRICS:
             # Metrics already reported in raw (un-scaled) form – directly copy.
             raw_equivalent_metrics = [
-                'ssim', 'ms_ssim', 'mse', 'rmse', 'fsim', 'gmsd',
-                'chist', 'edge_similarity', 'texture_similarity',
-                'sharpness_similarity', 'temporal_consistency',
-                'temporal_consistency_pre', 'temporal_consistency_post', 'temporal_consistency_delta'
+                "ssim",
+                "ms_ssim",
+                "mse",
+                "rmse",
+                "fsim",
+                "gmsd",
+                "chist",
+                "edge_similarity",
+                "texture_similarity",
+                "sharpness_similarity",
+                "temporal_consistency",
+                "temporal_consistency_pre",
+                "temporal_consistency_post",
+                "temporal_consistency_delta",
             ]
 
             for metric_name in raw_equivalent_metrics:
                 result[f"{metric_name}_raw"] = result[metric_name]
 
             # Handle PSNR separately: use un-scaled mean value
-            if raw_metric_values['psnr']:
-                result['psnr_raw'] = float(np.mean(raw_metric_values['psnr']))
+            if raw_metric_values["psnr"]:
+                result["psnr_raw"] = float(np.mean(raw_metric_values["psnr"]))
             else:
-                result['psnr_raw'] = 0.0
+                result["psnr_raw"] = 0.0
 
             # Raw copies for temporal consistency variants
-            result['temporal_consistency_pre_raw'] = result['temporal_consistency_pre']
-            result['temporal_consistency_post_raw'] = result['temporal_consistency_post']
-            result['temporal_consistency_delta_raw'] = result['temporal_consistency_delta']
+            result["temporal_consistency_pre_raw"] = result["temporal_consistency_pre"]
+            result["temporal_consistency_post_raw"] = result[
+                "temporal_consistency_post"
+            ]
+            result["temporal_consistency_delta_raw"] = result[
+                "temporal_consistency_delta"
+            ]
 
         return result
 

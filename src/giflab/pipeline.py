@@ -90,7 +90,9 @@ class CompressionResult:
     # Version metadata (auto-populated)
     giflab_version: str = field(init=False, default=GIFLAB_VERSION)
     code_commit: str = field(init=False, default_factory=_get_git_commit_hash)
-    dataset_version: str = field(init=False, default_factory=lambda: datetime.now().strftime("%Y%m%d"))
+    dataset_version: str = field(
+        init=False, default_factory=lambda: datetime.now().strftime("%Y%m%d")
+    )
 
 
 class CompressionPipeline:
@@ -124,12 +126,29 @@ class CompressionPipeline:
 
         # CSV fieldnames based on project scope
         self.csv_fieldnames = [
-            "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
-            "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
-            "render_ms", "orig_kilobytes", "orig_width", "orig_height",
-            "orig_frames", "orig_fps", "orig_n_colors", "entropy",
-            "source_platform", "source_metadata", "timestamp",
-            "giflab_version", "code_commit", "dataset_version"
+            "gif_sha",
+            "orig_filename",
+            "engine",
+            "engine_version",
+            "lossy",
+            "frame_keep_ratio",
+            "color_keep_count",
+            "kilobytes",
+            "ssim",
+            "render_ms",
+            "orig_kilobytes",
+            "orig_width",
+            "orig_height",
+            "orig_frames",
+            "orig_fps",
+            "orig_n_colors",
+            "entropy",
+            "source_platform",
+            "source_metadata",
+            "timestamp",
+            "giflab_version",
+            "code_commit",
+            "dataset_version",
         ]
 
         # Setup signal handling for graceful shutdown
@@ -138,8 +157,11 @@ class CompressionPipeline:
 
     def _setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown."""
+
         def signal_handler(signum, frame):
-            self.logger.info(f"Received signal {signum}, requesting graceful shutdown...")
+            self.logger.info(
+                f"Received signal {signum}, requesting graceful shutdown..."
+            )
             self._shutdown_requested = True
 
         signal.signal(signal.SIGINT, signal_handler)
@@ -167,7 +189,9 @@ class CompressionPipeline:
         self.logger.info(f"Discovered {len(unique_gif_files)} GIF files in {raw_dir}")
         return unique_gif_files
 
-    def generate_jobs(self, gif_paths: list[Path], raw_dir: Path | None = None) -> list[CompressionJob]:
+    def generate_jobs(
+        self, gif_paths: list[Path], raw_dir: Path | None = None
+    ) -> list[CompressionJob]:
         """Generate all compression jobs for the given GIF files.
 
         Args:
@@ -183,7 +207,9 @@ class CompressionPipeline:
             try:
                 # Detect source from directory structure if enabled
                 if self.detect_source_from_directory and raw_dir is not None:
-                    source_platform, source_metadata = detect_source_from_directory(gif_path, raw_dir)
+                    source_platform, source_metadata = detect_source_from_directory(
+                        gif_path, raw_dir
+                    )
                 else:
                     source_platform, source_metadata = "unknown", None
 
@@ -191,16 +217,24 @@ class CompressionPipeline:
                 metadata = extract_gif_metadata(
                     gif_path,
                     source_platform=source_platform,
-                    source_metadata=source_metadata
+                    source_metadata=source_metadata,
                 )
 
                 # Create per-GIF folder name: {original_filename}_{gif_sha}
-                folder_name = self._create_gif_folder_name(metadata.orig_filename, metadata.gif_sha)
+                folder_name = self._create_gif_folder_name(
+                    metadata.orig_filename, metadata.gif_sha
+                )
                 gif_folder = self.path_config.RENDERS_DIR / folder_name
 
                 if self.selected_pipelines is not None:
-                    pipeline_map: dict[str, Pipeline] = {p.identifier(): p for p in generate_all_pipelines()}
-                    missing = [pid for pid in self.selected_pipelines if pid not in pipeline_map]
+                    pipeline_map: dict[str, Pipeline] = {
+                        p.identifier(): p for p in generate_all_pipelines()
+                    }
+                    missing = [
+                        pid
+                        for pid in self.selected_pipelines
+                        if pid not in pipeline_map
+                    ]
                     if missing:
                         self.logger.warning(f"Unknown pipeline identifiers: {missing}")
                     for pid in self.selected_pipelines:
@@ -212,8 +246,13 @@ class CompressionPipeline:
                                 for colors in self.compression_config.COLOR_KEEP_COUNTS:
                                     jobs.append(
                                         self._create_job_from_pipeline(
-                                            gif_path, metadata, gif_folder,
-                                            pipe_obj, lossy, ratio, colors
+                                            gif_path,
+                                            metadata,
+                                            gif_folder,
+                                            pipe_obj,
+                                            lossy,
+                                            ratio,
+                                            colors,
                                         )
                                     )
                 else:
@@ -222,7 +261,9 @@ class CompressionPipeline:
                         for lossy in self.compression_config.LOSSY_LEVELS:
                             for ratio in self.compression_config.FRAME_KEEP_RATIOS:
                                 for colors in self.compression_config.COLOR_KEEP_COUNTS:
-                                    output_filename = f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+                                    output_filename = (
+                                        f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
+                                    )
                                     output_path = gif_folder / output_filename
                                     job = CompressionJob(
                                         gif_path=gif_path,
@@ -240,9 +281,13 @@ class CompressionPipeline:
                 # Move bad GIF
                 try:
                     move_bad_gif(gif_path, self.path_config.BAD_GIFS_DIR)
-                    self.logger.info(f"Moved bad GIF to: {self.path_config.BAD_GIFS_DIR}")
+                    self.logger.info(
+                        f"Moved bad GIF to: {self.path_config.BAD_GIFS_DIR}"
+                    )
                 except Exception as move_error:
-                    self.logger.error(f"Failed to move bad GIF {gif_path}: {move_error}")
+                    self.logger.error(
+                        f"Failed to move bad GIF {gif_path}: {move_error}"
+                    )
 
         self.logger.info(f"Generated {len(jobs)} compression jobs")
         return jobs
@@ -290,7 +335,9 @@ class CompressionPipeline:
         # Sanitize filename for cross-platform compatibility
         # Replace problematic characters with underscores
         safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
-        sanitized_name = "".join(c if c in safe_chars else "_" for c in name_without_ext)
+        sanitized_name = "".join(
+            c if c in safe_chars else "_" for c in name_without_ext
+        )
 
         # Trim to reasonable length (keep space for SHA and underscore)
         max_name_length = 200  # Leave room for SHA (64 chars) + underscore + filesystem limits
@@ -301,7 +348,9 @@ class CompressionPipeline:
         # This ensures we can always trace back to the original file
         return f"{sanitized_name}_{gif_sha}"
 
-    def _load_existing_csv_records(self, csv_path: Path) -> set[tuple[str, str, int, float, int]]:
+    def _load_existing_csv_records(
+        self, csv_path: Path
+    ) -> set[tuple[str, str, int, float, int]]:
         """Load existing CSV records to identify completed jobs.
 
         Args:
@@ -327,10 +376,14 @@ class CompressionPipeline:
                     colors_str = record.get("color_keep_count", "").strip()
 
                     if not all([gif_sha, engine, lossy_str, ratio_str, colors_str]):
-                        raise ValueError(f"Missing or empty required fields in record {i}")
+                        raise ValueError(
+                            f"Missing or empty required fields in record {i}"
+                        )
 
                     # Validate SHA format (64 hex characters)
-                    if len(gif_sha) != 64 or not all(c in "0123456789abcdef" for c in gif_sha.lower()):
+                    if len(gif_sha) != 64 or not all(
+                        c in "0123456789abcdef" for c in gif_sha.lower()
+                    ):
                         raise ValueError(f"Invalid SHA format in record {i}: {gif_sha}")
 
                     key = (
@@ -338,7 +391,7 @@ class CompressionPipeline:
                         engine,
                         int(lossy_str),
                         float(ratio_str),
-                        int(colors_str)
+                        int(colors_str),
                     )
                     completed_jobs.add(key)
                 except (KeyError, ValueError, TypeError) as e:
@@ -351,7 +404,9 @@ class CompressionPipeline:
             self.logger.error(f"Failed to load existing CSV records: {e}")
             return set()
 
-    def filter_existing_jobs(self, jobs: list[CompressionJob], csv_path: Path) -> list[CompressionJob]:
+    def filter_existing_jobs(
+        self, jobs: list[CompressionJob], csv_path: Path
+    ) -> list[CompressionJob]:
         """Filter out jobs that have already been completed (if resume=True).
 
         Args:
@@ -377,7 +432,7 @@ class CompressionPipeline:
                 job.engine,
                 job.lossy,
                 job.frame_keep_ratio,
-                job.color_keep_count
+                job.color_keep_count,
             )
 
             # Check if output file exists
@@ -395,13 +450,17 @@ class CompressionPipeline:
 
                 # Clean up partial results
                 if output_exists and not record_exists:
-                    self.logger.warning(f"Removing incomplete output file: {job.output_path}")
+                    self.logger.warning(
+                        f"Removing incomplete output file: {job.output_path}"
+                    )
                     try:
                         job.output_path.unlink()
                     except Exception as e:
                         self.logger.error(f"Failed to remove incomplete file: {e}")
 
-        self.logger.info(f"Filtered {len(jobs)} jobs -> {len(filtered_jobs)} remaining (skipped {skipped_count})")
+        self.logger.info(
+            f"Filtered {len(jobs)} jobs -> {len(filtered_jobs)} remaining (skipped {skipped_count})"
+        )
         return filtered_jobs
 
     def execute_job(self, job: CompressionJob) -> CompressionResult:
@@ -421,7 +480,11 @@ class CompressionPipeline:
             job.output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Convert engine string to enum
-            engine_enum = LossyEngine.GIFSICLE if job.engine == "gifsicle" else LossyEngine.ANIMATELY
+            engine_enum = (
+                LossyEngine.GIFSICLE
+                if job.engine == "gifsicle"
+                else LossyEngine.ANIMATELY
+            )
 
             # Execute compression with all parameters in single pass
             compression_result = apply_compression_with_all_params(
@@ -430,13 +493,12 @@ class CompressionPipeline:
                 lossy_level=job.lossy,
                 frame_keep_ratio=job.frame_keep_ratio,
                 color_keep_count=job.color_keep_count,
-                engine=engine_enum
+                engine=engine_enum,
             )
 
             # Calculate quality metrics
             metrics_result = calculate_comprehensive_metrics(
-                original_path=job.gif_path,
-                compressed_path=job.output_path
+                original_path=job.gif_path, compressed_path=job.output_path
             )
 
             # Create compression result
@@ -459,8 +521,10 @@ class CompressionPipeline:
                 orig_n_colors=job.metadata.orig_n_colors,
                 entropy=job.metadata.entropy,
                 source_platform=job.metadata.source_platform,
-                source_metadata=json.dumps(job.metadata.source_metadata) if job.metadata.source_metadata else None,
-                timestamp=datetime.now().isoformat()
+                source_metadata=json.dumps(job.metadata.source_metadata)
+                if job.metadata.source_metadata
+                else None,
+                timestamp=datetime.now().isoformat(),
             )
 
             return result
@@ -513,9 +577,16 @@ class CompressionPipeline:
 
         if not jobs_to_run:
             self.logger.info("All jobs already completed")
-            return {"status": "all_complete", "processed": 0, "failed": 0, "skipped": len(all_jobs)}
+            return {
+                "status": "all_complete",
+                "processed": 0,
+                "failed": 0,
+                "skipped": len(all_jobs),
+            }
 
-        self.logger.info(f"Will execute {len(jobs_to_run)} jobs with {self.workers} workers")
+        self.logger.info(
+            f"Will execute {len(jobs_to_run)} jobs with {self.workers} workers"
+        )
 
         # Execute jobs in parallel
         processed_count = 0
@@ -526,14 +597,15 @@ class CompressionPipeline:
             with ProcessPoolExecutor(max_workers=self.workers) as executor:
                 # Submit all jobs
                 future_to_job = {
-                    executor.submit(execute_single_job, job): job
-                    for job in jobs_to_run
+                    executor.submit(execute_single_job, job): job for job in jobs_to_run
                 }
 
                 # Process completed jobs
                 for future in as_completed(future_to_job):
                     if self._shutdown_requested:
-                        self.logger.info("Shutdown requested, cancelling remaining jobs...")
+                        self.logger.info(
+                            "Shutdown requested, cancelling remaining jobs..."
+                        )
                         executor.shutdown(wait=False)
                         break
 
@@ -561,17 +633,28 @@ class CompressionPipeline:
                         gif_path_str = str(job.gif_path)
                         if gif_path_str not in moved_bad_gifs:
                             try:
-                                move_bad_gif(job.gif_path, self.path_config.BAD_GIFS_DIR)
+                                move_bad_gif(
+                                    job.gif_path, self.path_config.BAD_GIFS_DIR
+                                )
                                 moved_bad_gifs.add(gif_path_str)
-                                self.logger.info(f"Moved bad GIF to: {self.path_config.BAD_GIFS_DIR}")
+                                self.logger.info(
+                                    f"Moved bad GIF to: {self.path_config.BAD_GIFS_DIR}"
+                                )
                             except Exception as move_error:
-                                self.logger.error(f"Failed to move bad GIF {job.gif_path}: {move_error}")
+                                self.logger.error(
+                                    f"Failed to move bad GIF {job.gif_path}: {move_error}"
+                                )
 
         except KeyboardInterrupt:
             self.logger.info("Pipeline interrupted by user")
         except Exception as e:
             self.logger.error(f"Pipeline execution failed: {e}")
-            return {"status": "error", "processed": processed_count, "failed": failed_count, "error": str(e)}
+            return {
+                "status": "error",
+                "processed": processed_count,
+                "failed": failed_count,
+                "error": str(e),
+            }
 
         # Final statistics
         skipped_count = len(all_jobs) - len(jobs_to_run)
@@ -588,7 +671,7 @@ class CompressionPipeline:
             "failed": failed_count,
             "skipped": skipped_count,
             "total_jobs": len(all_jobs),
-            "csv_path": str(csv_path)
+            "csv_path": str(csv_path),
         }
 
     def find_original_gif_by_sha(self, gif_sha: str, raw_dir: Path) -> Path | None:
@@ -621,7 +704,9 @@ class CompressionPipeline:
 
         return None
 
-    def find_original_gif_by_folder_name(self, folder_name: str, raw_dir: Path) -> Path | None:
+    def find_original_gif_by_folder_name(
+        self, folder_name: str, raw_dir: Path
+    ) -> Path | None:
         """Find the original GIF file using a render folder name.
 
         Args:
@@ -674,16 +759,14 @@ def execute_single_job(job: CompressionJob) -> CompressionResult:
         compression_config=DEFAULT_COMPRESSION_CONFIG,
         path_config=DEFAULT_PATH_CONFIG,
         workers=1,
-        resume=False
+        resume=False,
     )
 
     return pipeline.execute_job(job)
 
 
 def create_pipeline(
-    raw_dir: Path,
-    workers: int = 0,
-    resume: bool = True
+    raw_dir: Path, workers: int = 0, resume: bool = True
 ) -> CompressionPipeline:
     """Factory function to create a compression pipeline with default configs.
 
@@ -701,5 +784,5 @@ def create_pipeline(
         compression_config=DEFAULT_COMPRESSION_CONFIG,
         path_config=DEFAULT_PATH_CONFIG,
         workers=workers,
-        resume=resume
+        resume=resume,
     )

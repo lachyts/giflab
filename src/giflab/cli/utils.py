@@ -67,9 +67,10 @@ def check_gpu_availability(use_gpu: bool) -> str:
     """Check GPU availability and return status message."""
     if not use_gpu:
         return "📊 GPU acceleration: Disabled (using CPU processing)"
-    
+
     try:
         import cv2
+
         cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
         if cuda_devices > 0:
             return f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)"
@@ -101,16 +102,16 @@ def display_path_info(label: str, path: Path, emoji: str = "📁") -> None:
 def display_results_summary(result: dict) -> None:
     """Display a common results summary format."""
     status = result["status"]
-    
+
     click.echo("\n📊 Results:")
     click.echo(f"   • Status: {status}")
-    
+
     for key in ["processed", "failed", "skipped", "total_jobs"]:
         if key in result:
             click.echo(f"   • {key.replace('_', ' ').title()}: {result[key]}")
-    
+
     if "csv_path" in result:
         click.echo(f"   • Results saved to: {result['csv_path']}")
-    
+
     if "output_path" in result:
         click.echo(f"   • Results saved to: {result['output_path']}")

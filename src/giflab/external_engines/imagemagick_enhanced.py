@@ -7,13 +7,12 @@ Based on research findings identifying 13 different dithering methods.
 from __future__ import annotations
 
 import os
-from shutil import copy
 import time
 from pathlib import Path
+from shutil import copy
 from typing import Any, Literal
 
 from ..system_tools import discover_tool
-
 from .common import run_command
 
 __all__ = [
@@ -27,7 +26,7 @@ __all__ = [
 IMAGEMAGICK_DITHERING_METHODS = [
     "None",
     "FloydSteinberg",
-    "Riemersma",      # ⭐ Best performer from research
+    "Riemersma",  # ⭐ Best performer from research
     "Threshold",
     "Random",
     "Ordered",
@@ -43,8 +42,19 @@ IMAGEMAGICK_DITHERING_METHODS = [
 ]
 
 ImageMagickDitheringMethod = Literal[
-    "None", "FloydSteinberg", "Riemersma", "Threshold", "Random", "Ordered",
-    "O2x2", "O3x3", "O4x4", "O8x8", "H4x4a", "H6x6a", "H8x8a"
+    "None",
+    "FloydSteinberg",
+    "Riemersma",
+    "Threshold",
+    "Random",
+    "Ordered",
+    "O2x2",
+    "O3x3",
+    "O4x4",
+    "O8x8",
+    "H4x4a",
+    "H6x6a",
+    "H8x8a",
 ]
 
 
@@ -77,9 +87,11 @@ def color_reduce_with_dithering(
     """
     if colors < 1 or colors > 256:
         raise ValueError("colors must be between 1 and 256 inclusive")
-        
+
     if dithering_method not in IMAGEMAGICK_DITHERING_METHODS:
-        raise ValueError(f"dithering_method must be one of {IMAGEMAGICK_DITHERING_METHODS}")
+        raise ValueError(
+            f"dithering_method must be one of {IMAGEMAGICK_DITHERING_METHODS}"
+        )
 
     cmd = [
         _magick_binary(),
@@ -98,7 +110,7 @@ def color_reduce_with_dithering(
     result = run_command(cmd, engine="imagemagick", output_path=output_path)
     result["dithering_method"] = dithering_method
     result["pipeline_variant"] = f"imagemagick_dither_{dithering_method.lower()}"
-    
+
     return result
 
 
@@ -172,60 +184,59 @@ def lossy_compress(
 
 def test_redundant_methods(input_path: Path, colors: int = 16) -> dict[str, bytes]:
     """Test if supposedly redundant methods produce identical outputs.
-    
+
     Returns a dict mapping method names to output file hashes for comparison.
     This validates the research findings about redundant ImageMagick methods.
     """
     import hashlib
     import tempfile
-    
+
     results = {}
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        
+
         for method in IMAGEMAGICK_DITHERING_METHODS:
             output_path = tmpdir_path / f"test_{method.lower()}.gif"
-            
+
             try:
                 color_reduce_with_dithering(
-                    input_path, output_path,
-                    colors=colors, dithering_method=method
+                    input_path, output_path, colors=colors, dithering_method=method
                 )
-                
+
                 # Calculate hash of output file
-                with open(output_path, 'rb') as f:
+                with open(output_path, "rb") as f:
                     file_hash = hashlib.sha256(f.read()).digest()
                     results[method] = file_hash
-                    
+
             except Exception as e:
                 results[method] = f"ERROR: {e}"
-    
+
     return results
 
 
 def identify_redundant_methods(input_paths: list[Path]) -> dict[str, set[str]]:
     """Identify which dithering methods produce identical results.
-    
+
     Returns a dict mapping representative methods to sets of equivalent methods.
     This helps validate research findings about redundant methods.
     """
     from collections import defaultdict
-    
+
     # Group methods by their output hashes across multiple test images
     hash_to_methods = defaultdict(set)
-    
+
     for input_path in input_paths:
         method_hashes = test_redundant_methods(input_path)
-        
+
         for method, file_hash in method_hashes.items():
             if isinstance(file_hash, bytes):  # Skip errors
                 hash_to_methods[file_hash].add(method)
-    
+
     # Find groups of equivalent methods (methods that always produce same hash)
     equivalence_groups = {}
     processed_methods = set()
-    
+
     for methods in hash_to_methods.values():
         if len(methods) > 1:  # Only care about groups with multiple methods
             # Use first method alphabetically as representative
@@ -233,5 +244,5 @@ def identify_redundant_methods(input_paths: list[Path]) -> dict[str, set[str]]:
             if representative not in processed_methods:
                 equivalence_groups[representative] = methods
                 processed_methods.update(methods)
-    
+
     return equivalence_groups

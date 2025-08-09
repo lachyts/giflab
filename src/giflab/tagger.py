@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-if os.environ.get('GIFLAB_DISABLE_CLIP'):
+if os.environ.get("GIFLAB_DISABLE_CLIP"):
     CLIP_AVAILABLE = False
     torch = None
     open_clip = None
@@ -29,6 +29,7 @@ else:
     try:
         import open_clip
         import torch
+
         CLIP_AVAILABLE = True
     except ImportError:
         CLIP_AVAILABLE = False
@@ -51,8 +52,12 @@ class TaggingResult:
     def content_classification(self) -> dict[str, float]:
         """Get CLIP content classification scores."""
         content_keys = {
-            'screen_capture_confidence', 'vector_art_confidence', 'photography_confidence',
-            'hand_drawn_confidence', '3d_rendered_confidence', 'pixel_art_confidence'
+            "screen_capture_confidence",
+            "vector_art_confidence",
+            "photography_confidence",
+            "hand_drawn_confidence",
+            "3d_rendered_confidence",
+            "pixel_art_confidence",
         }
         return {k: v for k, v in self.scores.items() if k in content_keys}
 
@@ -60,8 +65,10 @@ class TaggingResult:
     def quality_assessment(self) -> dict[str, float]:
         """Get quality/artifact assessment scores."""
         quality_keys = {
-            'blocking_artifacts', 'ringing_artifacts',
-            'quantization_noise', 'overall_quality'
+            "blocking_artifacts",
+            "ringing_artifacts",
+            "quantization_noise",
+            "overall_quality",
         }
         return {k: v for k, v in self.scores.items() if k in quality_keys}
 
@@ -69,8 +76,11 @@ class TaggingResult:
     def technical_characteristics(self) -> dict[str, float]:
         """Get technical characteristic scores."""
         tech_keys = {
-            'text_density', 'edge_density', 'color_complexity',
-            'contrast_score', 'gradient_smoothness'
+            "text_density",
+            "edge_density",
+            "color_complexity",
+            "contrast_score",
+            "gradient_smoothness",
         }
         return {k: v for k, v in self.scores.items() if k in tech_keys}
 
@@ -78,10 +88,16 @@ class TaggingResult:
     def temporal_analysis(self) -> dict[str, float]:
         """Get temporal motion analysis scores."""
         temporal_keys = {
-            'frame_similarity', 'motion_intensity', 'motion_smoothness',
-            'static_region_ratio', 'scene_change_frequency', 'fade_transition_presence',
-            'cut_sharpness', 'temporal_entropy', 'loop_detection_confidence',
-            'motion_complexity'
+            "frame_similarity",
+            "motion_intensity",
+            "motion_smoothness",
+            "static_region_ratio",
+            "scene_change_frequency",
+            "fade_transition_presence",
+            "cut_sharpness",
+            "temporal_entropy",
+            "loop_detection_confidence",
+            "motion_complexity",
         }
         return {k: v for k, v in self.scores.items() if k in temporal_keys}
 
@@ -109,9 +125,13 @@ class HybridCompressionTagger:
 
         # Initialize CLIP for content classification
         try:
-            self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
+            (
+                self.clip_model,
+                _,
+                self.clip_preprocess,
+            ) = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
             self.clip_model = self.clip_model.to(self.device)
-            self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
+            self.tokenizer = open_clip.get_tokenizer("ViT-B-32")
             self.logger.info(f"CLIP model loaded on {self.device}")
         except Exception as e:
             self.logger.error(f"Failed to load CLIP model: {e}")
@@ -124,12 +144,16 @@ class HybridCompressionTagger:
             "a photograph or realistic image with natural textures",
             "hand drawn artwork or digital illustration",
             "3D rendered computer graphics with smooth surfaces",
-            "pixel art or low resolution retro graphics"
+            "pixel art or low resolution retro graphics",
         ]
 
         self.content_types = [
-            "screen_capture", "vector_art", "photography",
-            "hand_drawn", "3d_rendered", "pixel_art"
+            "screen_capture",
+            "vector_art",
+            "photography",
+            "hand_drawn",
+            "3d_rendered",
+            "pixel_art",
         ]
 
         self.model_version = "hybrid_v1.0_comprehensive"
@@ -180,14 +204,16 @@ class HybridCompressionTagger:
                 gif_sha=gif_sha,
                 scores=all_scores,
                 model_version=self.model_version,
-                processing_time_ms=processing_time
+                processing_time_ms=processing_time,
             )
 
         except Exception as e:
             self.logger.error(f"Tagging failed for {gif_path}: {e}")
             raise RuntimeError(f"Tagging analysis failed: {e}") from e
 
-    def _extract_representative_frames(self, gif_path: Path, max_frames: int = 10) -> list[np.ndarray]:
+    def _extract_representative_frames(
+        self, gif_path: Path, max_frames: int = 10
+    ) -> list[np.ndarray]:
         """Extract representative frames from GIF for analysis."""
         cap = None
         try:
@@ -248,7 +274,7 @@ class HybridCompressionTagger:
                 # Calculate similarity scores
                 image_features /= image_features.norm(dim=-1, keepdim=True)
                 text_features /= text_features.norm(dim=-1, keepdim=True)
-                logits_per_image = (image_features @ text_features.T)
+                logits_per_image = image_features @ text_features.T
                 probs = logits_per_image.softmax(dim=-1).cpu().numpy()[0]
 
             # Return confidence scores for each content type
@@ -260,41 +286,78 @@ class HybridCompressionTagger:
         except Exception as e:
             self.logger.error(f"CLIP classification failed: {e}")
             # Return zero scores if CLIP fails
-            return {f"{content_type}_confidence": 0.0 for content_type in self.content_types}
+            return {
+                f"{content_type}_confidence": 0.0 for content_type in self.content_types
+            }
 
-    def _analyze_comprehensive_characteristics(self, frames: list[np.ndarray]) -> dict[str, float]:
+    def _analyze_comprehensive_characteristics(
+        self, frames: list[np.ndarray]
+    ) -> dict[str, float]:
         """Comprehensive analysis including static technical metrics and temporal motion analysis."""
         if not frames:
             # Return default scores if no frames available
-            return dict.fromkeys(['blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality', 'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness', 'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio', 'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness', 'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'], 0.0)
+            return dict.fromkeys(
+                [
+                    "blocking_artifacts",
+                    "ringing_artifacts",
+                    "quantization_noise",
+                    "overall_quality",
+                    "text_density",
+                    "edge_density",
+                    "color_complexity",
+                    "contrast_score",
+                    "gradient_smoothness",
+                    "frame_similarity",
+                    "motion_intensity",
+                    "motion_smoothness",
+                    "static_region_ratio",
+                    "scene_change_frequency",
+                    "fade_transition_presence",
+                    "cut_sharpness",
+                    "temporal_entropy",
+                    "loop_detection_confidence",
+                    "motion_complexity",
+                ],
+                0.0,
+            )
 
         representative_frame = frames[0]  # Use first frame for static analysis
 
         return {
             # Quality/artifact assessment (4 metrics)
-            'blocking_artifacts': self._calculate_blocking_artifacts(representative_frame),
-            'ringing_artifacts': self._calculate_ringing_artifacts(representative_frame),
-            'quantization_noise': self._calculate_quantization_noise(representative_frame),
-            'overall_quality': self._calculate_overall_quality(representative_frame),
-
+            "blocking_artifacts": self._calculate_blocking_artifacts(
+                representative_frame
+            ),
+            "ringing_artifacts": self._calculate_ringing_artifacts(
+                representative_frame
+            ),
+            "quantization_noise": self._calculate_quantization_noise(
+                representative_frame
+            ),
+            "overall_quality": self._calculate_overall_quality(representative_frame),
             # Technical characteristics - static (5 metrics)
-            'text_density': self._calculate_text_density(representative_frame),
-            'edge_density': self._calculate_edge_density(representative_frame),
-            'color_complexity': self._calculate_color_complexity(representative_frame),
-            'contrast_score': self._calculate_contrast_score(representative_frame),
-            'gradient_smoothness': self._calculate_gradient_smoothness(representative_frame),
-
+            "text_density": self._calculate_text_density(representative_frame),
+            "edge_density": self._calculate_edge_density(representative_frame),
+            "color_complexity": self._calculate_color_complexity(representative_frame),
+            "contrast_score": self._calculate_contrast_score(representative_frame),
+            "gradient_smoothness": self._calculate_gradient_smoothness(
+                representative_frame
+            ),
             # Temporal motion analysis (10 metrics)
-            'frame_similarity': self._calculate_frame_similarity(frames),
-            'motion_intensity': self._calculate_motion_intensity(frames),
-            'motion_smoothness': self._calculate_motion_smoothness(frames),
-            'static_region_ratio': self._calculate_static_region_ratio(frames),
-            'scene_change_frequency': self._calculate_scene_change_frequency(frames),
-            'fade_transition_presence': self._calculate_fade_transition_presence(frames),
-            'cut_sharpness': self._calculate_cut_sharpness(frames),
-            'temporal_entropy': self._calculate_temporal_entropy(frames),
-            'loop_detection_confidence': self._calculate_loop_detection_confidence(frames),
-            'motion_complexity': self._calculate_motion_complexity(frames),
+            "frame_similarity": self._calculate_frame_similarity(frames),
+            "motion_intensity": self._calculate_motion_intensity(frames),
+            "motion_smoothness": self._calculate_motion_smoothness(frames),
+            "static_region_ratio": self._calculate_static_region_ratio(frames),
+            "scene_change_frequency": self._calculate_scene_change_frequency(frames),
+            "fade_transition_presence": self._calculate_fade_transition_presence(
+                frames
+            ),
+            "cut_sharpness": self._calculate_cut_sharpness(frames),
+            "temporal_entropy": self._calculate_temporal_entropy(frames),
+            "loop_detection_confidence": self._calculate_loop_detection_confidence(
+                frames
+            ),
+            "motion_complexity": self._calculate_motion_complexity(frames),
         }
 
     # Quality/Artifact Assessment Methods
@@ -309,13 +372,13 @@ class HybridCompressionTagger:
             h_diffs = []
             v_diffs = []
 
-            for i in range(8, h-8, 8):
-                for j in range(w-1):
-                    h_diffs.append(abs(int(gray[i, j]) - int(gray[i-1, j])))
+            for i in range(8, h - 8, 8):
+                for j in range(w - 1):
+                    h_diffs.append(abs(int(gray[i, j]) - int(gray[i - 1, j])))
 
-            for i in range(h-1):
-                for j in range(8, w-8, 8):
-                    v_diffs.append(abs(int(gray[i, j]) - int(gray[i, j-1])))
+            for i in range(h - 1):
+                for j in range(8, w - 8, 8):
+                    v_diffs.append(abs(int(gray[i, j]) - int(gray[i, j - 1])))
 
             # Higher boundary differences indicate blocking
             boundary_strength = np.mean(h_diffs + v_diffs) if h_diffs or v_diffs else 0
@@ -341,7 +404,9 @@ class HybridCompressionTagger:
             edges_dilated = cv2.dilate(edges, kernel, iterations=2)
 
             edge_mask = edges_dilated > 0
-            ringing_strength = np.mean(laplacian_abs[edge_mask]) if np.any(edge_mask) else 0
+            ringing_strength = (
+                np.mean(laplacian_abs[edge_mask]) if np.any(edge_mask) else 0
+            )
 
             return min(ringing_strength / 100.0, 1.0)
 
@@ -360,7 +425,11 @@ class HybridCompressionTagger:
             # Look for sharp peaks indicating quantization
             hist_smooth = cv2.GaussianBlur(hist.reshape(-1, 1), (0, 0), 2).flatten()
             hist_diff = np.abs(hist.flatten() - hist_smooth)
-            quantization_score = np.mean(hist_diff) / np.max(hist.flatten()) if np.max(hist.flatten()) > 0 else 0
+            quantization_score = (
+                np.mean(hist_diff) / np.max(hist.flatten())
+                if np.max(hist.flatten()) > 0
+                else 0
+            )
 
             return min(quantization_score * 10, 1.0)
 
@@ -393,7 +462,9 @@ class HybridCompressionTagger:
             morphed = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
 
             # Find text-like rectangular regions
-            contours, _ = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(
+                morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
             text_like_regions = 0
 
             for contour in contours:
@@ -472,7 +543,9 @@ class HybridCompressionTagger:
                 frame2 = cv2.cvtColor(frames[i + 1], cv2.COLOR_RGB2GRAY)
 
                 # Calculate normalized cross-correlation
-                correlation = cv2.matchTemplate(frame1, frame2, cv2.TM_CCOEFF_NORMED)[0, 0]
+                correlation = cv2.matchTemplate(frame1, frame2, cv2.TM_CCOEFF_NORMED)[
+                    0, 0
+                ]
                 similarities.append(max(0, correlation))  # Ensure non-negative
 
             return np.mean(similarities)
@@ -547,8 +620,11 @@ class HybridCompressionTagger:
 
             for i in range(len(frames) - 1):
                 # Validate frame shapes
-                if (len(frames[i].shape) < 3 or len(frames[i+1].shape) < 3 or
-                    frames[i].shape[:2] != frames[i+1].shape[:2]):
+                if (
+                    len(frames[i].shape) < 3
+                    or len(frames[i + 1].shape) < 3
+                    or frames[i].shape[:2] != frames[i + 1].shape[:2]
+                ):
                     continue  # Skip frames with inconsistent dimensions
 
                 gray1 = cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY)
@@ -594,8 +670,16 @@ class HybridCompressionTagger:
 
             for i in range(len(frames) - 1):
                 # Calculate histogram difference for scene change detection
-                hist1 = cv2.calcHist([frames[i]], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
-                hist2 = cv2.calcHist([frames[i + 1]], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
+                hist1 = cv2.calcHist(
+                    [frames[i]], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256]
+                )
+                hist2 = cv2.calcHist(
+                    [frames[i + 1]],
+                    [0, 1, 2],
+                    None,
+                    [32, 32, 32],
+                    [0, 256, 0, 256, 0, 256],
+                )
 
                 # Chi-squared distance for histogram comparison
                 chi_squared = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CHISQR)
@@ -619,13 +703,18 @@ class HybridCompressionTagger:
 
             for i in range(1, len(frames) - 1):
                 # Calculate brightness progression
-                brightness_prev = np.mean(cv2.cvtColor(frames[i-1], cv2.COLOR_RGB2GRAY))
+                brightness_prev = np.mean(
+                    cv2.cvtColor(frames[i - 1], cv2.COLOR_RGB2GRAY)
+                )
                 brightness_curr = np.mean(cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY))
-                brightness_next = np.mean(cv2.cvtColor(frames[i+1], cv2.COLOR_RGB2GRAY))
+                brightness_next = np.mean(
+                    cv2.cvtColor(frames[i + 1], cv2.COLOR_RGB2GRAY)
+                )
 
                 # Check for monotonic brightness change (fade pattern)
-                if ((brightness_prev < brightness_curr < brightness_next) or
-                    (brightness_prev > brightness_curr > brightness_next)):
+                if (brightness_prev < brightness_curr < brightness_next) or (
+                    brightness_prev > brightness_curr > brightness_next
+                ):
                     fade_indicators.append(1)
                 else:
                     fade_indicators.append(0)
@@ -645,8 +734,16 @@ class HybridCompressionTagger:
 
             for i in range(len(frames) - 1):
                 # Calculate histogram difference between consecutive frames
-                hist1 = cv2.calcHist([frames[i]], [0, 1, 2], None, [16, 16, 16], [0, 256, 0, 256, 0, 256])
-                hist2 = cv2.calcHist([frames[i + 1]], [0, 1, 2], None, [16, 16, 16], [0, 256, 0, 256, 0, 256])
+                hist1 = cv2.calcHist(
+                    [frames[i]], [0, 1, 2], None, [16, 16, 16], [0, 256, 0, 256, 0, 256]
+                )
+                hist2 = cv2.calcHist(
+                    [frames[i + 1]],
+                    [0, 1, 2],
+                    None,
+                    [16, 16, 16],
+                    [0, 256, 0, 256, 0, 256],
+                )
 
                 # Sharp cuts have high histogram differences
                 bhattacharyya = cv2.compareHist(hist1, hist2, cv2.HISTCMP_BHATTACHARYYA)
@@ -674,7 +771,9 @@ class HybridCompressionTagger:
             hist = hist / np.sum(hist)  # Normalize
 
             # Calculate Shannon entropy
-            entropy = -np.sum(hist * np.log2(hist + 1e-10))  # Add small value to avoid log(0)
+            entropy = -np.sum(
+                hist * np.log2(hist + 1e-10)
+            )  # Add small value to avoid log(0)
             return min(entropy / 8.0, 1.0)  # Normalize to 0-1
 
         except Exception:
@@ -691,7 +790,9 @@ class HybridCompressionTagger:
             last_frame = cv2.cvtColor(frames[-1], cv2.COLOR_RGB2GRAY)
 
             # Calculate structural similarity
-            ssim_score = cv2.matchTemplate(first_frame, last_frame, cv2.TM_CCOEFF_NORMED)[0, 0]
+            ssim_score = cv2.matchTemplate(
+                first_frame, last_frame, cv2.TM_CCOEFF_NORMED
+            )[0, 0]
 
             # Look for periodic patterns in middle frames
             mid_similarities = []
@@ -701,12 +802,17 @@ class HybridCompressionTagger:
                 loop_index = i % len(frames)
                 if loop_index < len(frames):
                     loop_frame = cv2.cvtColor(frames[loop_index], cv2.COLOR_RGB2GRAY)
-                    similarity = cv2.matchTemplate(mid_frame, loop_frame, cv2.TM_CCOEFF_NORMED)[0, 0]
+                    similarity = cv2.matchTemplate(
+                        mid_frame, loop_frame, cv2.TM_CCOEFF_NORMED
+                    )[0, 0]
                     mid_similarities.append(max(0, similarity))
 
             # Combine first-last similarity with periodic pattern strength
-            loop_confidence = (0.6 * max(0, ssim_score) +
-                              0.4 * np.mean(mid_similarities) if mid_similarities else 0)
+            loop_confidence = (
+                0.6 * max(0, ssim_score) + 0.4 * np.mean(mid_similarities)
+                if mid_similarities
+                else 0
+            )
             return min(loop_confidence, 1.0)
 
         except Exception:
@@ -732,7 +838,9 @@ class HybridCompressionTagger:
                 grad_y2 = cv2.Sobel(gray2, cv2.CV_64F, 0, 1, ksize=3)
 
                 # Motion direction change
-                direction_change = np.mean(np.abs(grad_x2 - grad_x1) + np.abs(grad_y2 - grad_y1))
+                direction_change = np.mean(
+                    np.abs(grad_x2 - grad_x1) + np.abs(grad_y2 - grad_y1)
+                )
                 motion_directions.append(direction_change)
 
                 # Motion magnitude
@@ -744,7 +852,9 @@ class HybridCompressionTagger:
             magnitude_complexity = np.var(motion_magnitudes) if motion_magnitudes else 0
 
             # Normalize and combine
-            total_complexity = (direction_complexity / 1000.0 + magnitude_complexity / 100.0) / 2
+            total_complexity = (
+                direction_complexity / 1000.0 + magnitude_complexity / 100.0
+            ) / 2
             return min(total_complexity, 1.0)
 
         except Exception:

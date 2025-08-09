@@ -48,7 +48,7 @@ def compute_file_sha256(file_path: Path) -> str:
 def extract_gif_metadata(
     file_path: Path,
     source_platform: str = "unknown",
-    source_metadata: dict[str, Any] | None = None
+    source_metadata: dict[str, Any] | None = None,
 ) -> GifMetadata:
     """Extract metadata from a GIF file.
 
@@ -75,7 +75,7 @@ def extract_gif_metadata(
     try:
         # Open GIF with PIL
         with Image.open(file_path) as img:
-            if img.format != 'GIF':
+            if img.format != "GIF":
                 raise ValueError(f"File is not a GIF: {file_path}")
 
             # Basic dimensions
@@ -87,13 +87,13 @@ def extract_gif_metadata(
 
             try:
                 # Use PIL's built-in frame counting if available
-                if hasattr(img, 'n_frames'):
+                if hasattr(img, "n_frames"):
                     frame_count = img.n_frames
                     # Still need to collect durations for FPS calculation
                     for i in range(frame_count):
                         try:
                             img.seek(i)
-                            duration = img.info.get('duration', 100)
+                            duration = img.info.get("duration", 100)
                             durations.append(duration)
                         except Exception:
                             durations.append(100)  # Default fallback
@@ -104,7 +104,7 @@ def extract_gif_metadata(
                         try:
                             img.seek(current_frame)
                             frame_count = current_frame + 1
-                            duration = img.info.get('duration', 100)
+                            duration = img.info.get("duration", 100)
                             durations.append(duration)
                             current_frame += 1
                         except EOFError:
@@ -114,7 +114,9 @@ def extract_gif_metadata(
 
                         # Safety limit to prevent infinite loops
                         if current_frame > 10000:
-                            raise ValueError(f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted")
+                            raise ValueError(
+                                f"GIF appears to have excessive frames (>{current_frame}), possibly corrupted"
+                            )
 
             except EOFError:
                 pass  # Normal end of frames
@@ -136,12 +138,14 @@ def extract_gif_metadata(
             # Count unique colors by examining palette
             img.seek(0)  # Go back to first frame
 
-            if img.mode == 'P':  # Palette mode
+            if img.mode == "P":  # Palette mode
                 # Get palette and count unique colors
                 palette = img.getpalette()
                 if palette:
                     # Palette is in RGB format, so divide by 3 to get color count
-                    orig_n_colors = len({tuple(palette[i:i+3]) for i in range(0, len(palette), 3)})
+                    orig_n_colors = len(
+                        {tuple(palette[i : i + 3]) for i in range(0, len(palette), 3)}
+                    )
                 else:
                     orig_n_colors = 256  # Default max for palette mode
             else:
@@ -149,7 +153,9 @@ def extract_gif_metadata(
                 quantized = img.quantize(colors=256)
                 palette = quantized.getpalette()
                 if palette:
-                    orig_n_colors = len({tuple(palette[i:i+3]) for i in range(0, len(palette), 3)})
+                    orig_n_colors = len(
+                        {tuple(palette[i : i + 3]) for i in range(0, len(palette), 3)}
+                    )
                 else:
                     orig_n_colors = 256
 
@@ -171,7 +177,7 @@ def extract_gif_metadata(
         orig_n_colors=orig_n_colors,
         entropy=entropy,
         source_platform=source_platform,
-        source_metadata=source_metadata
+        source_metadata=source_metadata,
     )
 
 
@@ -185,8 +191,8 @@ def calculate_entropy(image: Image.Image) -> float:
         Entropy value as float
     """
     # Convert to grayscale if needed
-    if image.mode != 'L':
-        gray_image = image.convert('L')
+    if image.mode != "L":
+        gray_image = image.convert("L")
     else:
         gray_image = image
 

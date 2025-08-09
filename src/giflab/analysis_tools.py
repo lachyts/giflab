@@ -17,6 +17,7 @@ from .dynamic_pipeline import Pipeline
 # CSV loading
 # ---------------------------------------------------------------------------
 
+
 def load_results(csv_path: Path) -> pd.DataFrame:
     """Load a GifLab results CSV into a pandas *DataFrame*.
 
@@ -26,9 +27,11 @@ def load_results(csv_path: Path) -> pd.DataFrame:
         raise FileNotFoundError(csv_path)
     return pd.read_csv(csv_path)
 
+
 # ---------------------------------------------------------------------------
 # Performance matrices
 # ---------------------------------------------------------------------------
+
 
 def _detect_variable(step_name: str) -> str:
     if step_name.endswith("Frame"):
@@ -54,27 +57,36 @@ def performance_matrix(df: pd.DataFrame, metric: str = "ssim") -> dict[str, pd.S
 
     out: dict[str, pd.Series] = {}
     for variable in ["frame_reduction", "color_reduction", "lossy_compression"]:
-        mask = df["variable"] == variable if "variable" in df.columns else pd.Series(True, index=df.index)
+        mask = (
+            df["variable"] == variable
+            if "variable" in df.columns
+            else pd.Series(True, index=df.index)
+        )
         if mask.any():
-            grouped = df[mask].groupby(name_col)[metric].mean().sort_values(ascending=False)
+            grouped = (
+                df[mask].groupby(name_col)[metric].mean().sort_values(ascending=False)
+            )
             out[variable] = grouped
     return out
+
 
 # ---------------------------------------------------------------------------
 # Recommendations
 # ---------------------------------------------------------------------------
 
-def recommend_tools(df: pd.DataFrame, metric: str = "ssim", top_n: int = 1) -> dict[str, list[str]]:
+
+def recommend_tools(
+    df: pd.DataFrame, metric: str = "ssim", top_n: int = 1
+) -> dict[str, list[str]]:
     """Return *top_n* tool names per variable based on *metric* (higher is better)."""
     matrices = performance_matrix(df, metric)
-    return {
-        var: list(series.head(top_n).index)
-        for var, series in matrices.items()
-    }
+    return {var: list(series.head(top_n).index) for var, series in matrices.items()}
+
 
 # ---------------------------------------------------------------------------
 # Pipeline visualisation
 # ---------------------------------------------------------------------------
+
 
 def pipeline_to_mermaid(pipeline: Pipeline) -> str:
     """Return Mermaid DSL representing *pipeline* as a flow chart."""
@@ -83,13 +95,15 @@ def pipeline_to_mermaid(pipeline: Pipeline) -> str:
     for i, step in enumerate(pipeline.steps):
         node_id = f"S{i}"
         label = f"{step.tool_cls.NAME}\n({step.variable})"
-        lines.append(f"    {node_id}[\"{label}\"]")
+        lines.append(f'    {node_id}["{label}"]')
         if prev_id is not None:
             lines.append(f"    {prev_id} --> {node_id}")
         prev_id = node_id
     return "\n".join(lines)
 
+
 # Convenience ----------------------------------------------------------------
+
 
 def save_pipeline_diagram(pipeline: Pipeline, out_path: Path) -> None:
     """Save a pipeline diagram as a `.mmd` Mermaid file for later rendering."""

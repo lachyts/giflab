@@ -34,19 +34,34 @@ class TaggingPipeline:
     # Define the 25 tagging columns that will be added to CSV
     TAGGING_COLUMNS = [
         # Content classification (CLIP) - 6 columns
-        'screen_capture_confidence', 'vector_art_confidence', 'photography_confidence',
-        'hand_drawn_confidence', '3d_rendered_confidence', 'pixel_art_confidence',
-
+        "screen_capture_confidence",
+        "vector_art_confidence",
+        "photography_confidence",
+        "hand_drawn_confidence",
+        "3d_rendered_confidence",
+        "pixel_art_confidence",
         # Quality assessment (Classical CV) - 4 columns
-        'blocking_artifacts', 'ringing_artifacts', 'quantization_noise', 'overall_quality',
-
+        "blocking_artifacts",
+        "ringing_artifacts",
+        "quantization_noise",
+        "overall_quality",
         # Technical characteristics (Classical CV) - 5 columns
-        'text_density', 'edge_density', 'color_complexity', 'contrast_score', 'gradient_smoothness',
-
+        "text_density",
+        "edge_density",
+        "color_complexity",
+        "contrast_score",
+        "gradient_smoothness",
         # Temporal motion analysis (Classical CV) - 10 columns
-        'frame_similarity', 'motion_intensity', 'motion_smoothness', 'static_region_ratio',
-        'scene_change_frequency', 'fade_transition_presence', 'cut_sharpness',
-        'temporal_entropy', 'loop_detection_confidence', 'motion_complexity'
+        "frame_similarity",
+        "motion_intensity",
+        "motion_smoothness",
+        "static_region_ratio",
+        "scene_change_frequency",
+        "fade_transition_presence",
+        "cut_sharpness",
+        "temporal_entropy",
+        "loop_detection_confidence",
+        "motion_complexity",
     ]
 
     def __init__(self, workers: int = 1):
@@ -59,7 +74,9 @@ class TaggingPipeline:
         self.workers = max(1, workers)
         self.logger = setup_logging(Path("logs"))
 
-        self.logger.info(f"Initialized HybridCompressionTagger with {self.workers} workers")
+        self.logger.info(
+            f"Initialized HybridCompressionTagger with {self.workers} workers"
+        )
         self.logger.info(f"Will add {len(self.TAGGING_COLUMNS)} tagging columns to CSV")
 
     def load_existing_results(self, csv_path: Path) -> list[dict[str, Any]]:
@@ -80,7 +97,7 @@ class TaggingPipeline:
 
             # Validate expected columns exist
             if results:
-                required_cols = {'gif_sha', 'orig_filename', 'engine'}
+                required_cols = {"gif_sha", "orig_filename", "engine"}
                 missing_cols = required_cols - set(results[0].keys())
                 if missing_cols:
                     raise ValueError(f"Missing required columns: {missing_cols}")
@@ -90,7 +107,9 @@ class TaggingPipeline:
             self.logger.error(f"Failed to load CSV {csv_path}: {e}")
             raise
 
-    def identify_unique_gifs(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def identify_unique_gifs(
+        self, results: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Identify unique original GIFs from compression results.
 
         CRITICAL: Only select original engine records (engine='original'),
@@ -116,11 +135,15 @@ class TaggingPipeline:
         self.logger.info(f"Found {len(unique_list)} unique original GIFs to tag")
 
         if not unique_list:
-            self.logger.warning("No original GIFs found (engine='original'). Tagging requires original records.")
+            self.logger.warning(
+                "No original GIFs found (engine='original'). Tagging requires original records."
+            )
 
         return unique_list
 
-    def find_original_gif_path(self, result: dict[str, Any], raw_dir: Path) -> Path | None:
+    def find_original_gif_path(
+        self, result: dict[str, Any], raw_dir: Path
+    ) -> Path | None:
         """Find the original GIF file path for a result record.
 
         Args:
@@ -138,7 +161,10 @@ class TaggingPipeline:
         # This ensures we get the correct case even on case-insensitive filesystems
         try:
             for file_path in raw_dir.iterdir():
-                if file_path.is_file() and file_path.name.lower() == orig_filename.lower():
+                if (
+                    file_path.is_file()
+                    and file_path.name.lower() == orig_filename.lower()
+                ):
                     return file_path
         except Exception:
             pass
@@ -165,9 +191,7 @@ class TaggingPipeline:
             raise RuntimeError(f"Tagging failed for {gif_path}: {e}") from e
 
     def update_results_with_tags(
-        self,
-        results: list[dict[str, Any]],
-        tagging_results: dict[str, TaggingResult]
+        self, results: list[dict[str, Any]], tagging_results: dict[str, TaggingResult]
     ) -> list[dict[str, Any]]:
         """Update compression results with generated tagging scores.
 
@@ -202,9 +226,7 @@ class TaggingPipeline:
         return updated_results
 
     def write_tagged_csv(
-        self,
-        updated_results: list[dict[str, Any]],
-        output_csv_path: Path
+        self, updated_results: list[dict[str, Any]], output_csv_path: Path
     ) -> None:
         """Write updated results with tagging scores to new CSV file.
 
@@ -219,30 +241,31 @@ class TaggingPipeline:
             raise ValueError("No results to write")
 
         # Determine fieldnames - original columns + tagging columns
-        original_fieldnames = [k for k in updated_results[0].keys() if k not in self.TAGGING_COLUMNS]
+        original_fieldnames = [
+            k for k in updated_results[0].keys() if k not in self.TAGGING_COLUMNS
+        ]
         fieldnames = original_fieldnames + self.TAGGING_COLUMNS
 
         try:
             output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(output_csv_path, "w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
 
                 for result in updated_results:
                     writer.writerow(result)
 
-            self.logger.info(f"Wrote {len(updated_results)} results to {output_csv_path}")
+            self.logger.info(
+                f"Wrote {len(updated_results)} results to {output_csv_path}"
+            )
 
         except Exception as e:
             self.logger.error(f"Failed to write CSV {output_csv_path}: {e}")
             raise
 
     def run(
-        self,
-        csv_path: Path,
-        raw_dir: Path,
-        output_csv_path: Path | None = None
+        self, csv_path: Path, raw_dir: Path, output_csv_path: Path | None = None
     ) -> dict[str, Any]:
         """Run the complete comprehensive tagging pipeline.
 
@@ -291,7 +314,9 @@ class TaggingPipeline:
             # Find original GIF path
             gif_path = self.find_original_gif_path(gif_record, raw_dir)
             if not gif_path:
-                self.logger.warning(f"Could not find original GIF for {gif_sha}: {gif_record.get('orig_filename', 'unknown')}")
+                self.logger.warning(
+                    f"Could not find original GIF for {gif_sha}: {gif_record.get('orig_filename', 'unknown')}"
+                )
                 failed_count += 1
                 continue
 
@@ -304,13 +329,15 @@ class TaggingPipeline:
                 # Log key scores for monitoring
                 content_classification = tagging_result.content_classification
                 if content_classification:
-                    content_type = max(content_classification.items(), key=lambda x: x[1])
+                    content_type = max(
+                        content_classification.items(), key=lambda x: x[1]
+                    )
                     content_type_str = f"{content_type[0]}={content_type[1]:.3f}"
                 else:
                     content_type_str = "no_content_classification"
 
-                motion_intensity = tagging_result.scores.get('motion_intensity', 0)
-                overall_quality = tagging_result.scores.get('overall_quality', 0)
+                motion_intensity = tagging_result.scores.get("motion_intensity", 0)
+                overall_quality = tagging_result.scores.get("overall_quality", 0)
 
                 self.logger.info(
                     f"Tagged {gif_path.name}: {content_type_str}, "
@@ -332,7 +359,9 @@ class TaggingPipeline:
             }
 
         # Update all results with tagging scores (inheritance)
-        self.logger.info("Updating all compression results with inherited tagging scores...")
+        self.logger.info(
+            "Updating all compression results with inherited tagging scores..."
+        )
         updated_results = self.update_results_with_tags(results, tagging_results)
 
         # Write updated results to new CSV
@@ -346,7 +375,7 @@ class TaggingPipeline:
             "tagged_successfully": tagged_count,
             "tagging_failures": failed_count,
             "output_path": str(output_csv_path),
-            "tagging_columns_added": len(self.TAGGING_COLUMNS)
+            "tagging_columns_added": len(self.TAGGING_COLUMNS),
         }
 
 
@@ -392,12 +421,8 @@ def validate_tagged_csv(csv_path: Path) -> dict[str, Any]:
             "tagging_columns_present": len(present_columns),
             "tagging_columns_missing": len(missing_columns),
             "missing_columns": missing_columns,
-            "csv_path": str(csv_path)
+            "csv_path": str(csv_path),
         }
 
     except Exception as e:
-        return {
-            "valid": False,
-            "error": str(e),
-            "csv_path": str(csv_path)
-        }
+        return {"valid": False, "error": str(e), "csv_path": str(csv_path)}

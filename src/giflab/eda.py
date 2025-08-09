@@ -33,15 +33,16 @@ def _numeric_columns(df: pd.DataFrame) -> list[str]:
 def _sanitize_filename(name: str) -> str:
     """Sanitize a column name to be safe for use as a filename."""
     import re
+
     # Replace problematic characters with underscores
-    safe_name = re.sub(r'[^\w\-_.]', '_', name)
+    safe_name = re.sub(r"[^\w\-_.]", "_", name)
     # Remove consecutive underscores
-    safe_name = re.sub(r'_+', '_', safe_name)
+    safe_name = re.sub(r"_+", "_", safe_name)
     # Remove leading/trailing underscores
-    safe_name = safe_name.strip('_')
+    safe_name = safe_name.strip("_")
     # Ensure it's not empty
     if not safe_name:
-        safe_name = 'metric'
+        safe_name = "metric"
     return safe_name
 
 

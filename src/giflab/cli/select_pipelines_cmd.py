@@ -14,9 +14,16 @@ from .utils import handle_generic_error
     "csv_file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-@click.option("--metric", default="ssim", help="Quality metric to optimise (default: ssim)")
+@click.option(
+    "--metric", default="ssim", help="Quality metric to optimise (default: ssim)"
+)
 @click.option("--top", default=1, help="Top-N pipelines to pick (per variable)")
-@click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=Path("winners.yaml"))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("winners.yaml"),
+)
 def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
     """Pick the best pipelines from an experiment CSV and write a YAML list."""
     try:

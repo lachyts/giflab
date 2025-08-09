@@ -5,13 +5,13 @@ import csv
 import json
 import logging
 import os
-from shutil import move, copy2
 import signal
 import sys
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from shutil import copy2, move
 from typing import Any
 
 # Cross-platform file locking
@@ -69,10 +69,7 @@ def setup_logging(log_dir: Path, log_level: str = "INFO") -> logging.Logger:
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
     )
 
     return logging.getLogger("giflab")
@@ -98,10 +95,7 @@ def atomic_write(target_path: Path, mode: str = "w"):
     # Create temporary file in same directory as target
     temp_dir = target_path.parent
     with tempfile.NamedTemporaryFile(
-        mode=mode,
-        dir=temp_dir,
-        delete=False,
-        suffix=f".tmp_{target_path.name}"
+        mode=mode, dir=temp_dir, delete=False, suffix=f".tmp_{target_path.name}"
     ) as temp_file:
         try:
             yield temp_file
@@ -114,7 +108,9 @@ def atomic_write(target_path: Path, mode: str = "w"):
             raise
 
 
-def append_csv_row(csv_path: Path, row_data: dict[str, Any], fieldnames: list[str]) -> None:
+def append_csv_row(
+    csv_path: Path, row_data: dict[str, Any], fieldnames: list[str]
+) -> None:
     """Atomically append a row to a CSV file with proper locking to prevent race conditions.
 
     Args:
@@ -265,7 +261,9 @@ def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:
             copy2(str(gif_path), str(dest_path))
             gif_path.unlink()
         except Exception as copy_error:
-            raise OSError(f"Failed to move {gif_path} to {dest_path}: {copy_error}") from e
+            raise OSError(
+                f"Failed to move {gif_path} to {dest_path}: {copy_error}"
+            ) from e
 
     return dest_path
 
