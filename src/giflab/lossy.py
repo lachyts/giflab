@@ -341,13 +341,52 @@ def compress_with_gifsicle(
     # Add input file first (required for frame operations)
     cmd.append(input_str)
 
-    # Add frame reduction arguments AFTER input file
+    # Add frame reduction arguments AFTER input file with timing preservation
     if frame_keep_ratio < 1.0:
-        frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
-        cmd.extend(frame_args)
+        # Extract timing information for frame reduction
+        try:
+            from .frame_keep import extract_gif_timing_info, build_gifsicle_timing_args, calculate_frame_indices
+            timing_info = extract_gif_timing_info(input_path)
+            original_delays = timing_info["frame_delays"]
+            loop_count = timing_info["loop_count"]
+            
+            # Calculate which frames to keep
+            frame_indices = calculate_frame_indices(total_frames, frame_keep_ratio)
+            
+            # Add frame selection arguments
+            frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
+            cmd.extend(frame_args)
+            
+            # Add timing preservation arguments with adjusted delays
+            timing_args = build_gifsicle_timing_args(original_delays, frame_indices, loop_count)
+            cmd.extend(timing_args)
+            
+        except Exception:
+            # Fallback to old behavior if timing extraction fails
+            frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
+            cmd.extend(frame_args)
+            # Add basic loop preservation
+            cmd.extend(["--loopcount=0"])
+    else:
+        # Even when not reducing frames, preserve timing and loop count
+        try:
+            from .frame_keep import extract_gif_timing_info, build_gifsicle_timing_args
+            timing_info = extract_gif_timing_info(input_path)
+            original_delays = timing_info["frame_delays"]
+            loop_count = timing_info["loop_count"]
+            
+            # No frame reduction, so use all frame indices
+            frame_indices = list(range(len(original_delays)))
+            timing_args = build_gifsicle_timing_args(original_delays, frame_indices, loop_count)
+            cmd.extend(timing_args)
+        except Exception:
+            # Default to infinite loop
+            cmd.extend(["--loopcount=0"])
 
     # Add output
     cmd.extend(["--output", output_str])
+
+    # Command ready for execution
 
     # Execute command and measure time
     start_time = time.time()
@@ -504,10 +543,48 @@ def compress_with_animately(
     if lossy_level > 0:
         cmd.extend(["--lossy", str(lossy_level)])
 
-    # Add frame reduction arguments
+    # Add frame reduction arguments with timing preservation
     if frame_keep_ratio < 1.0:
         frame_args = build_animately_frame_args(frame_keep_ratio, total_frames)
         cmd.extend(frame_args)
+        
+        # Extract and preserve original timing information
+        try:
+            from .frame_keep import extract_gif_timing_info, calculate_frame_indices, calculate_adjusted_delays
+            timing_info = extract_gif_timing_info(input_path)
+            original_delays = timing_info["frame_delays"]
+            loop_count = timing_info["loop_count"]
+            
+            # Calculate adjusted delays for remaining frames
+            frame_indices = calculate_frame_indices(total_frames, frame_keep_ratio)
+            adjusted_delays = calculate_adjusted_delays(original_delays, frame_indices)
+            
+            # Use average delay to maintain timing consistency
+            if adjusted_delays:
+                avg_delay = sum(adjusted_delays) / len(adjusted_delays)
+                cmd.extend(["--delay", str(int(avg_delay))])
+                
+            # Preserve loop count
+            if loop_count is not None:
+                cmd.extend(["--loops", str(loop_count)])
+            else:
+                cmd.extend(["--loops", "0"])  # Default to infinite loop
+                
+        except Exception:
+            # Fallback: just preserve basic looping
+            cmd.extend(["--loops", "0"])
+    else:
+        # Even when not reducing frames, preserve original loop count
+        try:
+            from .frame_keep import extract_gif_timing_info
+            timing_info = extract_gif_timing_info(input_path)
+            loop_count = timing_info["loop_count"]
+            if loop_count is not None:
+                cmd.extend(["--loops", str(loop_count)])
+            else:
+                cmd.extend(["--loops", "0"])
+        except Exception:
+            cmd.extend(["--loops", "0"])
 
     # Add color reduction arguments
     if color_keep_count is not None:

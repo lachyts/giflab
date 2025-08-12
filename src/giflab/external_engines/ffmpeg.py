@@ -82,8 +82,19 @@ def frame_reduce(
     *,
     fps: float,
 ) -> dict[str, Any]:
-    """Reduce frame-rate to *fps* using FFmpeg."""
+    """Reduce frame-rate to *fps* using FFmpeg with timing and loop preservation."""
     ffmpeg = _ffmpeg_binary()
+    
+    # Import timing functions
+    from ..frame_keep import extract_gif_timing_info
+    
+    # Extract original timing and loop information
+    try:
+        timing_info = extract_gif_timing_info(input_path)
+        loop_count = timing_info["loop_count"]
+    except Exception:
+        loop_count = 0  # Default to infinite loop
+    
     cmd = [
         ffmpeg,
         "-y",
@@ -92,9 +103,108 @@ def frame_reduce(
         "-i",
         str(input_path),
         "-filter_complex",
-        f"fps={fps}",
-        str(output_path),
+        f"fps={fps}"
     ]
+    
+    # Preserve loop count
+    if loop_count is not None and loop_count >= 0:
+        cmd.extend(["-loop", str(loop_count)])
+    else:
+        cmd.extend(["-loop", "0"])  # Infinite loop
+    
+    cmd.append(str(output_path))
+    
+    return run_command(cmd, engine="ffmpeg", output_path=output_path)
+
+
+def frame_reduce_by_ratio(
+    input_path: Path,
+    output_path: Path,
+    *,
+    keep_ratio: float,
+) -> dict[str, Any]:
+    """Reduce frames by *keep_ratio* using FFmpeg with proper timing preservation."""
+    if not 0 < keep_ratio <= 1:
+        raise ValueError("keep_ratio must be in (0, 1]")
+    
+    # Import timing and frame functions
+    from ..frame_keep import extract_gif_timing_info, calculate_frame_indices, calculate_adjusted_delays
+    from shutil import copy
+    import time
+    import os
+    
+    # Shortcut – no reduction needed
+    if keep_ratio == 1.0:
+        start = time.perf_counter()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        copy(input_path, output_path)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        size_kb = int(os.path.getsize(output_path) / 1024)
+        return {
+            "render_ms": duration_ms,
+            "engine": "ffmpeg",
+            "command": "cp",
+            "kilobytes": size_kb,
+        }
+    
+    # Extract timing and loop information
+    try:
+        timing_info = extract_gif_timing_info(input_path)
+        original_delays = timing_info["frame_delays"]
+        loop_count = timing_info["loop_count"]
+        total_frames = timing_info["total_frames"]
+    except Exception:
+        # Fallback: convert to fps-based approach
+        original_fps = 10.0  # Default assumption
+        target_fps = original_fps * keep_ratio
+        target_fps = max(target_fps, 0.1)  # Minimum FPS
+        return frame_reduce(input_path, output_path, fps=target_fps)
+    
+    # Calculate which frames to keep
+    frames_to_keep = calculate_frame_indices(total_frames, keep_ratio)
+    adjusted_delays = calculate_adjusted_delays(original_delays, frames_to_keep)
+    
+    # Create frame selection string for FFmpeg
+    # FFmpeg select filter: select frames by index
+    select_expr = "+".join([f"eq(n\\,{idx})" for idx in frames_to_keep])
+    
+    ffmpeg = _ffmpeg_binary()
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        str(input_path)
+    ]
+    
+    # Use select filter to choose specific frames
+    filters = [f"select='{select_expr}'"]
+    
+    # Set frame delays using setpts filter
+    # Calculate time base for frame delays
+    if len(adjusted_delays) > 1:
+        # Create PTS (Presentation Time Stamp) values for proper timing
+        pts_values = []
+        current_pts = 0
+        for delay in adjusted_delays[:-1]:  # All but last frame
+            pts_values.append(current_pts)
+            current_pts += delay / 1000.0  # Convert ms to seconds
+        pts_values.append(current_pts)  # Last frame
+        
+        # Apply setpts to control timing
+        filters.append("setpts=N*TB")
+    
+    cmd.extend(["-filter_complex", ",".join(filters)])
+    
+    # Preserve loop count
+    if loop_count is not None and loop_count >= 0:
+        cmd.extend(["-loop", str(loop_count)])
+    else:
+        cmd.extend(["-loop", "0"])  # Infinite loop
+    
+    cmd.append(str(output_path))
+    
     return run_command(cmd, engine="ffmpeg", output_path=output_path)
 
 

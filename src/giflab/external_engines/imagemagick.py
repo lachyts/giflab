@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import glob
 import os
+import tempfile
 import time
 from pathlib import Path
 from shutil import copy
 from typing import Any
 
+from PIL import Image
+
+from ..frame_keep import calculate_frame_indices
 from ..system_tools import discover_tool
 from .common import run_command
 
@@ -77,7 +81,7 @@ def frame_reduce(
     *,
     keep_ratio: float,
 ) -> dict[str, Any]:
-    """Drop frames to achieve *keep_ratio* using a simple “delete every Nth” rule."""
+    """Drop frames to achieve *keep_ratio* while preserving timing and looping."""
     if not 0 < keep_ratio <= 1:
         raise ValueError("keep_ratio must be in (0, 1]")
 
@@ -95,23 +99,75 @@ def frame_reduce(
             "kilobytes": size_kb,
         }
 
-    # Very naive deletion strategy: drop every *step* frame where
-    #   step = round(1/keep_ratio).
-    # For example          keep_ratio=0.5 ⇒ step=2 ⇒ delete 1--2
-    step = max(2, round(1 / keep_ratio))
-    delete_pattern = f"1--{step}"  # “delete every <step> frames starting at 1”
+    # Import timing functions from frame_keep module
+    from ..frame_keep import extract_gif_timing_info, calculate_adjusted_delays
 
-    cmd = [
-        _magick_binary(),
-        str(input_path),
-        "-coalesce",
-        "-delete",
-        delete_pattern,
-        "-layers",
-        "optimize",
-        str(output_path),
-    ]
+    # Extract timing and loop information from original GIF
+    try:
+        timing_info = extract_gif_timing_info(input_path)
+        original_delays = timing_info["frame_delays"]
+        loop_count = timing_info["loop_count"]
+        total_frames = timing_info["total_frames"]
+    except Exception as e:
+        # Fallback to old behavior if timing extraction fails
+        with Image.open(input_path) as img:
+            total_frames = 0
+            try:
+                while True:
+                    img.seek(total_frames)
+                    total_frames += 1
+            except EOFError:
+                pass
+        original_delays = [100] * total_frames  # Default delays
+        loop_count = 0  # Default to infinite loop
 
+    # Calculate which frames to keep using standardized algorithm
+    frames_to_keep = calculate_frame_indices(total_frames, keep_ratio)
+    
+    # Convert to ImageMagick deletion pattern
+    # Keep frames by deleting all others
+    all_frames = set(range(total_frames))
+    frames_to_delete = sorted(all_frames - set(frames_to_keep))
+    
+    if not frames_to_delete:
+        # Nothing to delete, just copy
+        start = time.perf_counter()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        copy(input_path, output_path)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        size_kb = int(os.path.getsize(output_path) / 1024)
+        return {
+            "render_ms": duration_ms,
+            "engine": "imagemagick", 
+            "command": "cp",
+            "kilobytes": size_kb,
+        }
+    
+    # Use simpler approach: delete frames and set uniform delay
+    adjusted_delays = calculate_adjusted_delays(original_delays, frames_to_keep)
+    
+    # Build ImageMagick command with timing and loop preservation
+    cmd = [_magick_binary(), str(input_path), "-coalesce"]
+    
+    # Delete unwanted frames
+    delete_pattern = ",".join(str(frame) for frame in frames_to_delete)
+    cmd.extend(["-delete", delete_pattern])
+    
+    # Set uniform delay based on average of adjusted delays
+    if adjusted_delays:
+        avg_delay = sum(adjusted_delays) / len(adjusted_delays)
+        delay_ticks = max(2, int(avg_delay // 10))  # Convert ms to ticks (1/100s)
+        cmd.extend(["-delay", str(delay_ticks)])
+    
+    # Preserve loop count
+    if loop_count is not None:
+        cmd.extend(["-loop", str(loop_count)])
+    else:
+        cmd.extend(["-loop", "0"])  # Default to infinite loop
+    
+    # Optimize and save
+    cmd.extend(["-layers", "optimize", str(output_path)])
+    
     return run_command(cmd, engine="imagemagick", output_path=output_path)
 
 

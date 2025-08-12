@@ -213,9 +213,9 @@ def create_custom_preset_from_cli(variable_slots, lock_slots, slot_params_list):
     help="Enable GPU acceleration for quality metrics calculation (requires OpenCV with CUDA)",
 )
 @click.option(
-    "--no-cache",
+    "--use-cache",
     is_flag=True,
-    help="Disable cache and force re-running all pipeline tests (slower but fresh results)",
+    help="Enable cache for pipeline test results (faster but may use stale results during development)",
 )
 @click.option(
     "--clear-cache",
@@ -257,7 +257,7 @@ def experiment(
     resume: bool,
     estimate_time: bool,
     use_gpu: bool,
-    no_cache: bool,
+    use_cache: bool,
     clear_cache: bool,
     preset: str,
     list_presets: bool,
@@ -280,9 +280,11 @@ def experiment(
         from giflab.experimental import ExperimentalRunner
         from giflab.experimental.sampling import SAMPLING_STRATEGIES
 
-        # Create pipeline runner with cache settings
-        use_cache = not no_cache  # Invert the no_cache flag
-        runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+        # Create pipeline runner with cache settings (disabled by default)
+        # use_cache flag is now directly used (defaults to False)
+        # Determine preset name for directory naming
+        preset_name_for_dir = preset if preset else "custom-experiment"
+        runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, preset_name=preset_name_for_dir)
 
         # Handle preset listing request
         if list_presets:
