@@ -29,11 +29,11 @@ class PipelineResultsCache:
         self.cache_db_path = cache_db_path
         self.git_commit = git_commit or "unknown"
         self.logger = logging.getLogger(__name__)
-        self._pending_results = []  # Batch storage
-        self._pending_failures = []  # Batch failure storage
+        self._pending_results: list[dict[str, Any]] = []  # Batch storage
+        self._pending_failures: list[dict[str, Any]] = []  # Batch failure storage
         self._init_database()
 
-    def _init_database(self):
+    def _init_database(self) -> None:
         """Initialize the SQLite database schema."""
         try:
             with sqlite3.connect(self.cache_db_path) as conn:
@@ -212,7 +212,7 @@ class PipelineResultsCache:
             self.logger.warning(f"Failed to retrieve cached result: {e}")
             return None
 
-    def queue_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
+    def queue_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict) -> None:
         """Queue a successful pipeline test result for batch storage.
 
         Args:
@@ -281,7 +281,7 @@ class PipelineResultsCache:
         # Auto-flush when batch size is reached
         self.flush_batch()
 
-    def flush_batch(self, force: bool = False):
+    def flush_batch(self, force: bool = False) -> None:
         """Flush pending results and failures to database.
 
         Args:
@@ -297,7 +297,7 @@ class PipelineResultsCache:
         if force or len(self._pending_failures) >= batch_size:
             self._flush_failures_batch()
 
-    def _flush_results_batch(self):
+    def _flush_results_batch(self) -> None:
         """Flush pending successful results to database."""
         if not self._pending_results:
             return
@@ -323,7 +323,7 @@ class PipelineResultsCache:
         except Exception as e:
             self.logger.warning(f"Failed to flush results batch: {e}")
 
-    def _flush_failures_batch(self):
+    def _flush_failures_batch(self) -> None:
         """Flush pending failures to database."""
         if not self._pending_failures:
             return
@@ -351,7 +351,7 @@ class PipelineResultsCache:
         except Exception as e:
             self.logger.warning(f"Failed to flush failures batch: {e}")
 
-    def store_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict):
+    def store_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict) -> None:
         """Store a pipeline test result (legacy method - now uses batching).
 
         Args:
@@ -365,7 +365,7 @@ class PipelineResultsCache:
             force=True
         )  # Force flush for immediate storage (legacy behavior)
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear all cached results and failures."""
         try:
             with sqlite3.connect(self.cache_db_path) as conn:

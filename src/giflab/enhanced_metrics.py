@@ -33,7 +33,7 @@ def normalize_metric(
             return 1.0  # Perfect score for zero MSE
         # Normalize MSE using log scale, then invert (lower MSE is better)
         normalized = 1.0 / (1.0 + np.log10(max(value, 1.0)))
-        return max(0.0, min(1.0, normalized))
+        return float(max(0.0, min(1.0, normalized)))
 
     elif metric_name == "gmsd_mean":
         # GMSD: lower is better, typical range 0-0.5
@@ -250,7 +250,7 @@ def calculate_efficiency_metric(
         normalized_compression**compression_weight
     )
 
-    return efficiency
+    return float(efficiency)
 
 
 def process_metrics_with_enhanced_quality(

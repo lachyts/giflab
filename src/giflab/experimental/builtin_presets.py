@@ -293,7 +293,7 @@ TARGETED_PRESETS = {
 }
 
 
-def register_builtin_presets():
+def register_builtin_presets() -> None:
     """Register all built-in presets with the global registry."""
     for preset_id, preset in TARGETED_PRESETS.items():
         PRESET_REGISTRY.register(preset_id, preset)

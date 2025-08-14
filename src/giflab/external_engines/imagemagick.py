@@ -100,7 +100,7 @@ def frame_reduce(
         }
 
     # Import timing functions from frame_keep module
-    from ..frame_keep import extract_gif_timing_info, calculate_adjusted_delays
+    from ..frame_keep import calculate_adjusted_delays, extract_gif_timing_info
 
     # Extract timing and loop information from original GIF
     try:
@@ -108,7 +108,7 @@ def frame_reduce(
         original_delays = timing_info["frame_delays"]
         loop_count = timing_info["loop_count"]
         total_frames = timing_info["total_frames"]
-    except Exception as e:
+    except Exception:
         # Fallback to old behavior if timing extraction fails
         with Image.open(input_path) as img:
             total_frames = 0
@@ -138,7 +138,7 @@ def frame_reduce(
         size_kb = int(os.path.getsize(output_path) / 1024)
         return {
             "render_ms": duration_ms,
-            "engine": "imagemagick", 
+            "engine": "imagemagick",
             "command": "cp",
             "kilobytes": size_kb,
         }

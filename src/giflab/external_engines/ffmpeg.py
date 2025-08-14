@@ -128,10 +128,15 @@ def frame_reduce_by_ratio(
         raise ValueError("keep_ratio must be in (0, 1]")
     
     # Import timing and frame functions
-    from ..frame_keep import extract_gif_timing_info, calculate_frame_indices, calculate_adjusted_delays
-    from shutil import copy
-    import time
     import os
+    import time
+    from shutil import copy
+
+    from ..frame_keep import (
+        calculate_adjusted_delays,
+        calculate_frame_indices,
+        extract_gif_timing_info,
+    )
     
     # Shortcut – no reduction needed
     if keep_ratio == 1.0:

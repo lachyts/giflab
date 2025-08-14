@@ -345,7 +345,11 @@ def compress_with_gifsicle(
     if frame_keep_ratio < 1.0:
         # Extract timing information for frame reduction
         try:
-            from .frame_keep import extract_gif_timing_info, build_gifsicle_timing_args, calculate_frame_indices
+            from .frame_keep import (
+                build_gifsicle_timing_args,
+                calculate_frame_indices,
+                extract_gif_timing_info,
+            )
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]
@@ -370,7 +374,7 @@ def compress_with_gifsicle(
     else:
         # Even when not reducing frames, preserve timing and loop count
         try:
-            from .frame_keep import extract_gif_timing_info, build_gifsicle_timing_args
+            from .frame_keep import build_gifsicle_timing_args, extract_gif_timing_info
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]
@@ -550,7 +554,11 @@ def compress_with_animately(
         
         # Extract and preserve original timing information
         try:
-            from .frame_keep import extract_gif_timing_info, calculate_frame_indices, calculate_adjusted_delays
+            from .frame_keep import (
+                calculate_adjusted_delays,
+                calculate_frame_indices,
+                extract_gif_timing_info,
+            )
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]

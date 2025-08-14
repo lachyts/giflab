@@ -50,7 +50,7 @@ class SlotConfiguration:
         default_factory=dict
     )  # Algorithm-specific parameters
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate slot configuration after initialization."""
         if self.type == "locked":
             if not self.implementation:
@@ -108,7 +108,7 @@ class ExperimentPreset:
     author: str | None = None  # Preset creator
     version: str = "1.0"  # Preset version for compatibility
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate experiment preset after initialization."""
         # Ensure at least one variable slot
         variable_count = sum(
@@ -192,7 +192,7 @@ class ExperimentPreset:
 class PresetRegistry:
     """Registry for managing experiment presets with validation and conflict detection."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.presets: dict[str, ExperimentPreset] = {}
         self.logger = logging.getLogger(__name__)
 

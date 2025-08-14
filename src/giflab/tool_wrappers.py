@@ -65,6 +65,7 @@ from .tool_interfaces import (
     FrameReductionTool,
     LossyCompressionTool,
 )
+from .wrapper_validation.integration import validate_wrapper_apply_result
 
 # ---------------------------------------------------------------------------
 # GIFSICLE
@@ -96,13 +97,16 @@ class GifsicleColorReducer(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
-        return compress_with_gifsicle(
+        result = compress_with_gifsicle(
             input_path,
             output_path,
             lossy_level=0,
             frame_keep_ratio=1.0,
             color_keep_count=colors,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -133,13 +137,16 @@ class GifsicleFrameReducer(FrameReductionTool):
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
-        return compress_with_gifsicle(
+        result = compress_with_gifsicle(
             input_path,
             output_path,
             lossy_level=0,
             frame_keep_ratio=ratio,
             color_keep_count=None,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -170,13 +177,16 @@ class GifsicleLossyCompressor(LossyCompressionTool):
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
-        return compress_with_gifsicle(
+        result = compress_with_gifsicle(
             input_path,
             output_path,
             lossy_level=level,
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -286,13 +296,16 @@ class AnimatelyColorReducer(ColorReductionTool):
         if params is None or "colors" not in params:
             raise ValueError("params must include 'colors' for color reduction")
         colors = int(params["colors"])
-        return compress_with_animately(
+        result = compress_with_animately(
             input_path,
             output_path,
             lossy_level=0,
             frame_keep_ratio=1.0,
             color_keep_count=colors,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -323,13 +336,16 @@ class AnimatelyFrameReducer(FrameReductionTool):
         if params is None or "ratio" not in params:
             raise ValueError("params must include 'ratio' for frame reduction")
         ratio = float(params["ratio"])
-        return compress_with_animately(
+        result = compress_with_animately(
             input_path,
             output_path,
             lossy_level=0,
             frame_keep_ratio=ratio,
             color_keep_count=None,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -360,13 +376,16 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
         if params is None or "lossy_level" not in params:
             raise ValueError("params must include 'lossy_level' for lossy compression")
         level = int(params["lossy_level"])
-        return compress_with_animately(
+        result = compress_with_animately(
             input_path,
             output_path,
             lossy_level=level,
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -464,12 +483,15 @@ class ImageMagickColorReducer(ColorReductionTool):
         colors = int(params["colors"])
         dithering_method = params.get("dithering_method", "None")
 
-        return imagemagick_color_reduce_with_dithering(
+        result = imagemagick_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
             dithering_method=dithering_method,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
 
 class ImageMagickFrameReducer(FrameReductionTool):
@@ -526,11 +548,14 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
         if params and "quality" in params:
             quality = int(params["quality"])
 
-        return imagemagick_lossy_compress(
+        result = imagemagick_lossy_compress(
             input_path,
             output_path,
             quality=quality,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
 
 # ---------------------------------------------------------------------------
@@ -569,13 +594,16 @@ class FFmpegColorReducer(ColorReductionTool):
             if "dithering_method" in params:
                 dithering_method = params["dithering_method"]
 
-        return ffmpeg_color_reduce_with_dithering(
+        result = ffmpeg_color_reduce_with_dithering(
             input_path,
             output_path,
             colors=colors,
             dithering_method=dithering_method,
             fps=fps,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
 
 class FFmpegFrameReducer(FrameReductionTool):
@@ -653,11 +681,14 @@ class FFmpegLossyCompressor(LossyCompressionTool):
             elif "q_scale" in params:
                 q_scale = int(params["q_scale"])
 
-        return ffmpeg_lossy_compress(
+        result = ffmpeg_lossy_compress(
             input_path,
             output_path,
             q_scale=q_scale,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
 
 # ---------------------------------------------------------------------------
@@ -1129,12 +1160,15 @@ class GifskiLossyCompressor(LossyCompressionTool):
         if params and "png_sequence_dir" in params:
             png_sequence_dir = Path(params["png_sequence_dir"])
 
-        return gifski_lossy_compress(
+        result = gifski_lossy_compress(
             input_path,
             output_path,
             quality=quality,
             png_sequence_dir=png_sequence_dir,
         )
+        
+        # Add validation
+        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
 
 
 # ---------------------------------------------------------------------------

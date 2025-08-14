@@ -58,7 +58,7 @@ class MetricsConfig:
 
     # Enable positional sampling (first, middle, last frame analysis)
     ENABLE_POSITIONAL_SAMPLING: bool = True
-    POSITIONAL_METRICS: list[str] = None  # Will be set in __post_init__
+    POSITIONAL_METRICS: list[str] | None = None  # Will be set in __post_init__
 
     # Composite quality weights (must sum to 1.0)
     # Legacy 4-metric weights (for backward compatibility)
@@ -280,8 +280,71 @@ class EngineConfig:
                 setattr(self, attr_name, env_value)
 
 
+@dataclass
+class ValidationConfig:
+    """Configuration for wrapper output validation system."""
+    
+    # Enable/disable validation
+    ENABLE_WRAPPER_VALIDATION: bool = True
+    
+    # Frame validation tolerances
+    FRAME_RATIO_TOLERANCE: float = 0.1    # 10% tolerance for frame reduction ratios
+    MIN_FRAMES_REQUIRED: int = 1          # Minimum frames in output
+    
+    # Color validation settings
+    COLOR_COUNT_TOLERANCE: int = 5        # Allow up to 5 extra colors due to encoding
+    MIN_COLOR_REDUCTION_PERCENT: float = 0.1  # Require at least 10% color reduction
+    
+    # Timing validation tolerances
+    FPS_TOLERANCE: float = 0.2            # 20% tolerance for FPS changes
+    MIN_FPS: float = 0.1                  # Minimum valid FPS
+    MAX_FPS: float = 60.0                 # Maximum reasonable FPS
+    
+    # Performance and error handling
+    VALIDATION_TIMEOUT_MS: int = 5000     # 5 second timeout per validation
+    FAIL_ON_VALIDATION_ERROR: bool = False  # Don't break pipelines on validation errors
+    LOG_VALIDATION_FAILURES: bool = True  # Log validation failures for debugging
+    
+    # File integrity checks
+    MIN_FILE_SIZE_BYTES: int = 100        # Minimum valid GIF size
+    MAX_FILE_SIZE_MB: float = 100.0       # Maximum reasonable output size
+
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        # Validate tolerances are positive
+        if self.FRAME_RATIO_TOLERANCE <= 0 or self.FRAME_RATIO_TOLERANCE > 1:
+            raise ValueError(f"FRAME_RATIO_TOLERANCE must be between 0 and 1, got {self.FRAME_RATIO_TOLERANCE}")
+        
+        if self.FPS_TOLERANCE <= 0 or self.FPS_TOLERANCE > 1:
+            raise ValueError(f"FPS_TOLERANCE must be between 0 and 1, got {self.FPS_TOLERANCE}")
+            
+        if self.MIN_COLOR_REDUCTION_PERCENT < 0 or self.MIN_COLOR_REDUCTION_PERCENT > 1:
+            raise ValueError(f"MIN_COLOR_REDUCTION_PERCENT must be between 0 and 1, got {self.MIN_COLOR_REDUCTION_PERCENT}")
+        
+        # Validate frame requirements
+        if self.MIN_FRAMES_REQUIRED < 1:
+            raise ValueError(f"MIN_FRAMES_REQUIRED must be at least 1, got {self.MIN_FRAMES_REQUIRED}")
+        
+        # Validate FPS bounds
+        if self.MIN_FPS <= 0:
+            raise ValueError(f"MIN_FPS must be positive, got {self.MIN_FPS}")
+        if self.MAX_FPS <= self.MIN_FPS:
+            raise ValueError(f"MAX_FPS must be greater than MIN_FPS, got MAX_FPS={self.MAX_FPS}, MIN_FPS={self.MIN_FPS}")
+        
+        # Validate file size limits
+        if self.MIN_FILE_SIZE_BYTES <= 0:
+            raise ValueError(f"MIN_FILE_SIZE_BYTES must be positive, got {self.MIN_FILE_SIZE_BYTES}")
+        if self.MAX_FILE_SIZE_MB <= 0:
+            raise ValueError(f"MAX_FILE_SIZE_MB must be positive, got {self.MAX_FILE_SIZE_MB}")
+        
+        # Validate timeout
+        if self.VALIDATION_TIMEOUT_MS <= 0:
+            raise ValueError(f"VALIDATION_TIMEOUT_MS must be positive, got {self.VALIDATION_TIMEOUT_MS}")
+
+
 # Default configuration instances
 DEFAULT_COMPRESSION_CONFIG = CompressionConfig()
 DEFAULT_METRICS_CONFIG = MetricsConfig()
 DEFAULT_PATH_CONFIG = PathConfig()
 DEFAULT_ENGINE_CONFIG = EngineConfig()
+DEFAULT_VALIDATION_CONFIG = ValidationConfig()

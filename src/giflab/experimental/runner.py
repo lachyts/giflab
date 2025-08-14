@@ -102,9 +102,9 @@ class ExperimentalRunner:
         # Track current preset for parameter override (None = use default test_params)
         self._current_preset: ExperimentPreset | None = None
 
-        # Create timestamped output directory for this run
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_dir = self.base_output_dir / f"run_{timestamp}"
+        # Create descriptive output directory with sequential numbering for this run
+        experiment_name = self._generate_experiment_name()
+        self.output_dir = self.base_output_dir / experiment_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Also create a "latest" symlink for easy access to most recent results
@@ -113,8 +113,7 @@ class ExperimentalRunner:
             if latest_link.exists() or latest_link.is_symlink():
                 latest_link.unlink()
             # Create relative symlink to work better across systems
-            relative_target = f"run_{timestamp}"
-            latest_link.symlink_to(relative_target)
+            latest_link.symlink_to(experiment_name)
             self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
             self.logger.info(f"🔗 Latest results symlink: {latest_link}")
         except (OSError, NotImplementedError) as e:
@@ -164,6 +163,70 @@ class ExperimentalRunner:
         return self._frame_generator.create_frame(
             content_type, size, frame, total_frames
         )
+
+    def _generate_experiment_name(self) -> str:
+        """Generate a descriptive experiment name with sequential numbering and Australian date format.
+        
+        Format: {run_number:03d}-{experiment_description}-{aus_date}
+        Example: 001-gifsicle-color-validation-14aug2025-1108
+        """
+        # Get next sequential run number
+        run_number = self._get_next_run_number()
+        
+        # Generate simple, clean timestamp (Australian format)
+        timestamp = datetime.now().strftime("%d-%m-%y")
+        
+        # Generate experiment description (will be set later when we know the experiment type)
+        experiment_desc = "custom-experiment"
+        
+        return f"{run_number:03d}-{experiment_desc}-{timestamp}"
+    
+    def _get_next_run_number(self) -> int:
+        """Get the next sequential run number by examining existing directories."""
+        if not self.base_output_dir.exists():
+            return 1
+            
+        # Find all directories that match our numbering pattern
+        existing_dirs = []
+        for path in self.base_output_dir.iterdir():
+            if path.is_dir() and not path.name.startswith('.') and path.name != 'latest':
+                # Try to extract number from directory name
+                try:
+                    # Look for pattern: 001-description-date or legacy names
+                    if path.name.startswith(tuple('0123456789')):
+                        # New format: 001-description-date
+                        parts = path.name.split('-', 1)
+                        if len(parts) >= 1:
+                            existing_dirs.append(int(parts[0]))
+                except (ValueError, IndexError):
+                    # Legacy directory name, ignore for numbering
+                    continue
+        
+        # Return next number
+        return max(existing_dirs, default=0) + 1
+    
+    def _update_experiment_description(self, description: str) -> None:
+        """Update the experiment description after we know what type of experiment we're running."""
+        # Generate new name with proper description
+        run_number = int(self.output_dir.name.split('-')[0])
+        timestamp = datetime.now().strftime("%d-%m-%y")
+        new_name = f"{run_number:03d}-{description}-{timestamp}"
+        new_path = self.base_output_dir / new_name
+        
+        # Rename directory if different
+        if new_name != self.output_dir.name:
+            self.output_dir.rename(new_path)
+            self.output_dir = new_path
+            
+            # Update latest symlink
+            latest_link = self.base_output_dir / "latest"
+            try:
+                if latest_link.exists() or latest_link.is_symlink():
+                    latest_link.unlink()
+                latest_link.symlink_to(new_name)
+            except (OSError, NotImplementedError):
+                # Symlinks not supported on this system
+                pass
 
     # Delegate sampling methods to the PipelineSampler
     def select_pipelines_intelligently(
@@ -310,7 +373,7 @@ class ExperimentalRunner:
         self.logger.info(f"   Use cache: {self.use_cache}")
 
     def generate_synthetic_gifs(self) -> list[Path]:
-        """Generate all synthetic test GIFs."""
+        """Generate all synthetic test GIFs in temporary subdirectory to avoid cluttering experiment root."""
         self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
 
         from importlib import import_module
@@ -338,12 +401,16 @@ class ExperimentalRunner:
                 def __exit__(self, exc_type, exc_val, exc_tb):
                     self.close()
 
+        # Create temporary subdirectory for synthetic GIFs to avoid cluttering experiment root
+        temp_synthetic_dir = self.output_dir / "temp_synthetic"
+        temp_synthetic_dir.mkdir(parents=True, exist_ok=True)
+        
         gif_paths = []
         with tqdm(
             self.synthetic_specs, desc="🖼️  Synthetic GIFs", unit="gif"
         ) as progress:
             for spec in progress:
-                gif_path = self.output_dir / f"{spec.name}.gif"
+                gif_path = temp_synthetic_dir / f"{spec.name}.gif"
                 if not gif_path.exists():
                     self._create_synthetic_gif(gif_path, spec)
                 gif_paths.append(gif_path)
@@ -394,22 +461,37 @@ class ExperimentalRunner:
             f"Running elimination analysis on {len(test_pipelines)} pipelines"
         )
 
-        # Generate synthetic test GIFs
-        if use_targeted_gifs:
-            synthetic_gifs = self.get_targeted_synthetic_gifs()
-        else:
-            synthetic_gifs = self.generate_synthetic_gifs()
+        try:
+            # Generate synthetic test GIFs
+            if use_targeted_gifs:
+                synthetic_gifs = self.get_targeted_synthetic_gifs()
+            else:
+                synthetic_gifs = self.generate_synthetic_gifs()
 
-        # Test all pipeline combinations
-        results_df = self._run_comprehensive_testing(synthetic_gifs, test_pipelines)
+            # Test all pipeline combinations
+            results_df = self._run_comprehensive_testing(synthetic_gifs, test_pipelines)
+            self._last_results_df = results_df  # Store for cleanup in finally block if needed
 
-        # Analyze results and eliminate underperformers
-        experiment_result = self._analyze_and_experiment(results_df, quality_threshold)
+            # Analyze results and eliminate underperformers
+            experiment_result = self._analyze_and_experiment(results_df, quality_threshold)
 
-        # Save results
-        self._save_results(experiment_result, results_df)
+            # Save results
+            self._save_results(experiment_result, results_df)
 
-        return experiment_result
+            return experiment_result
+        finally:
+            # Always clean up temporary synthetic GIFs directory and update catalog, even if experiment fails
+            self._cleanup_temp_synthetic_dir()
+            # Try to update catalog even for failed experiments (helps with debugging and tracking)
+            try:
+                # Create a minimal results_df if the experiment failed early
+                if not hasattr(self, '_last_results_df'):
+                    import pandas as pd
+                    self._last_results_df = pd.DataFrame()
+                dummy_experiment_result = ExperimentResult()
+                self._update_experiment_catalog(dummy_experiment_result, self._last_results_df)
+            except Exception as e:
+                self.logger.debug(f"Failed to update catalog in finally block: {e}")
 
     def _run_comprehensive_testing(
         self, gif_paths: list[Path], pipelines: list[Pipeline]
@@ -1285,6 +1367,9 @@ class ExperimentalRunner:
                 "actual_pipeline_steps": self._count_actual_steps(pipeline),
             }
 
+            # Save visual outputs for inspection (before temp directory cleanup)
+            self._save_visual_outputs(gif_path, output_path, pipeline, params, result)
+
             return result
 
     def _pipeline_uses_color_reduction(self, pipeline) -> bool:
@@ -1329,6 +1414,133 @@ class ExperimentalRunner:
                 if not tool_name.startswith("none-"):
                     actual_steps += 1
         return actual_steps
+
+    def _save_visual_outputs(
+        self, original_gif_path: Path, compressed_gif_path: Path, pipeline, params: dict, result: dict
+    ) -> None:
+        """Save visual GIF outputs in organized directory structure for inspection."""
+        try:
+            # Create visual outputs directory structure: {experiment}/visual_outputs/{gif_name}/
+            visual_dir = self.output_dir / "visual_outputs"
+            gif_name = original_gif_path.stem
+            gif_visual_dir = visual_dir / gif_name
+            gif_visual_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy original GIF (only once per GIF)
+            original_dest = gif_visual_dir / "original.gif"
+            if not original_dest.exists():
+                copy(original_gif_path, original_dest)
+                self.logger.debug(f"Copied original: {original_gif_path.name} -> {original_dest}")
+
+            # Generate descriptive filename for compressed GIF
+            compressed_filename = self._generate_compressed_filename(pipeline, params)
+            compressed_dest = gif_visual_dir / f"{compressed_filename}.gif"
+            
+            # Copy compressed GIF
+            copy(compressed_gif_path, compressed_dest)
+            self.logger.debug(f"Saved compressed: {compressed_filename}.gif")
+
+            # Save per-GIF metrics as JSON
+            metrics_file = gif_visual_dir / "metrics.json"
+            
+            # Load existing metrics or create new
+            import json
+            if metrics_file.exists():
+                with open(metrics_file) as f:
+                    all_metrics = json.load(f)
+            else:
+                all_metrics = {
+                    "original_info": {
+                        "filename": original_gif_path.name,
+                        "size_kb": round(original_gif_path.stat().st_size / 1024, 2),
+                        "content_type": result.get("content_type", "unknown")
+                    },
+                    "compressions": {}
+                }
+
+            # Add this compression's metrics (save ALL comprehensive metrics for complete quality analysis)
+            compression_metrics = {
+                # Pipeline identification
+                "pipeline": result.get("pipeline_id", "unknown"),
+                "tools_used": result.get("tools_used", []),
+                
+                # File and performance metrics
+                "file_size_kb": result.get("file_size_kb", 0),
+                "compression_ratio": result.get("compression_ratio", 1.0),
+                "render_time_ms": result.get("render_time_ms", 0),
+                
+                # Applied parameters
+                "applied_colors": result.get("applied_colors"),
+                "applied_lossy": result.get("applied_lossy"),
+                "applied_frame_ratio": result.get("applied_frame_ratio"),
+                
+                # Core structural similarity metrics
+                "ssim_mean": result.get("ssim_mean", 0.0),
+                "ms_ssim_mean": result.get("ms_ssim_mean", 0.0),
+                
+                # Signal quality metrics
+                "psnr_mean": result.get("psnr_mean", 0.0),
+                "mse_mean": result.get("mse_mean", 0.0),
+                "rmse_mean": result.get("rmse_mean", 0.0),
+                
+                # Advanced structural metrics
+                "fsim_mean": result.get("fsim_mean", 0.0),
+                "gmsd_mean": result.get("gmsd_mean", 0.0),
+                "edge_similarity_mean": result.get("edge_similarity_mean", 0.0),
+                
+                # Perceptual quality metrics
+                "chist_mean": result.get("chist_mean", 0.0),
+                "texture_similarity_mean": result.get("texture_similarity_mean", 0.0),
+                "sharpness_similarity_mean": result.get("sharpness_similarity_mean", 0.0),
+                
+                # Temporal consistency
+                "temporal_consistency": result.get("temporal_consistency", 0.0),
+                
+                # Composite quality scores (both legacy and enhanced)
+                "composite_quality": result.get("composite_quality", 0.0),
+                "enhanced_composite_quality": result.get("enhanced_composite_quality", 0.0),
+                "efficiency": result.get("efficiency", 0.0),
+                
+                # Frame count information
+                "frame_count": result.get("frame_count", 0)
+            }
+            
+            all_metrics["compressions"][compressed_filename] = compression_metrics
+
+            # Save updated metrics
+            with open(metrics_file, 'w') as f:
+                json.dump(all_metrics, f, indent=2)
+
+        except Exception as e:
+            self.logger.warning(f"Failed to save visual outputs for {original_gif_path.name}: {e}")
+
+    def _generate_compressed_filename(self, pipeline, params: dict) -> str:
+        """Generate descriptive filename for compressed GIF based on pipeline and parameters."""
+        # Extract meaningful parts from pipeline
+        parts = []
+        
+        for step in pipeline.steps:
+            if hasattr(step.tool_cls, "NAME"):
+                tool_name = step.tool_cls.NAME
+                if not tool_name.startswith("none-"):  # Skip no-op tools
+                    # Simplify tool names
+                    clean_name = tool_name.replace("-", "").replace("_", "")
+                    parts.append(clean_name)
+
+        pipeline_part = "-".join(parts) if parts else "unknown"
+        
+        # Add parameter details
+        param_parts = []
+        if params.get("colors") and self._pipeline_uses_color_reduction(pipeline):
+            param_parts.append(f"c{params['colors']}")
+        if params.get("lossy") and self._pipeline_uses_lossy_compression(pipeline):
+            param_parts.append(f"l{params['lossy']}")
+        if params.get("frame_ratio", 1.0) != 1.0 and self._pipeline_uses_frame_reduction(pipeline):
+            param_parts.append(f"f{params['frame_ratio']}")
+            
+        param_suffix = "-" + "-".join(param_parts) if param_parts else ""
+        
+        return f"{pipeline_part}{param_suffix}"
 
     def _test_gpu_availability(self):
         """Test GPU availability and log status."""
@@ -2371,6 +2583,108 @@ class ExperimentalRunner:
         self._save_pareto_analysis_results(experiment_result)
         self._generate_and_save_failure_report(results_df)
         self._log_results_summary(experiment_result, failed_results, results_df)
+        
+        # Update catalog.json with this experiment for web UI
+        self._update_experiment_catalog(experiment_result, results_df)
+
+    def _cleanup_temp_synthetic_dir(self):
+        """Clean up temporary synthetic GIFs directory after experiment completion."""
+        import shutil
+        temp_synthetic_dir = self.output_dir / "temp_synthetic"
+        if temp_synthetic_dir.exists():
+            try:
+                shutil.rmtree(temp_synthetic_dir)
+                self.logger.debug(f"Cleaned up temporary synthetic GIFs directory: {temp_synthetic_dir}")
+            except Exception as e:
+                self.logger.warning(f"Failed to clean up temporary directory {temp_synthetic_dir}: {e}")
+
+    def _update_experiment_catalog(self, experiment_result: ExperimentResult, results_df: pd.DataFrame):
+        """Update the catalog.json file with this experiment for web UI discovery."""
+        import json
+        from datetime import datetime
+        
+        catalog_path = self.base_output_dir / "catalog.json"
+        
+        # Count unique GIFs and pipelines from results
+        unique_gifs = len(results_df['gif_name'].unique()) if 'gif_name' in results_df.columns else 0
+        unique_pipelines = len(results_df['pipeline_id'].unique()) if 'pipeline_id' in results_df.columns else 0
+        
+        # Get experiment name from directory
+        experiment_dir_name = self.output_dir.name
+        
+        # Create experiment entry
+        experiment_entry = {
+            "id": experiment_dir_name,
+            "name": self._generate_experiment_display_name(),
+            "preset": getattr(self, '_current_preset', 'custom'),
+            "description": self._generate_experiment_description(),
+            "date": datetime.now().isoformat(),
+            "gifs_count": unique_gifs,
+            "pipelines_count": unique_pipelines,
+            "path": f"experiments/{experiment_dir_name}"
+        }
+        
+        try:
+            # Load existing catalog or create new one
+            if catalog_path.exists():
+                with open(catalog_path) as f:
+                    catalog = json.load(f)
+            else:
+                catalog = {"experiments": []}
+            
+            # Ensure experiments list exists
+            if "experiments" not in catalog:
+                catalog["experiments"] = []
+            
+            # Remove any existing entry with same ID (in case of re-run)
+            catalog["experiments"] = [exp for exp in catalog["experiments"] if exp.get("id") != experiment_dir_name]
+            
+            # Add new experiment entry
+            catalog["experiments"].append(experiment_entry)
+            
+            # Sort by date (newest first)
+            catalog["experiments"].sort(key=lambda x: x.get("date", ""), reverse=True)
+            
+            # Save updated catalog
+            with open(catalog_path, 'w') as f:
+                json.dump(catalog, f, indent=2)
+            
+            self.logger.info(f"📋 Updated experiment catalog: {catalog_path}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to update experiment catalog: {e}")
+
+    def _generate_experiment_display_name(self) -> str:
+        """Generate a human-readable display name for the experiment."""
+        if hasattr(self, '_current_preset') and self._current_preset:
+            preset_names = {
+                'quick-test': 'Quick Test',
+                'frame-focus': 'Frame Algorithm Comparison',
+                'color-focus': 'Color Reduction Analysis',
+                'lossy-focus': 'Lossy Compression Study'
+            }
+            base_name = preset_names.get(self._current_preset, self._current_preset.replace('-', ' ').title())
+        else:
+            base_name = "Custom Experiment"
+        
+        # Add any distinguishing features
+        if hasattr(self, 'use_gpu') and self.use_gpu:
+            base_name += " (GPU Accelerated)"
+        
+        return base_name
+
+    def _generate_experiment_description(self) -> str:
+        """Generate a description for the experiment based on its configuration."""
+        if hasattr(self, '_current_preset') and self._current_preset:
+            preset_descriptions = {
+                'quick-test': 'Fast preset for development and testing with comprehensive metrics',
+                'frame-focus': 'Compare frame reduction algorithms with quality preservation',
+                'color-focus': 'Analyze color palette reduction techniques and quality impact',
+                'lossy-focus': 'Study lossy compression levels and quality trade-offs'
+            }
+            return preset_descriptions.get(self._current_preset, f"Targeted analysis using {self._current_preset} preset")
+        else:
+            return "Custom experiment with comprehensive GIF compression analysis"
 
     def _validate_and_separate_results(
         self, results_df: pd.DataFrame
@@ -2454,28 +2768,6 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to update master history file: {e}")
 
-    def _log_run_metadata(self):
-        """Log metadata about this elimination run for tracking purposes."""
-        run_metadata = {
-            "run_id": self.output_dir.name,
-            "start_time": datetime.now().isoformat(),
-            "output_directory": str(self.output_dir),
-            "base_directory": str(self.base_output_dir),
-            "gpu_enabled": self.use_gpu,
-            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-            "git_commit": self._get_git_commit() if Path(".git").exists() else None,
-        }
-
-        # Save metadata to file
-        metadata_file = self.output_dir / "run_metadata.json"
-        try:
-            with open(metadata_file, "w") as f:
-                json.dump(run_metadata, f, indent=2)
-            self.logger.info(f"📋 Run metadata saved: {metadata_file}")
-        except Exception as e:
-            self.logger.warning(f"Failed to save run metadata: {e}")
-
-        return run_metadata
 
     def _get_git_commit(self) -> str:
         """Get current git commit hash if available."""

@@ -264,7 +264,7 @@ def experiment(
     variable_slot: tuple,
     lock_slot: tuple,
     slot_params: tuple,
-):
+) -> None:
     """Run comprehensive experimental pipeline testing with intelligent sampling.
 
     This command tests pipeline combinations on synthetic GIFs with diverse
@@ -282,9 +282,7 @@ def experiment(
 
         # Create pipeline runner with cache settings (disabled by default)
         # use_cache flag is now directly used (defaults to False)
-        # Determine preset name for directory naming
-        preset_name_for_dir = preset if preset else "custom-experiment"
-        runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, preset_name=preset_name_for_dir)
+        runner = ExperimentalRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
 
         # Handle preset listing request
         if list_presets:
@@ -324,6 +322,10 @@ def experiment(
                 click.echo(f"🎯 Using targeted preset: {preset}")
                 click.echo(f"🔬 Generated {len(test_pipelines)} targeted pipelines")
                 testing_approach = "targeted_preset"
+                
+                # Update experiment description with preset name
+                preset_description = preset.replace("-", "-").replace("_", "-")
+                runner._update_experiment_description(preset_description)
             except Exception as e:
                 click.echo(f"❌ Error with preset '{preset}': {e}")
                 click.echo("💡 Use --list-presets to see available presets")
@@ -349,6 +351,9 @@ def experiment(
                     f"🔬 Generated {len(test_pipelines)} custom targeted pipelines"
                 )
                 testing_approach = "custom_targeted"
+                
+                # Update experiment description with custom preset details
+                runner._update_experiment_description(custom_preset.name.lower().replace(" ", "-"))
             except Exception as e:
                 click.echo(f"❌ Error creating custom preset: {e}")
                 click.echo("💡 Check your slot configuration syntax")
@@ -365,18 +370,27 @@ def experiment(
                 click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
                 click.echo(f"📋 {strategy_info.description}")
                 testing_approach = f"sampling_{sampling}"
+                
+                # Update experiment description with sampling strategy
+                runner._update_experiment_description(f"sampling-{sampling}")
             elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
                 test_pipelines = all_pipelines[:max_pipelines]
                 click.echo(
                     f"⚠️  Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines"
                 )
                 testing_approach = "limited_testing"
+                
+                # Update experiment description for limited testing
+                runner._update_experiment_description(f"limited-{max_pipelines}-pipelines")
             else:
                 test_pipelines = all_pipelines
                 click.echo(
                     "🔬 Full comprehensive testing: Using all available pipelines"
                 )
                 testing_approach = "full_comprehensive"
+                
+                # Update experiment description for full testing
+                runner._update_experiment_description("full-comprehensive")
 
         # Calculate total job estimates
         if (

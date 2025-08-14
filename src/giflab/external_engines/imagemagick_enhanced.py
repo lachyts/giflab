@@ -201,7 +201,7 @@ def test_redundant_methods(input_path: Path, colors: int = 16) -> dict[str, byte
 
             try:
                 color_reduce_with_dithering(
-                    input_path, output_path, colors=colors, dithering_method=method
+                    input_path, output_path, colors=colors, dithering_method=method  # type: ignore
                 )
 
                 # Calculate hash of output file
@@ -210,7 +210,7 @@ def test_redundant_methods(input_path: Path, colors: int = 16) -> dict[str, byte
                     results[method] = file_hash
 
             except Exception as e:
-                results[method] = f"ERROR: {e}"
+                results[method] = f"ERROR: {e}".encode()
 
     return results
 
