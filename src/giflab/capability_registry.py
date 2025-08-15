@@ -35,7 +35,7 @@ def _iter_all_wrapper_subclasses() -> Iterator[type[ExternalTool]]:
                 # logging.getLogger(__name__).debug(f"Filtered base class: {obj.__name__}")
                 continue
 
-            yield obj  # type: ignore[arg-type]
+            yield obj
 
 
 def _is_base_class(cls: type) -> bool:

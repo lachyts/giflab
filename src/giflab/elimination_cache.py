@@ -11,7 +11,7 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .elimination_errors import ErrorTypes
 
@@ -197,7 +197,7 @@ class PipelineResultsCache:
                         self.logger.debug(
                             f"💾 Cache hit for {pipeline_id} on {gif_name}"
                         )
-                        return json.loads(result_json)
+                        return cast(dict, json.loads(result_json))
                     else:
                         self.logger.debug(
                             f"💾 Cache invalidated for {pipeline_id} on {gif_name} (git commit changed)"
@@ -246,7 +246,7 @@ class PipelineResultsCache:
 
     def queue_failure(
         self, pipeline_id: str, gif_name: str, params: dict, error_info: dict
-    ):
+    ) -> None:
         """Queue a pipeline failure for batch storage and analysis.
 
         Args:

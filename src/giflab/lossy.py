@@ -925,7 +925,7 @@ def _setup_png_sequence_directory(
         logger.info(f"Exporting {total_frames} frames to PNG sequence")
         png_export_result = export_png_sequence(input_path, png_sequence_dir)
 
-        if png_export_result.get("frame_count", 0) < 1:
+        if int(png_export_result.get("frame_count", 0)) < 1:
             logger.error("PNG sequence export failed: no frames generated")
             raise RuntimeError("Failed to export PNG sequence: no frames generated")
 
@@ -1055,7 +1055,7 @@ def _generate_json_config(
 
 def _execute_animately_advanced(
     animately_path: str, json_config_path: Path, output_path: Path
-) -> tuple[int, str]:
+) -> tuple[int, str | None]:
     """Execute Animately with advanced lossy configuration.
 
     Args:

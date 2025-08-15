@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from shutil import copy2, move
-from typing import Any
+from typing import Any, Generator, cast
 
 # Cross-platform file locking
 if sys.platform == "win32":
@@ -34,14 +34,14 @@ if sys.platform == "win32":
 else:
     import fcntl
 
-    def lock_file(file_handle) -> None:
+    def lock_file(file_handle: Any) -> None:
         """Lock file on Unix systems using fcntl."""
         try:
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
         except OSError:
             pass
 
-    def unlock_file(file_handle) -> None:
+    def unlock_file(file_handle: Any) -> None:
         """Unlock file on Unix systems using fcntl."""
         try:
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
@@ -76,7 +76,7 @@ def setup_logging(log_dir: Path, log_level: str = "INFO") -> logging.Logger:
 
 
 @contextmanager
-def atomic_write(target_path: Path, mode: str = "w"):
+def atomic_write(target_path: Path, mode: str = "w") -> Generator[Any, None, None]:
     """Context manager for atomic file writes using temporary files.
 
     Args:
@@ -215,7 +215,7 @@ def load_json(json_path: Path) -> dict[str, Any]:
         json.JSONDecodeError: If JSON is invalid
     """
     with open(json_path, encoding="utf-8") as f:
-        return json.load(f)
+        return cast(dict[str, Any], json.load(f))
 
 
 def move_bad_gif(gif_path: Path, bad_gifs_dir: Path) -> Path:

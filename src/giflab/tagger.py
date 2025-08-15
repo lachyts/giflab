@@ -113,14 +113,14 @@ class HybridCompressionTagger:
     - 10 temporal motion analysis scores (Classical CV)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the hybrid tagger with CLIP model and content queries."""
         if not CLIP_AVAILABLE:
             raise RuntimeError(
                 "CLIP dependencies not available. Install with: pip install torch open-clip-torch"
             )
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.logger = logging.getLogger(__name__)
 
         # Initialize CLIP for content classification
@@ -138,7 +138,7 @@ class HybridCompressionTagger:
             raise RuntimeError(f"CLIP initialization failed: {e}") from e
 
         # Content type queries for CLIP semantic classification
-        self.content_queries = [
+        self.content_queries: list[str] = [
             "a screenshot of computer software with text and UI elements",
             "vector art with clean geometric shapes and solid colors",
             "a photograph or realistic image with natural textures",
@@ -147,7 +147,7 @@ class HybridCompressionTagger:
             "pixel art or low resolution retro graphics",
         ]
 
-        self.content_types = [
+        self.content_types: list[str] = [
             "screen_capture",
             "vector_art",
             "photography",
@@ -156,7 +156,7 @@ class HybridCompressionTagger:
             "pixel_art",
         ]
 
-        self.model_version = "hybrid_v1.0_comprehensive"
+        self.model_version: str = "hybrid_v1.0_comprehensive"
 
     def tag_gif(self, gif_path: Path, gif_sha: str | None = None) -> TaggingResult:
         """Generate comprehensive tagging scores for a GIF.
@@ -230,10 +230,10 @@ class HybridCompressionTagger:
 
             if frame_count <= max_frames:
                 # Read all frames if small GIF
-                frame_indices = range(frame_count)
+                frame_indices = list(range(frame_count))
             else:
                 # Sample frames evenly across the GIF
-                frame_indices = np.linspace(0, frame_count - 1, max_frames, dtype=int)
+                frame_indices = np.linspace(0, frame_count - 1, max_frames, dtype=int).tolist()
 
             for frame_idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -486,7 +486,7 @@ class HybridCompressionTagger:
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             edges = cv2.Canny(gray, 50, 150)
             edge_density = np.sum(edges > 0) / edges.size
-            return float(min(edge_density * 10, 1.0))
+            return min(float(edge_density * 10), 1.0)
 
         except Exception:
             return 0.0
@@ -505,7 +505,7 @@ class HybridCompressionTagger:
         try:
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             contrast = np.std(gray) / 255.0
-            return float(min(contrast * 2, 1.0))
+            return min(float(contrast * 2), 1.0)
 
         except Exception:
             return 0.5
@@ -548,7 +548,7 @@ class HybridCompressionTagger:
                 ]
                 similarities.append(max(0, correlation))  # Ensure non-negative
 
-            return np.mean(similarities)
+            return float(np.mean(similarities))
 
         except Exception:
             return 0.5
@@ -597,7 +597,7 @@ class HybridCompressionTagger:
             # Smoothness = inverse of motion vector variance
             if len(motion_vectors) > 1:
                 variance = np.var(motion_vectors)
-                return max(0, 1.0 - min(variance / 100.0, 1.0))
+                return float(max(0, 1.0 - min(variance / 100.0, 1.0)))
             return 1.0
 
         except Exception:
@@ -654,7 +654,7 @@ class HybridCompressionTagger:
             else:
                 static_ratio = 1.0  # No pixels means completely static
 
-            return max(0, min(static_ratio, 1.0))
+            return float(max(0, min(static_ratio, 1.0)))
 
         except Exception:
             return 0.5
@@ -719,7 +719,7 @@ class HybridCompressionTagger:
                 else:
                     fade_indicators.append(0)
 
-            return np.mean(fade_indicators) if fade_indicators else 0.0
+            return float(np.mean(fade_indicators)) if fade_indicators else 0.0
 
         except Exception:
             return 0.0
@@ -749,7 +749,7 @@ class HybridCompressionTagger:
                 bhattacharyya = cv2.compareHist(hist1, hist2, cv2.HISTCMP_BHATTACHARYYA)
                 cut_sharpness_scores.append(min(bhattacharyya, 1.0))
 
-            return np.mean(cut_sharpness_scores)
+            return float(np.mean(cut_sharpness_scores))
 
         except Exception:
             return 0.0
@@ -774,7 +774,7 @@ class HybridCompressionTagger:
             entropy = -np.sum(
                 hist * np.log2(hist + 1e-10)
             )  # Add small value to avoid log(0)
-            return min(entropy / 8.0, 1.0)  # Normalize to 0-1
+            return float(min(entropy / 8.0, 1.0))  # Normalize to 0-1
 
         except Exception:
             return 0.5

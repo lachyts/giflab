@@ -290,10 +290,7 @@ def clean_error_message(error_msg: str) -> str:
     """
     import re
 
-    # Convert to string and handle None/empty cases
-    if error_msg is None:
-        return ""
-
+    # Convert to string and handle empty cases
     cleaned = str(error_msg)
 
     # Replace line breaks and carriage returns with spaces

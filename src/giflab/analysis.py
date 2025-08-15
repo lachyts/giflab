@@ -381,7 +381,7 @@ class ExperimentalAnalyzer:
             List of paths to generated visualization files
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        generated_files = []
+        generated_files: list[Path] = []
 
         successful_data = self.df[self.df["success"]]
 

@@ -349,7 +349,7 @@ class ExperimentalRunner:
                 # Test basic GPU operations
                 try:
                     import numpy as np
-                    test_mat = cv2.cuda_GpuMat()
+                    test_mat = cv2.cuda_GpuMat()  # type: ignore[attr-defined]
                     test_mat.upload(np.ones((100, 100), dtype=np.uint8))
                     test_mat.download()
                     self.logger.info(
@@ -405,26 +405,26 @@ class ExperimentalRunner:
         from importlib import import_module
 
         try:
-            tqdm = import_module("tqdm").tqdm  # type: ignore[attr-defined]
+            tqdm = import_module("tqdm").tqdm
         except ModuleNotFoundError:  # pragma: no cover – fallback if tqdm not installed
 
             class tqdm:  # noqa: WPS430 – simple fallback
-                def __init__(self, iterable, **kwargs):
+                def __init__(self, iterable: Any, **kwargs: Any) -> None:
                     self.iterable = iterable
 
-                def __iter__(self):
+                def __iter__(self) -> Any:
                     return iter(self.iterable)
 
-                def update(self, _n: int = 1):
+                def update(self, _n: int = 1) -> None:
                     pass
 
-                def close(self):
+                def close(self) -> None:
                     pass
 
-                def __enter__(self):
+                def __enter__(self) -> Any:
                     return self
 
-                def __exit__(self, exc_type, exc_val, exc_tb):
+                def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
                     self.close()
 
         # Create temporary subdirectory for synthetic GIFs to avoid cluttering experiment root
@@ -444,7 +444,7 @@ class ExperimentalRunner:
 
         return gif_paths
 
-    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec):
+    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec) -> None:
         """Create a synthetic GIF based on specification."""
         images = []
 
@@ -467,7 +467,7 @@ class ExperimentalRunner:
 
     def run_experimental_analysis(
         self,
-        test_pipelines: list[Pipeline] = None,
+        test_pipelines: list[Pipeline] | None = None,
         quality_threshold: float = 0.05,
         use_targeted_gifs: bool = False,
     ) -> ExperimentResult:
@@ -536,19 +536,19 @@ class ExperimentalRunner:
             class tqdm:
                 def __init__(
                     self,
-                    total=None,
-                    initial=0,
-                    desc="",
-                    unit="",
-                    bar_format="",
-                    **kwargs,
-                ):
+                    total: Any = None,
+                    initial: int = 0,
+                    desc: str = "",
+                    unit: str = "",
+                    bar_format: str = "",
+                    **kwargs: Any,
+                ) -> None:
                     self.total = total
                     self.n = initial
                     self.desc = desc
                     self._last_line_length = 0
 
-                def update(self, n=1):
+                def update(self, n: int = 1) -> None:
                     self.n += n
                     if hasattr(self, "total") and self.total:
                         percentage = (self.n / self.total) * 100
@@ -561,7 +561,7 @@ class ExperimentalRunner:
                         print(clear_line + progress_line, end="", flush=True)
                         self._last_line_length = len(progress_line)
 
-                def close(self):
+                def close(self) -> None:
                     # Clear the progress line and add newline
                     if hasattr(self, "_last_line_length"):
                         clear_line = "\r" + " " * self._last_line_length + "\r"
@@ -644,7 +644,7 @@ class ExperimentalRunner:
             csv_writer.writeheader()
 
         # Register cleanup handlers to prevent data loss on unexpected termination
-        def _cleanup_csv():
+        def _cleanup_csv() -> None:
             """Ensure CSV file is properly flushed and closed on exit."""
             try:
                 if csv_file and not csv_file.closed:
@@ -664,7 +664,7 @@ class ExperimentalRunner:
         atexit.register(_cleanup_csv)
 
         # Register signal handlers for common termination signals
-        def _signal_handler(signum, frame):
+        def _signal_handler(signum: Any, frame: Any) -> None:
             """Handle termination signals by cleaning up CSV and exiting gracefully."""
             signal_name = (
                 signal.Signals(signum).name
@@ -767,9 +767,10 @@ class ExperimentalRunner:
                             self.logger.info(
                                 "💡 This prevents the external-tool registration bug from causing invalid results"
                             )
-                            self.cache.queue_failure(
-                                pipeline.identifier(),
-                                gif_path.stem,
+                            if self.cache:
+                                self.cache.queue_failure(
+                                    pipeline.identifier(),
+                                    gif_path.stem,
                                 params,
                                 {
                                     "error": error_msg,
@@ -817,9 +818,10 @@ class ExperimentalRunner:
                                 self.logger.info(
                                     "💡 Filtering out base class tools that shouldn't be directly used"
                                 )
-                                self.cache.queue_failure(
-                                    pipeline.identifier(),
-                                    gif_path.stem,
+                                if self.cache:
+                                    self.cache.queue_failure(
+                                        pipeline.identifier(),
+                                        gif_path.stem,
                                     params,
                                     {
                                         "error": error_msg,
@@ -1054,8 +1056,8 @@ class ExperimentalRunner:
             return pd.DataFrame()
 
     def _add_result_to_buffer(
-        self, result: dict, buffer: list, csv_writer, csv_file, buffer_size: int
-    ):
+        self, result: dict, buffer: list, csv_writer: Any, csv_file: Any, buffer_size: int
+    ) -> None:
         """Add a result to the memory buffer and flush to CSV if buffer is full.
 
         Args:
@@ -1070,8 +1072,8 @@ class ExperimentalRunner:
             self._flush_results_buffer(buffer, csv_writer, csv_file)
 
     def _flush_results_buffer(
-        self, buffer: list, csv_writer, csv_file=None, force: bool = False
-    ):
+        self, buffer: list, csv_writer: Any, csv_file: Any = None, force: bool = False
+    ) -> None:
         """Flush results buffer to CSV file and clear memory.
 
         Args:
@@ -1398,7 +1400,7 @@ class ExperimentalRunner:
 
             return result
 
-    def _pipeline_uses_color_reduction(self, pipeline) -> bool:
+    def _pipeline_uses_color_reduction(self, pipeline: Any) -> bool:
         """Check if pipeline actually applies color reduction (not no-op)."""
         for step in pipeline.steps:
             if (
@@ -1409,7 +1411,7 @@ class ExperimentalRunner:
                 return True
         return False
 
-    def _pipeline_uses_frame_reduction(self, pipeline) -> bool:
+    def _pipeline_uses_frame_reduction(self, pipeline: Any) -> bool:
         """Check if pipeline actually applies frame reduction (not no-op)."""
         for step in pipeline.steps:
             if (
@@ -1420,7 +1422,7 @@ class ExperimentalRunner:
                 return True
         return False
 
-    def _pipeline_uses_lossy_compression(self, pipeline) -> bool:
+    def _pipeline_uses_lossy_compression(self, pipeline: Any) -> bool:
         """Check if pipeline actually applies lossy compression (not no-op)."""
         for step in pipeline.steps:
             if (
@@ -1431,7 +1433,7 @@ class ExperimentalRunner:
                 return True
         return False
 
-    def _count_actual_steps(self, pipeline) -> int:
+    def _count_actual_steps(self, pipeline: Any) -> int:
         """Count only non-no-op processing steps."""
         actual_steps = 0
         for step in pipeline.steps:
@@ -1442,7 +1444,7 @@ class ExperimentalRunner:
         return actual_steps
 
     def _save_visual_outputs(
-        self, original_gif_path: Path, compressed_gif_path: Path, pipeline, params: dict, result: dict
+        self, original_gif_path: Path, compressed_gif_path: Path, pipeline: Any, params: dict, result: dict
     ) -> None:
         """Save visual GIF outputs in organized directory structure for inspection."""
         try:
@@ -1673,8 +1675,8 @@ class ExperimentalRunner:
         for orig_frame, comp_frame in aligned_pairs:
             try:
                 # Upload frames to GPU
-                gpu_orig = cv2.cuda_GpuMat()
-                gpu_comp = cv2.cuda_GpuMat()
+                gpu_orig = cv2.cuda_GpuMat()  # type: ignore[attr-defined]
+                gpu_comp = cv2.cuda_GpuMat()  # type: ignore[attr-defined]
                 gpu_orig.upload(orig_frame.astype(np.uint8))
                 gpu_comp.upload(comp_frame.astype(np.uint8))
             except Exception as e:
@@ -1785,8 +1787,8 @@ class ExperimentalRunner:
             # Convert to grayscale on GPU if needed (reduces computational complexity)
             # Most quality metrics work better on luminance rather than individual color channels
             if gpu_img1.channels() == 3:
-                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)
-                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
+                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)  # type: ignore[attr-defined]
             else:
                 gpu_gray1 = gpu_img1
                 gpu_gray2 = gpu_img2
@@ -1796,8 +1798,8 @@ class ExperimentalRunner:
 
         try:
             # Convert to float32 for calculations (higher precision than uint8)
-            gpu_float1 = cv2.cuda.convertTo(gpu_gray1, cv2.CV_32F)
-            gpu_float2 = cv2.cuda.convertTo(gpu_gray2, cv2.CV_32F)
+            gpu_float1 = cv2.cuda.convertTo(gpu_gray1, cv2.CV_32F)  # type: ignore[attr-defined]
+            gpu_float2 = cv2.cuda.convertTo(gpu_gray2, cv2.CV_32F)  # type: ignore[attr-defined]
 
             # SSIM constants for numerical stability (Wang et al. 2004)
             # C1 = (K1 * L)^2, C2 = (K2 * L)^2 where L=255 (dynamic range), K1=0.01, K2=0.03
@@ -1814,35 +1816,35 @@ class ExperimentalRunner:
             sigma = 1.5
 
             # μ1, μ2 = local means computed via Gaussian blur
-            mu1 = cv2.cuda.GaussianBlur(gpu_float1, kernel_size, sigma)
-            mu2 = cv2.cuda.GaussianBlur(gpu_float2, kernel_size, sigma)
+            mu1 = cv2.cuda.GaussianBlur(gpu_float1, kernel_size, sigma)  # type: ignore[attr-defined]
+            mu2 = cv2.cuda.GaussianBlur(gpu_float2, kernel_size, sigma)  # type: ignore[attr-defined]
         except Exception as e:
             self.logger.warning(f"GPU SSIM calculation failed: {e}")
             return 0.0
 
         # Pre-compute squared means and cross-terms for SSIM formula
-        mu1_sq = cv2.cuda.multiply(mu1, mu1)  # μ1²
-        mu2_sq = cv2.cuda.multiply(mu2, mu2)  # μ2²
-        mu1_mu2 = cv2.cuda.multiply(mu1, mu2)  # μ1μ2
+        mu1_sq = cv2.cuda.multiply(mu1, mu1)  # type: ignore[attr-defined]  # μ1²
+        mu2_sq = cv2.cuda.multiply(mu2, mu2)  # type: ignore[attr-defined]  # μ2²
+        mu1_mu2 = cv2.cuda.multiply(mu1, mu2)  # type: ignore[attr-defined]  # μ1μ2
 
         # Variance calculations using GPU operations
         # σ1² = E[X1²] - μ1² (variance = mean of squares minus square of mean)
-        sigma1_sq = cv2.cuda.GaussianBlur(
-            cv2.cuda.multiply(gpu_float1, gpu_float1), kernel_size, sigma
+        sigma1_sq = cv2.cuda.GaussianBlur(  # type: ignore[attr-defined]
+            cv2.cuda.multiply(gpu_float1, gpu_float1), kernel_size, sigma  # type: ignore[attr-defined]
         )
-        sigma1_sq = cv2.cuda.subtract(sigma1_sq, mu1_sq)
+        sigma1_sq = cv2.cuda.subtract(sigma1_sq, mu1_sq)  # type: ignore[attr-defined]
 
         # σ2² = E[X2²] - μ2²
-        sigma2_sq = cv2.cuda.GaussianBlur(
-            cv2.cuda.multiply(gpu_float2, gpu_float2), kernel_size, sigma
+        sigma2_sq = cv2.cuda.GaussianBlur(  # type: ignore[attr-defined]
+            cv2.cuda.multiply(gpu_float2, gpu_float2), kernel_size, sigma  # type: ignore[attr-defined]
         )
-        sigma2_sq = cv2.cuda.subtract(sigma2_sq, mu2_sq)
+        sigma2_sq = cv2.cuda.subtract(sigma2_sq, mu2_sq)  # type: ignore[attr-defined]
 
         # σ12 = E[X1X2] - μ1μ2 (covariance between images)
-        sigma12 = cv2.cuda.GaussianBlur(
-            cv2.cuda.multiply(gpu_float1, gpu_float2), kernel_size, sigma
+        sigma12 = cv2.cuda.GaussianBlur(  # type: ignore[attr-defined]
+            cv2.cuda.multiply(gpu_float1, gpu_float2), kernel_size, sigma  # type: ignore[attr-defined]
         )
-        sigma12 = cv2.cuda.subtract(sigma12, mu1_mu2)
+        sigma12 = cv2.cuda.subtract(sigma12, mu1_mu2)  # type: ignore[attr-defined]
 
         # Download for final calculations (could be optimized further)
         mu1.download()
@@ -1870,8 +1872,8 @@ class ExperimentalRunner:
         import numpy as np
 
         # Calculate difference on GPU
-        gpu_diff = cv2.cuda.subtract(gpu_img1, gpu_img2)
-        gpu_squared = cv2.cuda.multiply(gpu_diff, gpu_diff)
+        gpu_diff = cv2.cuda.subtract(gpu_img1, gpu_img2)  # type: ignore[attr-defined]
+        gpu_squared = cv2.cuda.multiply(gpu_diff, gpu_diff)  # type: ignore[attr-defined]
 
         # Download for mean calculation
         squared_cpu = gpu_squared.download()
@@ -1888,7 +1890,7 @@ class ExperimentalRunner:
         try:
             # Convert to grayscale on GPU if needed
             if gpu_img1.channels() == 3:
-                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)
+                gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)  # type: ignore[attr-defined]
                 gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
             else:
                 gpu_gray1 = gpu_img1
@@ -1926,25 +1928,25 @@ class ExperimentalRunner:
         """CPU FSIM calculation."""
         from .metrics import fsim
 
-        return fsim(frame1, frame2)
+        return float(fsim(frame1, frame2))
 
     def _cpu_gmsd(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
         """CPU GMSD calculation."""
         from .metrics import gmsd
 
-        return gmsd(frame1, frame2)
+        return float(gmsd(frame1, frame2))
 
     def _cpu_chist(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
         """CPU color histogram correlation."""
         from .metrics import chist
 
-        return chist(frame1, frame2)
+        return float(chist(frame1, frame2))
 
     def _cpu_texture_similarity(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
         """CPU texture similarity."""
         from .metrics import texture_similarity
 
-        return texture_similarity(frame1, frame2)
+        return float(texture_similarity(frame1, frame2))
 
     def _cpu_sharpness_similarity(
         self, frame1: np.ndarray, frame2: np.ndarray
@@ -1952,13 +1954,13 @@ class ExperimentalRunner:
         """CPU sharpness similarity."""
         from .metrics import sharpness_similarity
 
-        return sharpness_similarity(frame1, frame2)
+        return float(sharpness_similarity(frame1, frame2))
 
     def _cpu_ms_ssim(self, frame1: np.ndarray, frame2: np.ndarray) -> float:
         """CPU MS-SSIM calculation."""
         from .metrics import calculate_ms_ssim
 
-        return calculate_ms_ssim(frame1, frame2)
+        return float(calculate_ms_ssim(frame1, frame2))
 
     def _calculate_temporal_consistency(self, aligned_pairs) -> float:
         """Calculate temporal consistency between frames."""
@@ -2145,12 +2147,12 @@ class ExperimentalRunner:
                 import json
 
                 with open(resume_file) as f:
-                    return json.load(f)
+                    return dict(json.load(f))
             except Exception as e:
                 self.logger.warning(f"Failed to load resume data: {e}")
         return {}
 
-    def _save_resume_data(self, resume_file: Path, completed_jobs: dict):
+    def _save_resume_data(self, resume_file: Path, completed_jobs: dict) -> None:
         """Save completed jobs for resume functionality."""
         try:
             import json
@@ -2160,7 +2162,7 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save resume data: {e}")
 
-    def _save_resume_data_minimal(self, resume_file: Path, completed_job_ids: set):
+    def _save_resume_data_minimal(self, resume_file: Path, completed_job_ids: set) -> None:
         """Save only completed job IDs for memory-efficient resume functionality."""
         try:
             import json
@@ -2183,7 +2185,7 @@ class ExperimentalRunner:
         try:
             from .system_tools import discover_tool
 
-            return discover_tool("gifski").available
+            return bool(discover_tool("gifski").available)
         except Exception:
             return False
 
@@ -2204,7 +2206,7 @@ class ExperimentalRunner:
         else:
             return f"{estimated_seconds/3600:.1f} hours"
 
-    def _save_intermediate_results(self, results: list[dict]):
+    def _save_intermediate_results(self, results: list[dict]) -> None:
         """Save intermediate results as checkpoint."""
         checkpoint_file = self.output_dir / "intermediate_results.json"
         try:
@@ -2544,7 +2546,7 @@ class ExperimentalRunner:
 
     def _save_results(
         self, experiment_result: ExperimentResult, results_df: pd.DataFrame
-    ):
+    ) -> None:
         """Save elimination analysis results."""
         failed_results, successful_results = self._validate_and_separate_results(
             results_df
@@ -2565,7 +2567,7 @@ class ExperimentalRunner:
         # Update catalog.json with this experiment for web UI
         self._update_experiment_catalog(experiment_result, results_df)
 
-    def _cleanup_temp_synthetic_dir(self):
+    def _cleanup_temp_synthetic_dir(self) -> None:
         """Clean up temporary synthetic GIFs directory after experiment completion."""
         import shutil
         temp_synthetic_dir = self.output_dir / "temp_synthetic"
@@ -2576,7 +2578,7 @@ class ExperimentalRunner:
             except Exception as e:
                 self.logger.warning(f"Failed to clean up temporary directory {temp_synthetic_dir}: {e}")
 
-    def _update_experiment_catalog(self, experiment_result: ExperimentResult, results_df: pd.DataFrame):
+    def _update_experiment_catalog(self, experiment_result: ExperimentResult, results_df: pd.DataFrame) -> None:
         """Update the catalog.json file with this experiment for web UI discovery."""
         import json
         from datetime import datetime
@@ -2641,7 +2643,7 @@ class ExperimentalRunner:
                 'color-focus': 'Color Reduction Analysis',
                 'lossy-focus': 'Lossy Compression Study'
             }
-            base_name = preset_names.get(self._current_preset, self._current_preset.replace('-', ' ').title())
+            base_name = str(preset_names.get(self._current_preset, self._current_preset.replace('-', ' ').title()))
         else:
             base_name = "Custom Experiment"
         
@@ -2660,7 +2662,7 @@ class ExperimentalRunner:
                 'color-focus': 'Analyze color palette reduction techniques and quality impact',
                 'lossy-focus': 'Study lossy compression levels and quality trade-offs'
             }
-            return preset_descriptions.get(self._current_preset, f"Targeted analysis using {self._current_preset} preset")
+            return str(preset_descriptions.get(self._current_preset, f"Targeted analysis using {self._current_preset} preset"))
         else:
             return "Custom experiment with comprehensive GIF compression analysis"
 
@@ -2688,7 +2690,7 @@ class ExperimentalRunner:
 
         return failed_results, successful_results
 
-    def _save_csv_results(self, results_df: pd.DataFrame):
+    def _save_csv_results(self, results_df: pd.DataFrame) -> None:
         """Clean and save results to CSV file with timestamped filename."""
         # Fix CSV output by properly escaping error messages
         results_df_clean = results_df.copy()
@@ -2717,7 +2719,7 @@ class ExperimentalRunner:
         # Also save a master history file in the base directory
         self._append_to_master_history(results_df_clean, timestamp)
 
-    def _append_to_master_history(self, results_df: pd.DataFrame, timestamp: str):
+    def _append_to_master_history(self, results_df: pd.DataFrame, timestamp: str) -> None:
         """Append results to a master history file that accumulates all runs."""
         master_history_path = self.base_output_dir / "elimination_history_master.csv"
 
@@ -2759,7 +2761,7 @@ class ExperimentalRunner:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
 
-    def _save_total_jobs_to_metadata(self, total_jobs: int):
+    def _save_total_jobs_to_metadata(self, total_jobs: int) -> None:
         """Save total jobs count to metadata file for monitor to pick up.
 
         Args:
@@ -2793,7 +2795,7 @@ class ExperimentalRunner:
             self.logger.warning(f"Failed to save total jobs to metadata: {e}")
             # Non-critical error, continue execution
 
-    def _save_failed_pipelines_log(self, failed_results: pd.DataFrame):
+    def _save_failed_pipelines_log(self, failed_results: pd.DataFrame) -> None:
         """Create and save detailed failed pipelines log."""
 
         def _sanitize_for_json(value):
@@ -2839,7 +2841,7 @@ class ExperimentalRunner:
 
     def _analyze_and_log_error_patterns(
         self, failed_pipeline_log: list, failed_count: int
-    ):
+    ) -> Any:
         """Analyze error patterns and log failure statistics."""
         error_types = Counter()
         for entry in failed_pipeline_log:
@@ -2860,7 +2862,7 @@ class ExperimentalRunner:
         results_df: pd.DataFrame,
         failed_results: pd.DataFrame,
         successful_results: pd.DataFrame,
-    ):
+    ) -> None:
         """Save enhanced elimination summary with failure information."""
         # Get error types for failed results
         error_types = {}
@@ -2894,7 +2896,7 @@ class ExperimentalRunner:
         with open(self.output_dir / "elimination_summary.json", "w") as f:
             json.dump(summary, f, indent=2)
 
-    def _generate_and_save_failure_report(self, results_df: pd.DataFrame):
+    def _generate_and_save_failure_report(self, results_df: pd.DataFrame) -> None:
         """Generate and save failure analysis report."""
         failure_report = self.generate_failure_analysis_report(results_df)
         with open(self.output_dir / "failure_analysis_report.txt", "w") as f:
@@ -2905,7 +2907,7 @@ class ExperimentalRunner:
         experiment_result: ExperimentResult,
         failed_results: pd.DataFrame,
         results_df: pd.DataFrame,
-    ):
+    ) -> None:
         """Log comprehensive results summary."""
         self.logger.info(
             f"Eliminated {len(experiment_result.eliminated_pipelines)} underperforming pipelines"
@@ -3127,7 +3129,7 @@ class ExperimentalRunner:
 
         return findings
 
-    def _save_pareto_analysis_results(self, experiment_result: ExperimentResult):
+    def _save_pareto_analysis_results(self, experiment_result: ExperimentResult) -> None:
         """Save Pareto frontier analysis results to files."""
         try:
             pareto_analysis = experiment_result.pareto_analysis
@@ -3213,7 +3215,7 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save Pareto analysis results: {e}")
 
-    def _generate_pareto_report(self, experiment_result: ExperimentResult):
+    def _generate_pareto_report(self, experiment_result: ExperimentResult) -> None:
         """Generate a human-readable Pareto analysis report."""
         try:
             pareto_analysis = experiment_result.pareto_analysis

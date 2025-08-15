@@ -223,4 +223,4 @@ def calculate_entropy(image: Image.Image) -> float:
     # Ensure non-negative result (handle floating point precision issues)
     entropy = max(0.0, entropy)
 
-    return round(entropy, 3)
+    return float(round(entropy, 3))

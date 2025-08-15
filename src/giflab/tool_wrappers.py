@@ -27,7 +27,7 @@ Key design choices
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .config import DEFAULT_ENGINE_CONFIG
 
@@ -35,6 +35,7 @@ from .config import DEFAULT_ENGINE_CONFIG
 from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
 from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
 from .external_engines.ffmpeg_enhanced import (
+    FFmpegDitheringMethod,
     color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering,
 )
 from .external_engines.gifski import lossy_compress as gifski_lossy_compress
@@ -555,7 +556,10 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
         )
         
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        if result is not None:
+            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+        else:
+            return {"error": "ImageMagick compression failed - no result returned", "success": False}
 
 
 # ---------------------------------------------------------------------------
@@ -598,12 +602,15 @@ class FFmpegColorReducer(ColorReductionTool):
             input_path,
             output_path,
             colors=colors,
-            dithering_method=dithering_method,
+            dithering_method=cast(FFmpegDitheringMethod, dithering_method),
             fps=fps,
         )
         
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        if result is not None:
+            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+        else:
+            return {"error": "FFmpeg color reduction failed - no result returned", "success": False}
 
 
 class FFmpegFrameReducer(FrameReductionTool):
@@ -688,7 +695,10 @@ class FFmpegLossyCompressor(LossyCompressionTool):
         )
         
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        if result is not None:
+            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+        else:
+            return {"error": "FFmpeg lossy compression failed - no result returned", "success": False}
 
 
 # ---------------------------------------------------------------------------
@@ -1168,7 +1178,10 @@ class GifskiLossyCompressor(LossyCompressionTool):
         )
         
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        if result is not None:
+            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+        else:
+            return {"error": "Gifski compression failed - no result returned", "success": False}
 
 
 # ---------------------------------------------------------------------------

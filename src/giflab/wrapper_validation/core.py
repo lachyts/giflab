@@ -25,7 +25,7 @@ class WrapperOutputValidator:
     the data in ways that would skew experimental results.
     """
     
-    def __init__(self, config=None) -> None:
+    def __init__(self, config: Any = None) -> None:
         """Initialize validator with configuration.
         
         Args:

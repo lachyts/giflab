@@ -190,8 +190,8 @@ def frame_reduce_by_ratio(
     # Calculate time base for frame delays
     if len(adjusted_delays) > 1:
         # Create PTS (Presentation Time Stamp) values for proper timing
-        pts_values = []
-        current_pts = 0
+        pts_values: list[float] = []
+        current_pts: float = 0.0
         for delay in adjusted_delays[:-1]:  # All but last frame
             pts_values.append(current_pts)
             current_pts += delay / 1000.0  # Convert ms to seconds

@@ -181,7 +181,7 @@ def _normalize_frame_dimensions(frame_files: list) -> list:
         return frame_files
 
     # First pass: collect all frame dimensions
-    frame_dimensions = []
+    frame_dimensions: list[tuple[int, int] | None] = []
     for frame_file in frame_files:
         try:
             with Image.open(frame_file) as img:
@@ -278,7 +278,7 @@ def _validate_and_prepare_frames(
 
     # Quick validation pass
     valid_frames = []
-    frame_dimensions = []
+    frame_dimensions: list[tuple[int, int]] = []
     invalid_count = 0
 
     for frame_file in frame_files:

@@ -5,7 +5,7 @@ pipeline efficiency across multiple dimensions (quality vs size trade-offs).
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -13,7 +13,7 @@ import pandas as pd
 class ParetoAnalyzer:
     """Advanced Pareto frontier analysis for pipeline efficiency comparison."""
 
-    def __init__(self, results_df: pd.DataFrame, logger: logging.Logger = None):
+    def __init__(self, results_df: pd.DataFrame, logger: Optional[logging.Logger] = None):
         """Initialize the Pareto analyzer.
 
         Args:
@@ -25,10 +25,10 @@ class ParetoAnalyzer:
         self.quality_metrics = ["composite_quality", "ssim_mean", "ms_ssim_mean"]
         self.size_metrics = ["file_size_kb", "compression_ratio"]
 
-    def generate_comprehensive_pareto_analysis(self) -> dict:
+    def generate_comprehensive_pareto_analysis(self) -> dict[str, Any]:
         """Generate complete Pareto analysis across all dimensions."""
 
-        analysis = {
+        analysis: dict[str, Any] = {
             "content_type_frontiers": {},
             "global_frontier": None,
             "pipeline_dominance_analysis": {},
@@ -274,10 +274,10 @@ class ParetoAnalyzer:
 
         return rankings
 
-    def _generate_trade_off_insights(self) -> dict:
+    def _generate_trade_off_insights(self) -> dict[str, Any]:
         """Generate insights about quality-size trade-offs."""
 
-        insights = {}
+        insights: dict[str, Any] = {}
 
         try:
             # Calculate efficiency metrics

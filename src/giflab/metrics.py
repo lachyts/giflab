@@ -5,7 +5,7 @@ import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -82,13 +82,13 @@ def extract_gif_frames(
             # Use even frame sampling across entire animation for better quality assessment
             if frames_to_extract >= total_frames:
                 # Use all frames if we're not hitting the limit
-                frame_indices = range(total_frames)
+                frame_indices = list(range(total_frames))
             else:
                 # Sample evenly across the entire animation to capture quality issues
                 # that may appear later in the animation
                 frame_indices = np.linspace(
                     0, total_frames - 1, frames_to_extract, dtype=int
-                )
+                ).tolist()
 
             for i in frame_indices:
                 img.seek(i)
@@ -318,7 +318,7 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         frame2_gray = frame2
 
     # Calculate MS-SSIM using pyramid approach
-    ssim_values = []
+    ssim_values: list[float] = []
     current_frame1 = frame1_gray.astype(np.float32)
     current_frame2 = frame2_gray.astype(np.float32)
 
@@ -340,10 +340,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
             prev_shape = current_frame1.shape
             current_frame1 = cv2.resize(
                 current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
-            )
+            ).astype(np.float32)
             current_frame2 = cv2.resize(
                 current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
-            )
+            ).astype(np.float32)
 
             # Stop if frames become too small OR if size didn't change (safety check)
             if (
@@ -355,8 +355,8 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
 
     # Weighted average of SSIM values across scales
     if ssim_values:
-        weights = [0.4, 0.25, 0.15, 0.1, 0.1][: len(ssim_values)]
-        weights = np.array(weights)
+        weight_list = [0.4, 0.25, 0.15, 0.1, 0.1][: len(ssim_values)]
+        weights = np.array(weight_list)
 
         # Protect against division by zero in weight normalization
         weights_sum = np.sum(weights)
@@ -449,7 +449,7 @@ def calculate_file_size_kb(file_path: Path) -> float:
         raise OSError(f"Cannot access file {file_path}: {e}") from e
 
 
-def measure_render_time(func, *args, **kwargs) -> tuple[Any, int]:
+def measure_render_time(func: Callable[..., Any], *args: Any, **kwargs: Any) -> tuple[Any, int]:
     """Measure execution time of a function in milliseconds.
 
     Args:
@@ -760,7 +760,9 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
 
 
 def _calculate_positional_samples(
-    aligned_pairs: list, metric_func, metric_name: str
+    aligned_pairs: list[tuple[np.ndarray, np.ndarray]], 
+    metric_func: Any, 
+    metric_name: str
 ) -> dict[str, float]:
     """Calculate metrics for first, middle, and last frames to understand positional effects.
 
@@ -1061,17 +1063,18 @@ def calculate_comprehensive_metrics(
             }
 
             # Calculate positional samples for configured metrics
-            for metric_name in config.POSITIONAL_METRICS:
-                if metric_name in metric_functions:
-                    try:
-                        positional_data = _calculate_positional_samples(
-                            aligned_pairs, metric_functions[metric_name], metric_name
-                        )
-                        result.update(positional_data)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to calculate positional samples for {metric_name}: {e}"
-                        )
+            if config.POSITIONAL_METRICS is not None:
+                for metric_name in config.POSITIONAL_METRICS:
+                    if metric_name in metric_functions:
+                        try:
+                            positional_data = _calculate_positional_samples(
+                                aligned_pairs, metric_functions[metric_name], metric_name
+                            )
+                            result.update(positional_data)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to calculate positional samples for {metric_name}: {e}"
+                            )
 
         # Add raw metrics if requested
         if config.RAW_METRICS:

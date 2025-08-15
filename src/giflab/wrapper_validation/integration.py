@@ -22,7 +22,7 @@ def add_validation_to_result(
     wrapper_params: dict[str, Any],
     wrapper_result: dict[str, Any],
     wrapper_type: str,
-    config = None
+    config: Any = None
 ) -> dict[str, Any]:
     """Add validation results to wrapper result metadata.
     
@@ -105,7 +105,7 @@ def add_validation_to_result(
     return enhanced_result
 
 
-def get_wrapper_type_from_class(wrapper_instance) -> str:
+def get_wrapper_type_from_class(wrapper_instance: Any) -> str:
     """Determine wrapper type from wrapper class instance.
     
     Args:
@@ -116,7 +116,7 @@ def get_wrapper_type_from_class(wrapper_instance) -> str:
     """
     # Check for VARIABLE attribute first (most reliable)
     if hasattr(wrapper_instance, 'VARIABLE'):
-        return wrapper_instance.VARIABLE
+        return str(wrapper_instance.VARIABLE)
     
     # Fallback to class name analysis
     class_name = wrapper_instance.__class__.__name__.lower()
@@ -132,7 +132,7 @@ def get_wrapper_type_from_class(wrapper_instance) -> str:
 
 
 def validate_wrapper_apply_result(
-    wrapper_instance,
+    wrapper_instance: Any,
     input_path: Path,
     output_path: Path,
     params: dict[str, Any],
@@ -166,12 +166,12 @@ def validate_wrapper_apply_result(
 
 def validate_pipeline_execution_result(
     input_path: Path,
-    pipeline,  # Pipeline type from dynamic_pipeline
+    pipeline: Any,  # Pipeline type from dynamic_pipeline
     pipeline_params: dict[str, Any],
     pipeline_result: dict[str, Any],
     stage_outputs: dict[str, Path] | None = None,
     final_output_path: Path | None = None,
-    validation_config = None
+    validation_config: Any = None
 ) -> dict[str, Any]:
     """Validate pipeline execution result and add validation info.
     
@@ -291,7 +291,7 @@ def create_validation_report(
         }
     
     # Group validations by type
-    by_type = {}
+    by_type: dict[str, dict[str, Any]] = {}
     for validation in validations:
         v_type = validation.validation_type
         if v_type not in by_type:
@@ -337,7 +337,7 @@ def _validation_result_to_dict(validation: ValidationResult) -> dict[str, Any]:
     }
 
 
-def _create_pipeline_validation_summary(validations: list[ValidationResult], pipeline) -> dict[str, Any]:
+def _create_pipeline_validation_summary(validations: list[ValidationResult], pipeline: Any) -> dict[str, Any]:
     """Create pipeline-specific validation summary."""
     if not validations:
         return {"total": 0, "passed": 0, "failed": 0, "pipeline_info": {}}
@@ -383,7 +383,7 @@ def _extract_final_output_from_result(pipeline_result: dict[str, Any]) -> Path |
     return None
 
 
-def _extract_stage_metadata_from_result(pipeline_result: dict[str, Any], pipeline) -> dict[str, dict[str, Any]]:
+def _extract_stage_metadata_from_result(pipeline_result: dict[str, Any], pipeline: Any) -> dict[str, dict[str, Any]]:
     """Extract stage metadata from pipeline result."""
     stage_metadata = {}
     

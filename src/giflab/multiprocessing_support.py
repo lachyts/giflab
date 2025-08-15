@@ -238,7 +238,7 @@ class ParallelFrameGenerator:
 
         # Sort results by frame index and convert to images
         results.sort(key=lambda r: r.frame_index)
-        images = []
+        images: list[Image.Image] = []
 
         for result in results:
             if result.success and result.image_data:

@@ -125,7 +125,7 @@ class CompressionPipeline:
         self.logger = setup_logging(path_config.LOGS_DIR)
 
         # CSV fieldnames based on project scope
-        self.csv_fieldnames = [
+        self.csv_fieldnames: list[str] = [
             "gif_sha",
             "orig_filename",
             "engine",
@@ -153,12 +153,12 @@ class CompressionPipeline:
 
         # Setup signal handling for graceful shutdown
         self._setup_signal_handlers()
-        self._shutdown_requested = False
+        self._shutdown_requested: bool = False
 
-    def _setup_signal_handlers(self):
+    def _setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown."""
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, frame: Any) -> None:
             self.logger.info(
                 f"Received signal {signum}, requesting graceful shutdown..."
             )

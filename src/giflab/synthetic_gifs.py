@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -302,26 +302,26 @@ class SyntheticGifGenerator:
         from importlib import import_module
 
         try:
-            tqdm = import_module("tqdm").tqdm  # type: ignore[attr-defined]
+            tqdm = import_module("tqdm").tqdm
         except ModuleNotFoundError:  # pragma: no cover – fallback when tqdm missing
 
-            class tqdm:  # noqa: WPS430 – simple stub
-                def __init__(self, iterable, **kwargs):
+            class tqdm:  # type: ignore[no-redef] # noqa: WPS430 – simple stub
+                def __init__(self, iterable: Any, **kwargs: Any) -> None:
                     self.iterable = iterable
 
-                def __iter__(self):
+                def __iter__(self) -> Any:
                     return iter(self.iterable)
 
-                def update(self, _n: int = 1):
+                def update(self, _n: int = 1) -> None:
                     pass
 
-                def close(self):
+                def close(self) -> None:
                     pass
 
-                def __enter__(self):
+                def __enter__(self) -> Any:
                     return self
 
-                def __exit__(self, exc_type, exc_val, exc_tb):
+                def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
                     self.close()
 
         gif_paths = []
@@ -335,7 +335,7 @@ class SyntheticGifGenerator:
 
         return gif_paths
 
-    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec):
+    def _create_synthetic_gif(self, path: Path, spec: SyntheticGifSpec) -> None:
         """Create a synthetic GIF based on specification."""
         frame_generator = SyntheticFrameGenerator()
         images = []
@@ -503,7 +503,7 @@ class SyntheticFrameGenerator:
         for x in range(0, size[0], 10):
             for y in range(0, size[1], 10):
                 if ((x + y + offset) // 10) % 2 == 0:
-                    draw.rectangle([x, y, x + 9, y + 9], fill=(255, 255, 255))
+                    draw.rectangle((x, y, x + 9, y + 9), fill=(255, 255, 255))
 
         return img
 
@@ -673,7 +673,7 @@ class SyntheticFrameGenerator:
         bounce_y = int(abs(np.sin(progress * 8 * np.pi)) * (size[1] - 30))
 
         draw.rectangle(
-            [bounce_x, bounce_y, bounce_x + 15, bounce_y + 15], fill=(100, 255, 150)
+            (bounce_x, bounce_y, bounce_x + 15, bounce_y + 15), fill=(100, 255, 150)
         )
 
         return img
@@ -707,7 +707,7 @@ class SyntheticFrameGenerator:
             y = text_y_start + 20 + i * 3
             if y + block_height < text_y_end:
                 draw.rectangle(
-                    [x, y, x + block_width - 2, y + block_height], fill=(50, 50, 50)
+                    (x, y, x + block_width - 2, y + block_height), fill=(50, 50, 50)
                 )
 
         # Graphics elements (bottom third)
@@ -871,7 +871,7 @@ class SyntheticFrameGenerator:
         # Static background pattern
         for x in range(0, size[0], 20):
             for y in range(0, size[1], 20):
-                draw.rectangle([x, y, x + 18, y + 18], outline=(180, 190, 200))
+                draw.rectangle((x, y, x + 18, y + 18), outline=(180, 190, 200))
 
         # Very minimal animated element
         if frame % 5 == 0 and size[0] > 10:
@@ -946,6 +946,6 @@ class SyntheticFrameGenerator:
         img = Image.new("RGB", size, (100, 100, 100))
         draw = ImageDraw.Draw(img)
         draw.rectangle(
-            [frame * 5, frame * 5, frame * 5 + 20, frame * 5 + 20], fill=(255, 255, 255)
+            (frame * 5, frame * 5, frame * 5 + 20, frame * 5 + 20), fill=(255, 255, 255)
         )
         return img

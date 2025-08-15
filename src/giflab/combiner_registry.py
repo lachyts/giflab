@@ -29,7 +29,7 @@ _COMBINERS: dict[str, CombinerFn] = {}
 def register(group: str) -> Callable[[CombinerFn], CombinerFn]:
     """Decorator to register a combiner for *group* (e.g. "gifsicle")."""
 
-    def _decorator(fn: CombinerFn) -> CombinerFn:  # type: ignore[misc]
+    def _decorator(fn: CombinerFn) -> CombinerFn:
         _COMBINERS[group] = fn
         return fn
 
@@ -38,7 +38,9 @@ def register(group: str) -> Callable[[CombinerFn], CombinerFn]:
 
 def combiner_for(group: str | None) -> CombinerFn | None:  # noqa: D401
     """Return the combiner for *group* (or ``None`` if not registered)."""
-
+    
+    if group is None:
+        return None
     return _COMBINERS.get(group)
 
 
@@ -88,7 +90,7 @@ def _combine_animately(
 ) -> dict[str, Any]:
     lossy = int(params.get("lossy_level", 0) or 0)
     ratio = float(params.get("ratio", 1.0) or 1.0)
-    colors = params.get("colors")
+    colors = int(params.get("colors", 256) or 256)
 
     return apply_compression_with_all_params(
         input_path=input_path,

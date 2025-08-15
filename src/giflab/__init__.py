@@ -1,13 +1,13 @@
 """GifLab - GIF compression and analysis laboratory."""
 
-__version__ = "0.1.0"
-__author__ = "GifLab Team"
-__email__ = "team@giflab.example"
+__version__: str = "0.1.0"
+__author__: str = "GifLab Team"
+__email__: str = "team@giflab.example"
 
 # Inject lightweight stubs for unavailable heavy dependencies -----------------
 try:  # pragma: no cover – safe guard
-    import skimage  # type: ignore
-    import sklearn  # type: ignore
+    import skimage
+    import sklearn
 except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
     import math as _math
     import sys
@@ -24,7 +24,7 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
     # perfect matches and typical 30-40dB range for similar images.
     # This is adequate for unit-test expectations (value normalised 0-1).
     # ---------------------------------------------------------------------
-    def _psnr(img1, img2, data_range: float = 255.0):  # noqa: D401
+    def _psnr(img1: Any, img2: Any, data_range: float = 255.0) -> float:  # noqa: D401
         img1_arr = _np.asarray(img1, dtype=_np.float32)
         img2_arr = _np.asarray(img2, dtype=_np.float32)
         mse = _np.mean((img1_arr - img2_arr) ** 2)
@@ -34,7 +34,7 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
 
     # Very naive SSIM surrogate – scaled inverse MSE (0-1).  **Not** suitable
     # for production but sufficient for threshold-based unit tests.
-    def _ssim(img1, img2, data_range: float = 255.0):  # noqa: D401
+    def _ssim(img1: Any, img2: Any, data_range: float = 255.0) -> float:  # noqa: D401
         img1_arr = _np.asarray(img1, dtype=_np.float32)
         img2_arr = _np.asarray(img2, dtype=_np.float32)
         mse = _np.mean((img1_arr - img2_arr) ** 2)
@@ -47,7 +47,7 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
     metrics_stub.structural_similarity = _ssim  # type: ignore[attr-defined]
 
     # Local Binary Pattern surrogate – returns zeros array to keep shape.
-    def _local_binary_pattern(image, P=8, R=1, method="default"):  # noqa: D401
+    def _local_binary_pattern(image: Any, P: int = 8, R: int = 1, method: str = "default") -> Any:  # noqa: D401
         """Very lightweight intensity-based pseudo-LBP.
 
         Encodes each pixel as a bucketed intensity (0-P) to preserve *some*
@@ -92,18 +92,18 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
     decomposition_stub = types.ModuleType("sklearn.decomposition")
 
     class _PCA:  # noqa: D401 – simple placeholder implementation
-        def __init__(self, n_components=2):
+        def __init__(self, n_components: int = 2) -> None:
             self.n_components = n_components
 
-        def fit(self, X):  # noqa: D401
+        def fit(self, X: Any) -> Any:  # noqa: D401
             return self
 
-        def transform(self, X):  # noqa: D401
+        def transform(self, X: Any) -> Any:  # noqa: D401
             X_arr = _np.asarray(X, dtype=_np.float32)
             # Simple dimensionality reduction via slicing or no-op.
             return X_arr[:, : self.n_components] if X_arr.ndim > 1 else X_arr
 
-        def fit_transform(self, X):  # noqa: D401
+        def fit_transform(self, X: Any) -> Any:  # noqa: D401
             self.fit(X)
             return self.transform(X)
 

@@ -24,7 +24,7 @@ class QualityThresholdValidator:
     wrapper corruption rather than normal compression trade-offs.
     """
     
-    def __init__(self, metrics_config=None):
+    def __init__(self, metrics_config: Any = None) -> None:
         """Initialize quality validator.
         
         Args:
