@@ -46,7 +46,7 @@ def tag(
     output: Path | None,
     workers: int,
     validate_only: bool,
-):
+) -> None:
     """Add comprehensive tagging scores to existing compression results.
 
     Analyzes original GIF files and adds 25 continuous scores (0.0-1.0) to compression results:

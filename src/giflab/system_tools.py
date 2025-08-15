@@ -15,6 +15,10 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import EngineConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +166,7 @@ _CONFIG_MAPPING: dict[str, str] = {
 }
 
 
-def discover_tool(tool_key: str, engine_config=None) -> ToolInfo:
+def discover_tool(tool_key: str, engine_config: EngineConfig | None = None) -> ToolInfo:
     """Return *ToolInfo* for *tool_key* using configuration and fallback discovery.
 
     Args:
@@ -219,7 +223,7 @@ def discover_tool(tool_key: str, engine_config=None) -> ToolInfo:
     return ToolInfo(name=fallback_name, available=False, version=None)
 
 
-def verify_required_tools(engine_config=None) -> dict[str, ToolInfo]:
+def verify_required_tools(engine_config: EngineConfig | None = None) -> dict[str, ToolInfo]:
     """Ensure all configured binaries are available – raise on failure.
 
     Args:
@@ -238,7 +242,7 @@ def verify_required_tools(engine_config=None) -> dict[str, ToolInfo]:
     return results
 
 
-def get_available_tools(engine_config=None) -> dict[str, ToolInfo]:
+def get_available_tools(engine_config: EngineConfig | None = None) -> dict[str, ToolInfo]:
     """Get availability status for all supported tools without requiring them.
 
     Args:

@@ -146,7 +146,7 @@ def run(
         handle_generic_error("Pipeline", e)
 
 
-def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
+def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path) -> None:
     """Run dry-run analysis showing what work would be done."""
 
     # Discover GIFs
@@ -171,10 +171,10 @@ def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
     jobs_to_run = pipeline.filter_existing_jobs(all_jobs, csv_path)
 
     # Show summary
-    engines = DEFAULT_COMPRESSION_CONFIG.ENGINES
-    frame_ratios = DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS
-    color_counts = DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS
-    lossy_levels = DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS
+    engines = DEFAULT_COMPRESSION_CONFIG.ENGINES or []
+    frame_ratios = DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS or []
+    color_counts = DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or []
+    lossy_levels = DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS or []
 
     variants_per_gif = (
         len(engines) * len(frame_ratios) * len(color_counts) * len(lossy_levels)
@@ -212,7 +212,7 @@ def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
             click.echo(f"   ... and {len(jobs_to_run) - 5} more jobs")
 
 
-def _run_pipeline(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path):
+def _run_pipeline(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path) -> None:
     """Execute the compression pipeline."""
 
     result = pipeline.run(raw_dir, csv_path)

@@ -211,7 +211,7 @@ def calculate_safe_psnr(
             return 100.0
 
         # Use scikit-image PSNR for non-perfect matches
-        return psnr(frame1, frame2, data_range=data_range)
+        return float(psnr(frame1, frame2, data_range=data_range))
 
     except Exception as e:
         logger.warning(f"PSNR calculation failed: {e}")
@@ -362,10 +362,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         weights_sum = np.sum(weights)
         if weights_sum > 0:
             weights = weights / weights_sum  # Normalize weights
-            return np.average(ssim_values, weights=weights)
+            return float(np.average(ssim_values, weights=weights))
         else:
             # If all weights are zero, use uniform weighting
-            return np.mean(ssim_values)
+            return float(np.mean(ssim_values))
     else:
         return 0.0
 
@@ -866,7 +866,7 @@ def calculate_comprehensive_metrics(
             raise ValueError("No frame pairs could be aligned")
 
         # Calculate all frame-level metrics
-        metric_values = {
+        metric_values: dict[str, list[float]] = {
             "ssim": [],
             "ms_ssim": [],
             "psnr": [],
@@ -881,7 +881,7 @@ def calculate_comprehensive_metrics(
         }
 
         # Store raw (un-normalised) metric values where necessary
-        raw_metric_values = {
+        raw_metric_values: dict[str, list[float]] = {
             "psnr": [],  # PSNR is normalised for main reporting; keep raw values separately
         }
 

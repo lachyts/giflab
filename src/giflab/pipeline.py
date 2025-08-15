@@ -177,7 +177,7 @@ class CompressionPipeline:
             List of GIF file paths
         """
         gif_patterns = ["*.gif", "*.GIF"]
-        gif_files = []
+        gif_files: list[Path] = []
 
         for pattern in gif_patterns:
             gif_files.extend(raw_dir.glob(pattern))
@@ -241,9 +241,9 @@ class CompressionPipeline:
                         if pid not in pipeline_map:
                             continue
                         pipe_obj = pipeline_map[pid]
-                        for lossy in self.compression_config.LOSSY_LEVELS:
-                            for ratio in self.compression_config.FRAME_KEEP_RATIOS:
-                                for colors in self.compression_config.COLOR_KEEP_COUNTS:
+                        for lossy in (self.compression_config.LOSSY_LEVELS or []):
+                            for ratio in (self.compression_config.FRAME_KEEP_RATIOS or []):
+                                for colors in (self.compression_config.COLOR_KEEP_COUNTS or []):
                                     jobs.append(
                                         self._create_job_from_pipeline(
                                             gif_path,
@@ -257,10 +257,10 @@ class CompressionPipeline:
                                     )
                 else:
                     # Legacy engine grid
-                    for engine in self.compression_config.ENGINES:
-                        for lossy in self.compression_config.LOSSY_LEVELS:
-                            for ratio in self.compression_config.FRAME_KEEP_RATIOS:
-                                for colors in self.compression_config.COLOR_KEEP_COUNTS:
+                    for engine in (self.compression_config.ENGINES or []):
+                        for lossy in (self.compression_config.LOSSY_LEVELS or []):
+                            for ratio in (self.compression_config.FRAME_KEEP_RATIOS or []):
+                                for colors in (self.compression_config.COLOR_KEEP_COUNTS or []):
                                     output_filename = (
                                         f"{engine}_l{lossy}_r{ratio:.2f}_c{colors}.gif"
                                     )

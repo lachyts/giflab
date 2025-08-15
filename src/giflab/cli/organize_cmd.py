@@ -12,7 +12,7 @@ from .utils import handle_generic_error
     "raw_dir",
     type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
 )
-def organize_directories(raw_dir: Path):
+def organize_directories(raw_dir: Path) -> None:
     """Create organized directory structure for source-based GIF collection.
 
     Creates subdirectories in RAW_DIR for different GIF sources:

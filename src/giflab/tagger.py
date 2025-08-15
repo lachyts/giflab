@@ -382,7 +382,7 @@ class HybridCompressionTagger:
 
             # Higher boundary differences indicate blocking
             boundary_strength = np.mean(h_diffs + v_diffs) if h_diffs or v_diffs else 0
-            return min(boundary_strength / 255.0, 1.0)
+            return float(min(boundary_strength / 255.0, 1.0))
 
         except Exception:
             return 0.0
@@ -486,7 +486,7 @@ class HybridCompressionTagger:
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             edges = cv2.Canny(gray, 50, 150)
             edge_density = np.sum(edges > 0) / edges.size
-            return min(edge_density * 10, 1.0)
+            return float(min(edge_density * 10, 1.0))
 
         except Exception:
             return 0.0
@@ -505,7 +505,7 @@ class HybridCompressionTagger:
         try:
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             contrast = np.std(gray) / 255.0
-            return min(contrast * 2, 1.0)
+            return float(min(contrast * 2, 1.0))
 
         except Exception:
             return 0.5
@@ -523,7 +523,7 @@ class HybridCompressionTagger:
             grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
             grad_smoothness = 1.0 - min(np.std(grad_magnitude) / 255.0, 1.0)
 
-            return max(0.0, grad_smoothness)
+            return float(max(0.0, grad_smoothness))
 
         except Exception:
             return 0.5
@@ -572,7 +572,7 @@ class HybridCompressionTagger:
                 motion = np.mean(diff) / 255.0
                 motion_scores.append(motion)
 
-            return np.mean(motion_scores)
+            return float(np.mean(motion_scores))
 
         except Exception:
             return 0.5

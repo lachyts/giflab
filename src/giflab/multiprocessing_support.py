@@ -65,7 +65,7 @@ class ProcessSafeQueue:
         Args:
             maxsize: Maximum queue size (0 = unlimited)
         """
-        self._queue = mp.Queue(maxsize)
+        self._queue: mp.Queue = mp.Queue(maxsize)
         self._lock = mp.Lock()
 
     def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:

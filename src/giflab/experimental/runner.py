@@ -125,7 +125,7 @@ class ExperimentalRunner:
         if self.use_cache:
             cache_db_path = self.base_output_dir / "pipeline_results_cache.db"
             git_commit = get_git_commit()
-            self.cache = PipelineResultsCache(cache_db_path, git_commit)
+            self.cache: PipelineResultsCache | None = PipelineResultsCache(cache_db_path, git_commit)
 
             # Log cache statistics
             cache_stats = self.cache.get_cache_stats()
@@ -336,7 +336,7 @@ class ExperimentalRunner:
     # NOTE: The rest of the ExperimentalRunner methods will be added in the next step
     # This is just the structure and constructor to start with
 
-    def _test_gpu_availability(self):
+    def _test_gpu_availability(self) -> None:
         """Test if GPU acceleration is available."""
         try:
             import cv2
@@ -344,16 +344,42 @@ class ExperimentalRunner:
             device_count = cv2.cuda.getCudaEnabledDeviceCount()
             if device_count > 0:
                 self.logger.info(
-                    f"🚀 GPU acceleration available: {device_count} CUDA device(s)"
+                    f"🚀 GPU acceleration enabled: {device_count} CUDA device(s) available"
                 )
+                # Test basic GPU operations
+                try:
+                    import numpy as np
+                    test_mat = cv2.cuda_GpuMat()
+                    test_mat.upload(np.ones((100, 100), dtype=np.uint8))
+                    test_mat.download()
+                    self.logger.info(
+                        "✅ GPU operations test passed - GPU acceleration enabled"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"🔄 GPU operations test failed: {e}")
+                    self.logger.warning(
+                        "🔄 GPU acceleration disabled - continuing with CPU processing"
+                    )
+                    self.logger.info(
+                        "💡 To enable GPU: ensure CUDA drivers and OpenCV-CUDA are properly installed"
+                    )
+                    self.use_gpu = False
             else:
+                self.logger.warning("🔄 No CUDA devices found on this system")
                 self.logger.warning(
-                    "⚠️ GPU acceleration requested but no CUDA devices found - falling back to CPU"
+                    "🔄 GPU acceleration disabled - continuing with CPU processing"
+                )
+                self.logger.info(
+                    "💡 To enable GPU: install CUDA-capable hardware and drivers"
                 )
                 self.use_gpu = False
         except ImportError:
+            self.logger.warning("🔄 OpenCV CUDA support not available")
             self.logger.warning(
-                "⚠️ GPU acceleration requested but OpenCV with CUDA not available - falling back to CPU"
+                "🔄 GPU acceleration disabled - continuing with CPU processing"
+            )
+            self.logger.info(
+                "💡 To enable GPU: install opencv-python with CUDA support"
             )
             self.use_gpu = False
         except Exception as e:
@@ -362,7 +388,7 @@ class ExperimentalRunner:
             )
             self.use_gpu = False
 
-    def _log_run_metadata(self):
+    def _log_run_metadata(self) -> None:
         """Log metadata about this elimination run."""
         git_commit = get_git_commit()
         self.logger.info("🔬 Elimination run metadata:")
@@ -678,7 +704,7 @@ class ExperimentalRunner:
         )
 
         # Use small memory buffer for batching, not unlimited accumulation
-        results_buffer = []
+        results_buffer: list[dict] = []
         buffer_size = 25  # Reduced from 100 for more frequent monitoring updates
         failed_jobs = 0
 
@@ -1542,54 +1568,6 @@ class ExperimentalRunner:
         
         return f"{pipeline_part}{param_suffix}"
 
-    def _test_gpu_availability(self):
-        """Test GPU availability and log status."""
-        try:
-            import cv2
-            import numpy as np
-
-            cuda_count = cv2.cuda.getCudaEnabledDeviceCount()
-
-            if cuda_count > 0:
-                self.logger.info(
-                    f"🚀 GPU acceleration enabled: {cuda_count} CUDA device(s) available"
-                )
-                # Test basic GPU operations
-                try:
-                    test_mat = cv2.cuda_GpuMat()
-                    test_mat.upload(np.ones((100, 100), dtype=np.uint8))
-                    test_mat.download()
-                    self.logger.info(
-                        "✅ GPU operations test passed - GPU acceleration enabled"
-                    )
-                except Exception as e:
-                    self.logger.warning(f"🔄 GPU operations test failed: {e}")
-                    self.logger.warning(
-                        "🔄 GPU acceleration disabled - continuing with CPU processing"
-                    )
-                    self.logger.info(
-                        "💡 To enable GPU: ensure CUDA drivers and OpenCV-CUDA are properly installed"
-                    )
-                    self.use_gpu = False
-            else:
-                self.logger.warning("🔄 No CUDA devices found on this system")
-                self.logger.warning(
-                    "🔄 GPU acceleration disabled - continuing with CPU processing"
-                )
-                self.logger.info(
-                    "💡 To enable GPU: install CUDA-capable hardware and drivers"
-                )
-                self.use_gpu = False
-
-        except ImportError:
-            self.logger.warning("🔄 OpenCV CUDA support not available")
-            self.logger.warning(
-                "🔄 GPU acceleration disabled - continuing with CPU processing"
-            )
-            self.logger.info(
-                "💡 To enable GPU: install opencv-python with CUDA support"
-            )
-            self.use_gpu = False
 
     def _calculate_gpu_accelerated_metrics(
         self, original_path: Path, compressed_path: Path

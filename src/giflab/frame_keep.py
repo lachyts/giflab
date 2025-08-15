@@ -243,7 +243,7 @@ def validate_frame_keep_ratio(keep_ratio: float) -> None:
     # Allow small floating point differences
     tolerance = 1e-6
     is_valid = any(
-        abs(keep_ratio - valid_ratio) < tolerance for valid_ratio in valid_ratios
+        abs(keep_ratio - valid_ratio) < tolerance for valid_ratio in (valid_ratios or [])
     )
 
     if not is_valid:

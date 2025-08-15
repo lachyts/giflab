@@ -42,7 +42,7 @@ from .utils import handle_generic_error
     is_flag=True,
     help="Show detailed error information including stack traces",
 )
-def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool):
+def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool) -> None:
     """
     View detailed information about failed pipelines from elimination testing.
 
@@ -132,7 +132,7 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
             click.echo(f"   Showing {error_type} failures: {len(failed_pipelines)}")
 
         # Error type breakdown
-        error_types = Counter()
+        error_types: Counter[str] = Counter()
         for failure in all_failures:
             error_msg = failure.get("error_message", "").lower()
             if "gifski" in error_msg:

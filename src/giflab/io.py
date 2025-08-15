@@ -34,14 +34,14 @@ if sys.platform == "win32":
 else:
     import fcntl
 
-    def lock_file(file_handle):
+    def lock_file(file_handle) -> None:
         """Lock file on Unix systems using fcntl."""
         try:
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
         except OSError:
             pass
 
-    def unlock_file(file_handle):
+    def unlock_file(file_handle) -> None:
         """Unlock file on Unix systems using fcntl."""
         try:
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)

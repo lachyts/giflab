@@ -24,7 +24,7 @@ from .utils import handle_generic_error
     type=click.Path(dir_okay=False, path_type=Path),
     default=Path("winners.yaml"),
 )
-def select_pipelines(csv_file: Path, metric: str, top: int, output: Path):
+def select_pipelines(csv_file: Path, metric: str, top: int, output: Path) -> None:
     """Pick the best pipelines from an experiment CSV and write a YAML list."""
     try:
         click.echo("📊 Loading experiment results…")
