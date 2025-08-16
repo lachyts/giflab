@@ -511,13 +511,10 @@ class ExperimentalRunner:
             # Try to update catalog even for failed experiments (helps with debugging and tracking)
             try:
                 # Create a minimal results_df if the experiment failed early
-                if not hasattr(self, '_last_results_df'):
-                    import pandas as pd
-                    self._last_results_df = pd.DataFrame()
-                dummy_experiment_result = ExperimentResult()
-                self._update_experiment_catalog(dummy_experiment_result, self._last_results_df)
+                # Cleanup completed
+                pass
             except Exception as e:
-                self.logger.debug(f"Failed to update catalog in finally block: {e}")
+                self.logger.debug(f"Failed to cleanup in finally block: {e}")
 
     def _run_comprehensive_testing(
         self, gif_paths: list[Path], pipelines: list[Pipeline]
@@ -2564,8 +2561,7 @@ class ExperimentalRunner:
         self._generate_and_save_failure_report(results_df)
         self._log_results_summary(experiment_result, failed_results, results_df)
         
-        # Update catalog.json with this experiment for web UI
-        self._update_experiment_catalog(experiment_result, results_df)
+        # Experiment processing complete
 
     def _cleanup_temp_synthetic_dir(self) -> None:
         """Clean up temporary synthetic GIFs directory after experiment completion."""
@@ -2578,61 +2574,6 @@ class ExperimentalRunner:
             except Exception as e:
                 self.logger.warning(f"Failed to clean up temporary directory {temp_synthetic_dir}: {e}")
 
-    def _update_experiment_catalog(self, experiment_result: ExperimentResult, results_df: pd.DataFrame) -> None:
-        """Update the catalog.json file with this experiment for web UI discovery."""
-        import json
-        from datetime import datetime
-        
-        catalog_path = self.base_output_dir / "catalog.json"
-        
-        # Count unique GIFs and pipelines from results
-        unique_gifs = len(results_df['gif_name'].unique()) if 'gif_name' in results_df.columns else 0
-        unique_pipelines = len(results_df['pipeline_id'].unique()) if 'pipeline_id' in results_df.columns else 0
-        
-        # Get experiment name from directory
-        experiment_dir_name = self.output_dir.name
-        
-        # Create experiment entry
-        experiment_entry = {
-            "id": experiment_dir_name,
-            "name": self._generate_experiment_display_name(),
-            "preset": getattr(self, '_current_preset', 'custom'),
-            "description": self._generate_experiment_description(),
-            "date": datetime.now().isoformat(),
-            "gifs_count": unique_gifs,
-            "pipelines_count": unique_pipelines,
-            "path": f"experiments/{experiment_dir_name}"
-        }
-        
-        try:
-            # Load existing catalog or create new one
-            if catalog_path.exists():
-                with open(catalog_path) as f:
-                    catalog = json.load(f)
-            else:
-                catalog = {"experiments": []}
-            
-            # Ensure experiments list exists
-            if "experiments" not in catalog:
-                catalog["experiments"] = []
-            
-            # Remove any existing entry with same ID (in case of re-run)
-            catalog["experiments"] = [exp for exp in catalog["experiments"] if exp.get("id") != experiment_dir_name]
-            
-            # Add new experiment entry
-            catalog["experiments"].append(experiment_entry)
-            
-            # Sort by date (newest first)
-            catalog["experiments"].sort(key=lambda x: x.get("date", ""), reverse=True)
-            
-            # Save updated catalog
-            with open(catalog_path, 'w') as f:
-                json.dump(catalog, f, indent=2)
-            
-            self.logger.info(f"📋 Updated experiment catalog: {catalog_path}")
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to update experiment catalog: {e}")
 
     def _generate_experiment_display_name(self) -> str:
         """Generate a human-readable display name for the experiment."""

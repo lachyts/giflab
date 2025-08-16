@@ -290,6 +290,88 @@ TARGETED_PRESETS = {
         tags=["research", "parameter-sweep", "lossy-analysis"],
         author="GifLab Research Team",
     ),
+    # Wrapper Validation Presets: Test individual tool wrappers in isolation
+    #
+    # Pattern for creating wrapper validation presets for any tool:
+    # 1. Set all three slots (frame, color, lossy) as "variable" 
+    # 2. Each slot scope includes both the tool-specific implementation and the "none-" equivalent
+    #    - frame_slot: ["<tool>-frame", "none-frame"] 
+    #    - color_slot: ["<tool>-color", "none-color"]
+    #    - lossy_slot: ["<tool>-lossy", "none-lossy"]
+    # 3. Use factorial sampling to generate all 8 combinations (2³ = 8 pipelines):
+    #    - Full tool pipeline: tool-frame → tool-color → tool-lossy
+    #    - Frame + Color only: tool-frame → tool-color → none-lossy
+    #    - Frame + Lossy only: tool-frame → none-color → tool-lossy  
+    #    - Frame only: tool-frame → none-color → none-lossy
+    #    - Color + Lossy only: none-frame → tool-color → tool-lossy
+    #    - Color only: none-frame → tool-color → none-lossy
+    #    - Lossy only: none-frame → none-color → tool-lossy
+    #    - Baseline (no processing): none-frame → none-color → none-lossy
+    #
+    # This pattern isolates each wrapper component for validation while testing
+    # all meaningful combinations to ensure components work independently and together.
+    #
+    # Future tool validation presets:
+    # - "ffmpeg-wrapper-validation"
+    # - "imagemagick-wrapper-validation" 
+    # - "animately-wrapper-validation"
+    "gifsicle-frame-validation": ExperimentPreset(
+        name="GIFsicle Frame Wrapper Validation",
+        description="Test gifsicle-frame wrapper in pure isolation",
+        frame_slot=SlotConfiguration(
+            type="variable",
+            scope=["gifsicle-frame"],
+            parameters={"ratios": [1.0, 0.8, 0.6, 0.4, 0.2]},
+        ),
+        color_slot=SlotConfiguration(
+            type="locked", implementation="none-color", parameters={}
+        ),
+        lossy_slot=SlotConfiguration(
+            type="locked", implementation="none-lossy", parameters={"level": 0}
+        ),
+        custom_sampling="full",
+        max_combinations=20,
+        tags=["validation", "gifsicle", "frame-wrapper", "isolation"],
+        author="GifLab Research Team",
+    ),
+    "gifsicle-color-validation": ExperimentPreset(
+        name="GIFsicle Color Wrapper Validation",
+        description="Test gifsicle-color wrapper in pure isolation",
+        frame_slot=SlotConfiguration(
+            type="locked", implementation="none-frame", parameters={"ratio": 1.0}
+        ),
+        color_slot=SlotConfiguration(
+            type="variable",
+            scope=["gifsicle-color"],
+            parameters={"colors": [64, 32, 16, 8]},
+        ),
+        lossy_slot=SlotConfiguration(
+            type="locked", implementation="none-lossy", parameters={"level": 0}
+        ),
+        custom_sampling="full",
+        max_combinations=20,
+        tags=["validation", "gifsicle", "color-wrapper", "isolation"],
+        author="GifLab Research Team",
+    ),
+    "gifsicle-lossy-validation": ExperimentPreset(
+        name="GIFsicle Lossy Wrapper Validation", 
+        description="Test gifsicle-lossy wrapper in pure isolation",
+        frame_slot=SlotConfiguration(
+            type="locked", implementation="none-frame", parameters={"ratio": 1.0}
+        ),
+        color_slot=SlotConfiguration(
+            type="locked", implementation="none-color", parameters={}
+        ),
+        lossy_slot=SlotConfiguration(
+            type="variable",
+            scope=["gifsicle-lossy"],
+            parameters={"levels": [0, 40, 80, 120]},
+        ),
+        custom_sampling="full",
+        max_combinations=20,
+        tags=["validation", "gifsicle", "lossy-wrapper", "isolation"],
+        author="GifLab Research Team",
+    ),
 }
 
 

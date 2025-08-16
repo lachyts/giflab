@@ -86,8 +86,23 @@ Thumbs.db
 # Logs
 logs/*.log
 
-# Results and experimental analysis outputs
-results/
+# Results and experimental analysis outputs - selective exclusions
+results/**/*.gif
+results/**/*.csv  
+results/**/*.json
+results/**/*.db
+results/**/*.sqlite*
+results/**/cache/
+results/**/samples/
+results/**/experiments/*/
+results/**/archive/
+results/**/latest
+
+# Allow essential result files
+!results/README.md
+!results/comparison.html
+!results/.gitkeep
+!results/*/.gitkeep
 test_debug/
 test_fixes/
 test_enhanced/

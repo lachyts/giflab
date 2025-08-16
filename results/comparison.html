@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GifLab Comparison Tool (Fixed Discovery)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .cors-warning {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 1200px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        .cors-warning h3 {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .cors-warning code {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 5px;
+            display: block;
+            margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .controls {
+            background: white;
+            padding: 30px;
+            margin: 30px auto;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            transition: border-color 0.3s;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        select:disabled {
+            background-color: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .pipeline-filters {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e1e5e9;
+        }
+
+        .pipeline-filters h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .pipeline-checkboxes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .pipeline-checkbox {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: white;
+        }
+
+        .pipeline-checkbox:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.1);
+        }
+
+        .pipeline-checkbox.selected {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .pipeline-checkbox input[type="checkbox"] {
+            margin-right: 12px;
+            transform: scale(1.2);
+            accent-color: #667eea;
+        }
+
+        .pipeline-info {
+            flex: 1;
+        }
+
+        .pipeline-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .pipeline-stats {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .efficiency-bar {
+            width: 100px;
+            height: 6px;
+            background-color: #e1e5e9;
+            border-radius: 3px;
+            margin-left: 15px;
+            overflow: hidden;
+        }
+
+        .efficiency-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .efficiency-excellent { background-color: #4CAF50; }
+        .efficiency-good { background-color: #8BC34A; }
+        .efficiency-fair { background-color: #FFC107; }
+        .efficiency-poor { background-color: #FF5722; }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 30px;
+        }
+
+        .gif-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .gif-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+
+        .gif-container {
+            position: relative;
+            background: #f8f9fa;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gif-container img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .gif-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            color: white;
+            padding: 20px;
+        }
+
+        .gif-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-link {
+            background: rgba(255,255,255,0.3);
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .file-link:hover {
+            background: rgba(255,255,255,0.5);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .file-link::before {
+            content: "🔗";
+            font-size: 0.9em;
+        }
+
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            font-size: 0.9em;
+        }
+
+        .metadata span {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            backdrop-filter: blur(10px);
+        }
+
+        .metrics-panel {
+            background: white;
+            margin: 30px auto;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .metrics-header {
+            background: #667eea;
+            color: white;
+            padding: 20px 30px;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .metrics-table {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background-color: #f8f9ff;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #c62828;
+        }
+
+        @media (max-width: 768px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+                padding: 0 15px;
+            }
+            
+            .controls {
+                margin: 15px;
+                padding: 20px;
+            }
+            
+            .pipeline-checkboxes {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 GifLab Comparison Tool</h1>
+        <p>Visual comparison of GIF compression algorithms and pipelines</p>
+    </div>
+
+    <div class="cors-warning" id="corsWarning">
+        <h3>⚠️ Cannot Load Experiments</h3>
+        <p>If you're seeing this message, the page can't load experiment data due to CORS restrictions.</p>
+        <p><strong>To fix this, run a local HTTP server:</strong></p>
+        <code>cd results<br>python -m http.server 3000</code>
+        <p>Then open: <strong>http://localhost:3000/comparison.html</strong></p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="experimentSelect">Select Experiment:</label>
+            <select id="experimentSelect">
+                <option value="">Loading experiments...</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="gifSelect">Select GIF:</label>
+            <select id="gifSelect" disabled>
+                <option value="">Select an experiment first</option>
+            </select>
+        </div>
+
+        <div class="pipeline-filters hidden" id="pipelineFilters">
+            <h3>Compare Pipelines:</h3>
+            <div class="pipeline-checkboxes" id="pipelineCheckboxes">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <div class="comparison-grid" id="comparisonGrid">
+        <!-- GIF comparison cards will be added here -->
+    </div>
+
+    <div class="metrics-panel hidden" id="metricsPanel">
+        <div class="metrics-header">Detailed Comparison Metrics</div>
+        <div class="metrics-table">
+            <table id="metricsTable">
+                <thead>
+                    <tr>
+                        <th>Pipeline</th>
+                        <th>File Size</th>
+                        <th>Frames</th>
+                        <th>Compression</th>
+                        <th>Quality</th>
+                        <th>Efficiency</th>
+                        <th>Render Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dynamically populated -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        class GifLabComparison {
+            constructor() {
+                this.experiments = [];
+                this.currentExperiment = null;
+                this.currentGif = null;
+                this.selectedPipelines = new Set();
+                
+                this.initializeElements();
+                this.loadCatalog();
+            }
+
+            initializeElements() {
+                this.experimentSelect = document.getElementById('experimentSelect');
+                this.gifSelect = document.getElementById('gifSelect');
+                this.pipelineFilters = document.getElementById('pipelineFilters');
+                this.pipelineCheckboxes = document.getElementById('pipelineCheckboxes');
+                this.comparisonGrid = document.getElementById('comparisonGrid');
+                this.metricsPanel = document.getElementById('metricsPanel');
+                this.metricsTable = document.getElementById('metricsTable');
+                
+                this.experimentSelect.addEventListener('change', (e) => {
+                    this.selectExperiment(e.target.value);
+                });
+                
+                this.gifSelect.addEventListener('change', (e) => {
+                    this.selectGif(e.target.value);
+                });
+            }
+
+            async loadCatalog() {
+                try {
+                    console.log('🔍 Scanning filesystem for experiments...');
+                    
+                    // Discover experiments directly from filesystem
+                    this.experiments = await this.discoverExperimentsFromFilesystem();
+                    
+                    this.populateExperimentSelect();
+                    
+                    if (this.experiments.length === 0) {
+                        this.showError('No experiments found. Run some experiments to get started!');
+                    } else {
+                        console.log(`✅ Found ${this.experiments.length} experiments`);
+                    }
+                    
+                } catch (error) {
+                    console.error('Failed to discover experiments:', error);
+                    
+                    // Show CORS warning if it's likely a CORS issue
+                    if (window.location.protocol === 'file:' || error.message.includes('CORS') || error.message.includes('network')) {
+                        document.getElementById('corsWarning').style.display = 'block';
+                    }
+                    
+                    this.showError('Failed to scan experiments directory. Make sure you have run at least one experiment.');
+                }
+            }
+
+            populateExperimentSelect() {
+                this.experimentSelect.innerHTML = '<option value="">Select Experiment...</option>';
+                
+                // Sort experiments by date (newest first)
+                const sortedExperiments = [...this.experiments].sort((a, b) => 
+                    new Date(b.date) - new Date(a.date)
+                );
+                
+                sortedExperiments.forEach(exp => {
+                    const option = document.createElement('option');
+                    option.value = exp.id;
+                    option.textContent = `${exp.name} (${this.formatDate(exp.date)})`;
+                    this.experimentSelect.appendChild(option);
+                });
+            }
+
+            async selectExperiment(experimentId) {
+                if (!experimentId) {
+                    this.gifSelect.disabled = true;
+                    this.gifSelect.innerHTML = '<option value="">Select an experiment first</option>';
+                    this.pipelineFilters.classList.add('hidden');
+                    this.clearComparison();
+                    return;
+                }
+
+                try {
+                    // Load experiment from new visual_outputs structure
+                    await this.loadExperimentFromVisualOutputs(experimentId);
+                    this.populateGifSelect();
+                } catch (error) {
+                    console.error('Failed to load experiment:', error);
+                    this.showError(`Failed to load experiment data for ${experimentId}`);
+                }
+            }
+
+            async loadExperimentFromVisualOutputs(experimentId) {
+                // Try to get list of GIFs from visual_outputs directory
+                const visualOutputsPath = `experiments/${experimentId}/visual_outputs`;
+                
+                // First get experiment metadata
+                const metadataResponse = await fetch(`experiments/${experimentId}/run_metadata.json`);
+                const metadata = await metadataResponse.json();
+                
+                this.currentExperiment = {
+                    experiment: { id: experimentId },
+                    metadata: metadata,
+                    gifs: []
+                };
+
+                // Load available GIFs by looking for directories with metrics.json
+                const availableGifs = await this.discoverGifsInVisualOutputs(visualOutputsPath);
+                
+                for (const gifName of availableGifs) {
+                    try {
+                        const metricsResponse = await fetch(`${visualOutputsPath}/${gifName}/metrics.json`);
+                        const metrics = await metricsResponse.json();
+                        
+                        const gifData = this.convertMetricsToGifData(gifName, metrics, visualOutputsPath);
+                        this.currentExperiment.gifs.push(gifData);
+                    } catch (error) {
+                        console.warn(`Failed to load metrics for ${gifName}:`, error);
+                    }
+                }
+            }
+
+            async discoverGifsInVisualOutputs(basePath) {
+                // Try to discover available GIFs by testing known GIF names
+                const knownGifNames = [
+                    'animation_heavy', 'complex_gradient', 'data_visualization', 'extended_animation',
+                    'few_colors', 'geometric_patterns', 'gradient_large', 'gradient_medium', 
+                    'gradient_small', 'gradient_xlarge', 'high_contrast', 'high_frequency_detail',
+                    'long_animation', 'many_colors', 'minimal_frames', 'mixed_content',
+                    'noise_large', 'noise_small', 'photographic_noise', 'single_pixel_anim',
+                    'smooth_gradient', 'solid_blocks', 'static_minimal_change', 'texture_complex', 
+                    'transitions'
+                ];
+                
+                const availableGifs = [];
+                for (const gifName of knownGifNames) {
+                    try {
+                        const response = await fetch(`${basePath}/${gifName}/metrics.json`);
+                        if (response.ok) {
+                            availableGifs.push(gifName);
+                        }
+                    } catch (error) {
+                        // GIF not available, skip
+                    }
+                }
+                return availableGifs;
+            }
+
+            convertMetricsToGifData(gifName, metrics, basePath) {
+                const pipelines = [];
+                
+                // Convert each compression to pipeline format
+                Object.entries(metrics.compressions).forEach(([compressionName, data]) => {
+                    pipelines.push({
+                        id: compressionName,
+                        display_name: this.generateDisplayName(data),
+                        file_size_kb: data.file_size_kb,
+                        compression_ratio: data.compression_ratio,
+                        enhanced_composite_quality: data.enhanced_composite_quality || data.composite_quality || 0,
+                        efficiency: this.calculateEfficiency(data),
+                        render_time_ms: data.render_time_ms,
+                        frame_count: data.frame_count || metrics.original_info.frame_count || 'N/A'
+                    });
+                });
+
+                return {
+                    name: gifName,
+                    content_type: metrics.original_info.content_type || 'unknown',
+                    original: {
+                        file_size_kb: metrics.original_info.size_kb,
+                        frame_count: metrics.original_info.frame_count || 'N/A'
+                    },
+                    pipelines: pipelines
+                };
+            }
+
+            generateDisplayName(compressionData) {
+                const tools = compressionData.tools_used || [];
+                let name = tools.join(' + ').replace(/-/g, ' ');
+                
+                if (compressionData.applied_colors) {
+                    name += ` (${compressionData.applied_colors} colors)`;
+                }
+                if (compressionData.applied_lossy) {
+                    name += ` (${compressionData.applied_lossy}% lossy)`;
+                }
+                if (compressionData.applied_frame_ratio) {
+                    name += ` (${(compressionData.applied_frame_ratio * 100).toFixed(0)}% frames)`;
+                }
+                
+                return name || compressionData.pipeline;
+            }
+
+            calculateEfficiency(compressionData) {
+                // Use enhanced composite quality if available, fall back to legacy
+                // Enhanced quality already includes proper efficiency calculation
+                if (compressionData.efficiency !== undefined) {
+                    return compressionData.efficiency;
+                }
+                
+                // Fallback calculation using enhanced composite quality if available
+                const qualityScore = compressionData.enhanced_composite_quality || compressionData.composite_quality || 0;
+                const compressionScore = Math.min(compressionData.compression_ratio / 10, 1);
+                return (qualityScore * 0.6 + compressionScore * 0.4);
+            }
+
+            populateGifSelect() {
+                this.gifSelect.disabled = false;
+                this.gifSelect.innerHTML = '<option value="">Select GIF...</option>';
+                
+                if (this.currentExperiment && this.currentExperiment.gifs) {
+                    this.currentExperiment.gifs.forEach(gif => {
+                        const option = document.createElement('option');
+                        option.value = gif.name;
+                        option.textContent = `${gif.name} (${gif.content_type})`;
+                        this.gifSelect.appendChild(option);
+                    });
+                }
+            }
+
+            selectGif(gifName) {
+                if (!gifName || !this.currentExperiment) {
+                    this.pipelineFilters.classList.add('hidden');
+                    this.clearComparison();
+                    return;
+                }
+
+                this.currentGif = this.currentExperiment.gifs.find(g => g.name === gifName);
+                if (this.currentGif) {
+                    this.populatePipelineFilters();
+                    this.pipelineFilters.classList.remove('hidden');
+                }
+            }
+
+            populatePipelineFilters() {
+                this.pipelineCheckboxes.innerHTML = '';
+                this.selectedPipelines.clear();
+
+                if (!this.currentGif || !this.currentGif.pipelines) return;
+
+                this.currentGif.pipelines.forEach(pipeline => {
+                    const checkboxDiv = document.createElement('div');
+                    checkboxDiv.className = 'pipeline-checkbox';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `pipeline-${pipeline.id}`;
+                    checkbox.value = pipeline.id;
+                    checkbox.addEventListener('change', (e) => {
+                        this.togglePipeline(pipeline.id, e.target.checked);
+                        checkboxDiv.classList.toggle('selected', e.target.checked);
+                    });
+                    
+                    const info = document.createElement('div');
+                    info.className = 'pipeline-info';
+                    
+                    const name = document.createElement('div');
+                    name.className = 'pipeline-name';
+                    name.textContent = pipeline.display_name;
+                    
+                    const stats = document.createElement('div');
+                    stats.className = 'pipeline-stats';
+                    stats.textContent = `${pipeline.file_size_kb.toFixed(1)} KB • ${pipeline.compression_ratio.toFixed(1)}x compression • ${(pipeline.efficiency * 100).toFixed(0)}% efficiency`;
+                    
+                    info.appendChild(name);
+                    info.appendChild(stats);
+                    
+                    const efficiencyBar = document.createElement('div');
+                    efficiencyBar.className = 'efficiency-bar';
+                    
+                    const efficiencyFill = document.createElement('div');
+                    efficiencyFill.className = `efficiency-fill ${this.getEfficiencyClass(pipeline.efficiency)}`;
+                    efficiencyFill.style.width = `${pipeline.efficiency * 100}%`;
+                    
+                    efficiencyBar.appendChild(efficiencyFill);
+                    
+                    checkboxDiv.appendChild(checkbox);
+                    checkboxDiv.appendChild(info);
+                    checkboxDiv.appendChild(efficiencyBar);
+                    
+                    this.pipelineCheckboxes.appendChild(checkboxDiv);
+                });
+            }
+
+            togglePipeline(pipelineId, selected) {
+                if (selected) {
+                    this.selectedPipelines.add(pipelineId);
+                } else {
+                    this.selectedPipelines.delete(pipelineId);
+                }
+                this.updateComparison();
+            }
+
+            updateComparison() {
+                this.clearComparison();
+                
+                if (!this.currentGif || !this.currentExperiment || this.selectedPipelines.size === 0) {
+                    this.metricsPanel.classList.add('hidden');
+                    return;
+                }
+
+                // Always show original first
+                this.addGifCard({
+                    src: `experiments/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/original.gif`,
+                    title: 'Original',
+                    metadata: {
+                        size: `${this.currentGif.original.file_size_kb.toFixed(1)} KB`,
+                        frames: `${this.currentGif.original.frame_count} frames`
+                    },
+                    isOriginal: true
+                });
+
+                // Add selected pipelines
+                const selectedPipelineData = this.currentGif.pipelines.filter(p => 
+                    this.selectedPipelines.has(p.id)
+                );
+
+                selectedPipelineData.forEach(pipeline => {
+                    this.addGifCard({
+                        src: `experiments/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/${pipeline.id}.gif`,
+                        title: pipeline.display_name,
+                        metadata: {
+                            size: `${pipeline.file_size_kb.toFixed(1)} KB`,
+                            frames: `${pipeline.frame_count} frames`,
+                            compression: `${pipeline.compression_ratio.toFixed(1)}x smaller`,
+                            quality: `Quality: ${pipeline.enhanced_composite_quality.toFixed(3)}`,
+                            efficiency: `Efficiency: ${(pipeline.efficiency * 100).toFixed(0)}%`,
+                            time: `${pipeline.render_time_ms}ms`
+                        },
+                        efficiency: pipeline.efficiency
+                    });
+                });
+
+                this.updateMetricsTable(selectedPipelineData);
+            }
+
+            addGifCard(options) {
+                const card = document.createElement('div');
+                card.className = 'gif-card';
+                
+                const container = document.createElement('div');
+                container.className = 'gif-container';
+                
+                const img = document.createElement('img');
+                img.src = options.src;
+                img.alt = options.title;
+                img.onerror = () => {
+                    img.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="%23f0f0f0"/><text x="100" y="50" text-anchor="middle" fill="%23999">Image not found</text></svg>';
+                };
+                
+                const overlay = document.createElement('div');
+                overlay.className = 'gif-overlay';
+                
+                const title = document.createElement('div');
+                title.className = 'gif-title';
+                
+                const titleText = document.createElement('span');
+                titleText.textContent = options.title;
+                
+                const fileLink = document.createElement('a');
+                fileLink.className = 'file-link';
+                fileLink.href = options.src;
+                fileLink.target = '_blank';
+                fileLink.textContent = 'View File';
+                fileLink.title = `Open ${options.src} in new tab`;
+                
+                title.appendChild(titleText);
+                title.appendChild(fileLink);
+                
+                const metadata = document.createElement('div');
+                metadata.className = 'metadata';
+                
+                Object.entries(options.metadata).forEach(([key, value]) => {
+                    const span = document.createElement('span');
+                    span.textContent = value;
+                    metadata.appendChild(span);
+                });
+                
+                overlay.appendChild(title);
+                overlay.appendChild(metadata);
+                container.appendChild(img);
+                container.appendChild(overlay);
+                card.appendChild(container);
+                
+                // Add efficiency styling for non-original cards
+                if (!options.isOriginal && options.efficiency !== undefined) {
+                    card.style.borderLeft = `4px solid ${this.getEfficiencyColor(options.efficiency)}`;
+                }
+                
+                this.comparisonGrid.appendChild(card);
+            }
+
+            updateMetricsTable(pipelines) {
+                const tbody = this.metricsTable.querySelector('tbody');
+                tbody.innerHTML = '';
+
+                // Add original row
+                const originalRow = document.createElement('tr');
+                originalRow.innerHTML = `
+                    <td><strong>Original</strong></td>
+                    <td>${this.currentGif.original.file_size_kb.toFixed(1)} KB</td>
+                    <td>${this.currentGif.original.frame_count}</td>
+                    <td>1.0x</td>
+                    <td>1.000</td>
+                    <td>—</td>
+                    <td>—</td>
+                `;
+                tbody.appendChild(originalRow);
+
+                // Add pipeline rows
+                pipelines.forEach(pipeline => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${pipeline.display_name}</td>
+                        <td>${pipeline.file_size_kb.toFixed(1)} KB</td>
+                        <td>${pipeline.frame_count}</td>
+                        <td>${pipeline.compression_ratio.toFixed(1)}x</td>
+                        <td>${pipeline.enhanced_composite_quality.toFixed(3)}</td>
+                        <td style="color: ${this.getEfficiencyColor(pipeline.efficiency)}">
+                            ${(pipeline.efficiency * 100).toFixed(0)}%
+                        </td>
+                        <td>${pipeline.render_time_ms}ms</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                this.metricsPanel.classList.remove('hidden');
+            }
+
+            clearComparison() {
+                this.comparisonGrid.innerHTML = '';
+                this.metricsPanel.classList.add('hidden');
+            }
+
+            getEfficiencyClass(efficiency) {
+                if (efficiency >= 0.8) return 'efficiency-excellent';
+                if (efficiency >= 0.6) return 'efficiency-good'; 
+                if (efficiency >= 0.4) return 'efficiency-fair';
+                return 'efficiency-poor';
+            }
+
+            getEfficiencyColor(efficiency) {
+                if (efficiency >= 0.8) return '#4CAF50';
+                if (efficiency >= 0.6) return '#8BC34A';
+                if (efficiency >= 0.4) return '#FFC107';
+                return '#FF5722';
+            }
+
+            async discoverExperimentsFromFilesystem() {
+                console.log('🔍 Starting experiment discovery from filesystem...');
+                const experiments = [];
+                
+                // Fetch actual directory listing from web server
+                console.log('📂 Fetching experiment directories from server...');
+                try {
+                    const response = await fetch('experiments/');
+                    const html = await response.text();
+                    console.log('📋 Got directory listing');
+                    
+                    // Parse directory names from HTML listing
+                    const dirRegex = /href="([^"]+\/)"/g;
+                    const directories = [];
+                    let match;
+                    
+                    while ((match = dirRegex.exec(html)) !== null) {
+                        const dirName = match[1].replace('/', ''); // Remove trailing slash
+                        // Skip system directories
+                        if (!dirName.startsWith('.') && dirName !== 'latest' && !dirName.includes('cache')) {
+                            directories.push(dirName);
+                            console.log(`   📁 Found directory: ${dirName}`);
+                        }
+                    }
+                    
+                    console.log(`📊 Found ${directories.length} potential experiment directories`);
+                    
+                    // Check each directory to see if it's a valid experiment
+                    for (const expId of directories) {
+                        console.log(`🔍 Checking experiment: ${expId}`);
+                        const experiment = await this.checkExperimentExists(expId);
+                        if (experiment) {
+                            experiments.push(experiment);
+                            console.log(`✅ Valid experiment: ${expId}`);
+                        } else {
+                            console.log(`❌ Invalid experiment: ${expId}`);
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.log(`❌ Failed to fetch directory listing: ${error.message}`);
+                    console.log('📂 Falling back to known experiment test...');
+                    
+                    // Fallback to testing known experiment
+                    const knownExperiment = await this.checkExperimentExists('001-gifsicle-frame-validation-16-08-25');
+                    if (knownExperiment) {
+                        experiments.push(knownExperiment);
+                        console.log('✅ Found known experiment:', knownExperiment.id);
+                    }
+                }
+                
+                console.log(`📊 Discovery complete. Found ${experiments.length} experiments:`);
+                experiments.forEach(exp => {
+                    console.log(`   - ${exp.id}: "${exp.name}" (${exp.gifs_count} GIFs)`);
+                });
+                
+                // Sort by date (newest first) if we have date info
+                experiments.sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                return experiments;
+            }
+            
+            async tryExperimentPatterns(baseName, experiments) {
+                // Try different date patterns with the base name
+                const today = new Date();
+                const datePatterns = [
+                    // Recent dates in DD-MM-YY format
+                    '16-08-25', '15-08-25', '14-08-25', '13-08-25', '12-08-25', '11-08-25',
+                    // Today and recent days in DD-MM-YY
+                    today.toLocaleDateString('en-GB', {day: '2-digit', month: '2-digit', year: '2-digit'}).replace(/\//g, '-'),
+                    // YYYY-MM-DD format
+                    '2025-08-16', '2025-08-15', '2025-08-14', '2025-08-13', '2025-08-12', '2025-08-11'
+                ];
+                
+                for (const date of datePatterns) {
+                    const expId = `${baseName}-${date}`;
+                    const experiment = await this.checkExperimentExists(expId);
+                    if (experiment && !experiments.find(e => e.id === experiment.id)) {
+                        experiments.push(experiment);
+                        console.log(`✅ Discovered: ${expId}`);
+                    }
+                }
+                
+                // Also try without date suffix
+                const experiment = await this.checkExperimentExists(baseName);
+                if (experiment && !experiments.find(e => e.id === experiment.id)) {
+                    experiments.push(experiment);
+                    console.log(`✅ Discovered: ${baseName}`);
+                }
+            }
+            
+            async checkExperimentExists(expId) {
+                try {
+                    console.log(`🔍 Checking experiment: ${expId}`);
+                    
+                    // Check if experiment has required structure
+                    const metadataPath = `experiments/${expId}/run_metadata.json`;
+                    const visualOutputsPath = `experiments/${expId}/visual_outputs`;
+                    
+                    console.log(`   📄 Checking metadata: ${metadataPath}`);
+                    const hasMetadata = await this.checkFileExists(metadataPath);
+                    console.log(`   📄 Metadata exists: ${hasMetadata}`);
+                    
+                    console.log(`   📁 Checking visual outputs: ${visualOutputsPath}`);
+                    const hasVisualOutputs = await this.checkDirectoryExists(visualOutputsPath);
+                    console.log(`   📁 Visual outputs exists: ${hasVisualOutputs}`);
+                    
+                    if (!hasMetadata || !hasVisualOutputs) {
+                        console.log(`   ❌ ${expId} missing required files (metadata: ${hasMetadata}, visual_outputs: ${hasVisualOutputs})`);
+                        return null;
+                    }
+                    
+                    console.log(`   ✅ ${expId} has required structure`);
+                    
+                    // Load metadata
+                    let metadata = {};
+                    try {
+                        const metadataResponse = await fetch(`experiments/${expId}/run_metadata.json`);
+                        if (metadataResponse.ok) {
+                            metadata = await metadataResponse.json();
+                        }
+                    } catch (e) {
+                        console.warn(`Could not load metadata for ${expId}`);
+                    }
+                    
+                    // Count GIFs
+                    const gifCount = await this.countGifsInVisualOutputs(`experiments/${expId}/visual_outputs`);
+                    
+                    // Extract date from ID or use current date
+                    let date = new Date().toISOString();
+                    const dateMatch = expId.match(/-(\d{2}-\d{2}-\d{2})$/);
+                    if (dateMatch) {
+                        const [, shortDate] = dateMatch;
+                        const [day, month, year] = shortDate.split('-');
+                        date = new Date(`20${year}-${month}-${day}`).toISOString();
+                    }
+                    
+                    return {
+                        id: expId,
+                        name: metadata.name || this.generateExperimentName(expId),
+                        preset: metadata.preset || 'custom',
+                        description: metadata.description || `Experiment: ${expId}`,
+                        date: metadata.timestamp || date,
+                        gifs_count: gifCount,
+                        pipelines_count: metadata.pipeline_count || 'unknown',
+                        path: `experiments/${expId}`
+                    };
+                    
+                } catch (error) {
+                    return null;
+                }
+            }
+            
+            generateExperimentName(expId) {
+                // Generate human-readable name from experiment ID
+                return expId
+                    .replace(/^[0-9]{3}-/, '') // Remove leading numbers
+                    .replace(/-[0-9]{2}-[0-9]{2}-[0-9]{2}$/, '') // Remove trailing date
+                    .replace(/-/g, ' ') // Replace dashes with spaces
+                    .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize words
+            }
+            
+            async countGifsInVisualOutputs(visualOutputsPath) {
+                const knownGifNames = [
+                    'animation_heavy', 'complex_gradient', 'data_visualization', 'extended_animation',
+                    'few_colors', 'geometric_patterns', 'gradient_large', 'gradient_medium', 
+                    'gradient_small', 'gradient_xlarge', 'high_contrast', 'high_frequency_detail',
+                    'long_animation', 'many_colors', 'minimal_frames', 'mixed_content',
+                    'noise_large', 'noise_small', 'photographic_noise', 'single_pixel_anim',
+                    'smooth_gradient', 'solid_blocks', 'static_minimal_change', 'texture_complex', 
+                    'transitions'
+                ];
+                
+                let count = 0;
+                for (const gifName of knownGifNames) {
+                    try {
+                        const response = await fetch(`${visualOutputsPath}/${gifName}/metrics.json`, { method: 'HEAD' });
+                        if (response.ok) {
+                            count++;
+                        }
+                    } catch {
+                        continue;
+                    }
+                }
+                
+                return count;
+            }
+            
+            async checkFileExists(filePath) {
+                try {
+                    console.log(`      🌐 Fetching: ${filePath}`);
+                    const response = await fetch(filePath, { method: 'HEAD' });
+                    console.log(`      📡 Response: ${response.status} ${response.statusText}`);
+                    return response.ok;
+                } catch (error) {
+                    console.log(`      ❌ Fetch error: ${error.message}`);
+                    return false;
+                }
+            }
+            
+            async checkDirectoryExists(dirPath) {
+                console.log(`      📁 Testing directory: ${dirPath}`);
+                
+                // For visual_outputs directory, check if it has subdirectories with metrics.json
+                if (dirPath.includes('visual_outputs')) {
+                    console.log(`        🔍 Checking for subdirectories with metrics.json...`);
+                    
+                    // Try some common GIF names that might exist as subdirectories
+                    const testSubdirs = [
+                        'animation_heavy', 'smooth_gradient', 'complex_gradient', 
+                        'many_colors', 'few_colors', 'high_contrast', 'noise_large'
+                    ];
+                    
+                    for (const subdir of testSubdirs) {
+                        try {
+                            const testPath = `${dirPath}/${subdir}/metrics.json`;
+                            console.log(`        🔍 Testing: ${testPath}`);
+                            const response = await fetch(testPath, { method: 'HEAD' });
+                            console.log(`        📡 Response: ${response.status} ${response.statusText}`);
+                            if (response.ok) {
+                                console.log(`        ✅ Visual outputs directory confirmed via: ${subdir}/metrics.json`);
+                                return true;
+                            }
+                        } catch (error) {
+                            console.log(`        ❌ Error testing ${subdir}: ${error.message}`);
+                            continue;
+                        }
+                    }
+                    
+                    console.log(`      ❌ No valid subdirectories found in visual_outputs`);
+                    return false;
+                }
+                
+                // For other directories, use original logic
+                const testFiles = ['metrics.json', 'run_metadata.json'];
+                for (const file of testFiles) {
+                    try {
+                        const testPath = `${dirPath}/${file}`;
+                        console.log(`        🔍 Testing: ${testPath}`);
+                        const response = await fetch(testPath, { method: 'HEAD' });
+                        console.log(`        📡 Response: ${response.status} ${response.statusText}`);
+                        if (response.ok) {
+                            console.log(`        ✅ Directory confirmed via: ${file}`);
+                            return true;
+                        }
+                    } catch (error) {
+                        console.log(`        ❌ Error testing ${file}: ${error.message}`);
+                        continue;
+                    }
+                }
+                console.log(`      ❌ Directory not accessible: ${dirPath}`);
+                return false;
+            }
+            
+
+            formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-AU') + ' ' + date.toLocaleTimeString('en-AU', {hour: '2-digit', minute:'2-digit'});
+            }
+
+            showError(message) {
+                const error = document.createElement('div');
+                error.className = 'error';
+                error.textContent = message;
+                
+                // Insert after header
+                const header = document.querySelector('.header');
+                header.insertAdjacentElement('afterend', error);
+                
+                setTimeout(() => error.remove(), 5000);
+            }
+        }
+
+        // Initialize the comparison tool when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const app = new GifLabComparison();
+            
+            // Make app available globally for debugging
+            window.app = app;
+            
+            // Add global debug functions for manual testing
+            window.debugDiscovery = async function() {
+                console.log('🔧 Manual debug: Starting experiment discovery...');
+                try {
+                    const experiments = await app.discoverExperimentsFromFilesystem();
+                    console.log('🔧 Manual debug: Discovery complete');
+                    console.log('🔧 Experiments found:', experiments);
+                    return experiments;
+                } catch (error) {
+                    console.log('🔧 Manual debug: Error during discovery:', error);
+                    return error;
+                }
+            };
+            
+            window.debugCheckExperiment = async function(expId) {
+                console.log(`🔧 Manual debug: Checking experiment ${expId}`);
+                try {
+                    const result = await app.checkExperimentExists(expId);
+                    console.log('🔧 Manual debug: Check complete');
+                    console.log('🔧 Result:', result);
+                    return result;
+                } catch (error) {
+                    console.log('🔧 Manual debug: Error checking experiment:', error);
+                    return error;
+                }
+            };
+            
+            window.debugFileExists = async function(filePath) {
+                console.log(`🔧 Manual debug: Checking file ${filePath}`);
+                try {
+                    const result = await app.checkFileExists(filePath);
+                    console.log('🔧 Manual debug: File check complete');
+                    console.log('🔧 Result:', result);
+                    return result;
+                } catch (error) {
+                    console.log('🔧 Manual debug: Error checking file:', error);
+                    return error;
+                }
+            };
+            
+            // Test function to verify the fix
+            window.testDiscoveryFix = async function() {
+                console.log('🧪 Testing discovery fix...');
+                
+                // Test the known experiment
+                const result = await app.checkExperimentExists('001-gifsicle-frame-validation-16-08-25');
+                console.log(`Test result: ${result ? '✅ SUCCESS' : '❌ FAILED'}`);
+                
+                if (result) {
+                    console.log('🎉 Fix is working! The experiment should now be discoverable.');
+                } else {
+                    console.log('❌ Fix did not resolve the issue. Check console for details.');
+                }
+                
+                return result;
+            };
+            
+            console.log('🔧 Debug functions available:');
+            console.log('   - debugDiscovery() - Run full discovery process');
+            console.log('   - debugCheckExperiment("experiment-id") - Test specific experiment');
+            console.log('   - debugFileExists("path/to/file") - Test file existence');
+            console.log('   - testDiscoveryFix() - Test the directory validation fix');
+        });
+    </script>
+</body>
+</html>
