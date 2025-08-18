@@ -417,11 +417,13 @@ def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
 
 
 def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context: bool = False) -> float:
-    """Detect disposal method artifacts like frame stacking or ghosting.
+    """Detect disposal method artifacts including background corruption, transparency bleeding, and color shifts.
     
-    Disposal artifacts occur when frames accumulate instead of being properly
-    cleared between animation frames. This creates a characteristic pattern
-    where content increases rather than changes between frames.
+    Disposal artifacts manifest as:
+    - Background color corruption (gray→pink, white bleeding)
+    - Color palette degradation and intensity shifts  
+    - Transparency corruption and overlay residue
+    - Visual frame stacking and overlay artifacts
     
     Args:
         frames: List of consecutive frames
@@ -431,75 +433,260 @@ def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context:
     Returns:
         Artifact score between 0.0 and 1.0 (0.0 = severe artifacts, 1.0 = clean)
     """
-    if len(frames) < 3:
-        return 1.0  # Need at least 3 frames to detect stacking
-        
-    # Calculate cumulative content density across frames
-    content_densities = []
-    for frame in frames:
-        # Convert to grayscale for simpler analysis
-        if len(frame.shape) == 3:
-            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = frame
+    if len(frames) < 2:
+        return 1.0  # Need at least 2 frames to detect artifacts
+    
+    # Extract first and last frames for comparison (most likely to show accumulation)
+    first_frame = frames[0].astype(np.float32)
+    last_frame = frames[-1].astype(np.float32)
+    
+    # Ensure frames are the same size
+    if first_frame.shape != last_frame.shape:
+        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))
+    
+    scores = []
+    
+    # 1. Background Color Stability Detection
+    bg_stability = detect_background_color_stability(first_frame, last_frame)
+    scores.append(('background_stability', bg_stability, 0.25))
+    
+    # 2. Structural Integrity Detection (for geometric artifacts like duplicate lines)
+    structural_score = detect_structural_artifacts(first_frame, last_frame)
+    scores.append(('structural', structural_score, 0.4))
+    
+    # 3. Transparency Corruption Detection  
+    transparency_score = detect_transparency_corruption(frames)
+    scores.append(('transparency', transparency_score, 0.2))
+    
+    # 4. Color Fidelity Measurement
+    color_fidelity = detect_color_fidelity_corruption(first_frame, last_frame)
+    scores.append(('color_fidelity', color_fidelity, 0.1))
+    
+    # 5. Visual Frame Overlay Detection (legacy density-based)
+    overlay_score = detect_frame_overlay_artifacts(frames)
+    scores.append(('overlay', overlay_score, 0.05))
+    
+    # Calculate weighted final score
+    total_weight = sum(weight for _, _, weight in scores)
+    final_score = sum(score * weight for _, score, weight in scores) / total_weight
+    
+    return float(max(0.0, min(1.0, final_score)))
+
+
+def detect_background_color_stability(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+    """Detect background color corruption between first and last frames.
+    
+    Background corruption manifests as color shifts (gray→pink) in areas that
+    should remain stable throughout the animation.
+    """
+    # Sample edge regions as likely background areas
+    height, width = first_frame.shape[:2]
+    edge_width = max(5, width // 20)
+    edge_height = max(5, height // 20)
+    
+    # Extract edge regions (top, bottom, left, right)
+    edges_first = []
+    edges_last = []
+    
+    # Top and bottom edges
+    edges_first.extend([first_frame[:edge_height, :], first_frame[-edge_height:, :]])
+    edges_last.extend([last_frame[:edge_height, :], last_frame[-edge_height:, :]])
+    
+    # Left and right edges  
+    edges_first.extend([first_frame[:, :edge_width], first_frame[:, -edge_width:]])
+    edges_last.extend([last_frame[:, :edge_width], last_frame[:, -edge_width:]])
+    
+    # Calculate color shift in edge regions
+    total_shift = 0.0
+    for edge_first, edge_last in zip(edges_first, edges_last):
+        if edge_first.shape != edge_last.shape:
+            continue
             
-        # Calculate non-background pixel density (assuming 0 or low values are background)
-        non_bg_pixels = np.sum(gray > 25)  # Threshold for non-background
-        total_pixels = gray.shape[0] * gray.shape[1]
-        density = non_bg_pixels / total_pixels
-        content_densities.append(density)
+        # Calculate mean color difference in each edge region
+        color_diff = np.mean(np.abs(edge_first - edge_last))
+        total_shift += color_diff
     
-    # Adjust detection thresholds based on context
-    if frame_reduction_context:
-        # Frame reduction context: Focus on visual stacking artifacts only
-        # Allow larger temporal discontinuities as they're expected
-        density_threshold = 1.2   # 20% increase threshold (more lenient)
-        diff_threshold = 1.1      # 10% increase threshold (more lenient)
-        # Weight visual stacking detection more heavily than temporal changes
-        density_weight = 0.8
-        diff_weight = 0.2
-    else:
-        # Normal context: Detect both visual stacking and temporal artifacts
-        density_threshold = 1.1   # 10% increase threshold (strict)
-        diff_threshold = 1.05     # 5% increase threshold (strict)
-        # Balanced detection of both artifact types
-        density_weight = 0.5
-        diff_weight = 0.5
+    # Normalize shift (higher shift = lower score)
+    avg_shift = total_shift / len(edges_first)
+    # Convert to 0-1 score where 0 = severe shift, 1 = no shift
+    stability_score = max(0.0, 1.0 - (avg_shift / 50.0))  # 50 is empirical threshold
     
-    # Check for increasing density pattern (characteristic of stacking)
-    density_increases = 0
-    for i in range(1, len(content_densities)):
-        if content_densities[i] > content_densities[i-1] * density_threshold:
-            density_increases += 1
+    return stability_score
+
+
+def detect_transparency_corruption(frames: list[np.ndarray]) -> float:
+    """Detect transparency and white bleeding artifacts.
     
-    # Also check for frame difference accumulation
-    cumulative_diff = 0.0
-    diff_accumulations = []
+    Transparency corruption shows as unexpected white pixels or regions
+    where transparency should be preserved.
+    """
+    if len(frames) < 2:
+        return 1.0
+    
+    corruption_scores = []
     
     for i in range(1, len(frames)):
         frame1 = frames[i-1].astype(np.float32)
         frame2 = frames[i].astype(np.float32)
         
-        # Calculate absolute difference
-        diff = np.mean(np.abs(frame2 - frame1))
-        cumulative_diff += diff
-        diff_accumulations.append(cumulative_diff)
+        if frame1.shape != frame2.shape:
+            frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+        
+        # Detect unexpected white/bright pixels (transparency bleeding)
+        if len(frame1.shape) == 3:
+            # Check for white bleeding in RGB
+            white_threshold = 240
+            bright_pixels_1 = np.sum(np.all(frame1 > white_threshold, axis=2))
+            bright_pixels_2 = np.sum(np.all(frame2 > white_threshold, axis=2))
+            
+            # Corruption = unexpected increase in bright pixels
+            pixel_increase = max(0, bright_pixels_2 - bright_pixels_1)
+            total_pixels = frame1.shape[0] * frame1.shape[1]
+            corruption_ratio = pixel_increase / total_pixels
+            
+            corruption_scores.append(1.0 - min(1.0, corruption_ratio * 10))  # Scale factor
     
-    # Clean animations should have stable or decreasing cumulative differences
-    # Stacking artifacts cause increasing cumulative differences
-    increasing_diffs = 0
-    for i in range(1, len(diff_accumulations)):
-        if diff_accumulations[i] > diff_accumulations[i-1] * diff_threshold:
-            increasing_diffs += 1
+    if not corruption_scores:
+        return 1.0
     
-    # Calculate final score (lower = more artifacts)
+    return float(np.mean(corruption_scores))
+
+
+def detect_color_fidelity_corruption(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+    """Detect color palette corruption and intensity shifts.
+    
+    Color fidelity corruption shows as unexpected color changes in regions
+    that should maintain consistent colors (red→magenta shifts).
+    """
+    if first_frame.shape != last_frame.shape:
+        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))
+    
+    if len(first_frame.shape) == 3:
+        # Calculate per-channel color stability
+        channel_stabilities = []
+        
+        for channel in range(3):  # R, G, B
+            first_channel = first_frame[:, :, channel]
+            last_channel = last_frame[:, :, channel]
+            
+            # Calculate mean absolute difference in this color channel
+            channel_diff = np.mean(np.abs(first_channel - last_channel))
+            
+            # Convert to stability score (lower diff = higher stability)
+            stability = max(0.0, 1.0 - (channel_diff / 100.0))  # 100 is empirical threshold
+            channel_stabilities.append(stability)
+        
+        # Overall color fidelity is minimum channel stability (worst channel determines score)
+        return float(min(channel_stabilities))
+    else:
+        # Grayscale - calculate intensity stability
+        intensity_diff = np.mean(np.abs(first_frame - last_frame))
+        return float(max(0.0, 1.0 - (intensity_diff / 100.0)))
+
+
+def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+    """Detect structural disposal artifacts like duplicate lines, edges, and geometric elements.
+    
+    This method detects disposal artifacts that manifest as:
+    - Duplicate axis lines in charts
+    - Overlapping geometric elements
+    - Edge duplication and structural inconsistencies
+    - Line artifacts that don't affect overall color/density
+    
+    Args:
+        first_frame: First frame of the animation
+        last_frame: Last frame of the animation (most likely to show accumulation)
+        
+    Returns:
+        Score between 0.0 and 1.0 (0.0 = severe structural artifacts, 1.0 = clean)
+    """
+    try:
+        # Convert to grayscale for edge detection
+        gray_first = cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY) if len(first_frame.shape) == 3 else first_frame
+        gray_last = cv2.cvtColor(last_frame, cv2.COLOR_RGB2GRAY) if len(last_frame.shape) == 3 else last_frame
+        
+        # Ensure same dimensions
+        if gray_first.shape != gray_last.shape:
+            gray_last = cv2.resize(gray_last, (gray_first.shape[1], gray_first.shape[0]))
+        
+        # Edge detection using Canny - captures lines and structural elements
+        edges_first = cv2.Canny(gray_first.astype(np.uint8), 50, 150)
+        edges_last = cv2.Canny(gray_last.astype(np.uint8), 50, 150)
+        
+        # Calculate edge pixel counts
+        edge_count_first = np.sum(edges_first > 0)
+        edge_count_last = np.sum(edges_last > 0)
+        
+        # Detect structural duplication - significant edge increase suggests artifacts
+        if edge_count_first == 0:
+            # No edges in first frame - can't detect duplication
+            edge_increase_score = 1.0
+        else:
+            edge_ratio = edge_count_last / edge_count_first
+            # Normal animation should have similar edge density
+            # Disposal artifacts cause edge multiplication (ratio > 1.2 for charts/diagrams)
+            if edge_ratio > 1.2:
+                # More aggressive penalization for edge duplication
+                edge_increase_score = max(0.0, 1.0 - ((edge_ratio - 1.2) * 1.5))
+            else:
+                edge_increase_score = 1.0
+        
+        # Detect edge pattern inconsistency using structural similarity
+        if edge_count_first > 0 and edge_count_last > 0:
+            # Calculate correlation between edge patterns
+            edges_first_norm = edges_first.astype(np.float32) / 255.0
+            edges_last_norm = edges_last.astype(np.float32) / 255.0
+            
+            # Use SSIM on edge maps to detect structural corruption
+            edge_ssim = ssim(edges_first_norm, edges_last_norm, data_range=1.0)
+            
+            # Low SSIM between edge patterns indicates structural corruption
+            # But account for legitimate animation changes
+            if edge_ssim < 0.6:  # Significant structural change
+                edge_pattern_score = max(0.0, edge_ssim)
+            else:
+                edge_pattern_score = 1.0
+        else:
+            edge_pattern_score = 1.0
+        
+        # Combine edge increase and pattern consistency (equal weighting)
+        final_score = (edge_increase_score * 0.6 + edge_pattern_score * 0.4)
+        
+        return float(max(0.0, min(1.0, final_score)))
+        
+    except Exception as e:
+        logger.warning(f"Structural artifact detection failed: {e}")
+        return 1.0  # Assume clean on error
+
+
+def detect_frame_overlay_artifacts(frames: list[np.ndarray]) -> float:
+    """Detect visual frame overlay artifacts using density-based approach.
+    
+    This is the legacy detection method for frame stacking artifacts.
+    """
+    if len(frames) < 3:
+        return 1.0
+    
+    # Calculate content density changes
+    content_densities = []
+    for frame in frames:
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) if len(frame.shape) == 3 else frame
+        non_bg_pixels = np.sum(gray > 25)
+        total_pixels = gray.shape[0] * gray.shape[1]
+        density = non_bg_pixels / total_pixels
+        content_densities.append(density)
+    
+    # Check for problematic density increases
+    increases = 0
+    for i in range(1, len(content_densities)):
+        if content_densities[i] > content_densities[i-1] * 1.15:  # 15% increase threshold
+            increases += 1
+    
+    # Score based on density increase pattern
     max_increases = len(frames) - 1
-    density_score = 1.0 - (density_increases / max_increases)
-    diff_score = 1.0 - (increasing_diffs / max(1, len(diff_accumulations) - 1))
+    score = 1.0 - (increases / max_increases) if max_increases > 0 else 1.0
     
-    # Combine scores with context-aware weighting
-    final_score = (density_score * density_weight + diff_score * diff_weight)
-    return float(max(0.0, min(1.0, final_score)))
+    return float(max(0.0, min(1.0, score)))
 
 
 # Legacy compatibility functions

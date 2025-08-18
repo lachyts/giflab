@@ -247,6 +247,35 @@
             display: inline-flex;
             align-items: center;
             gap: 4px;
+            margin-left: 4px;
+        }
+
+        .copy-path-button {
+            background: rgba(255,255,255,0.3);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 4px;
+        }
+
+        .copy-path-button:hover {
+            background: rgba(255,255,255,0.5);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .copy-path-button.copied {
+            background: rgba(76, 175, 80, 0.8);
+            border-color: rgba(76, 175, 80, 0.6);
         }
 
         .file-link:hover {
@@ -646,8 +675,8 @@
                 // Check for disposal artifacts (if ANY pipeline has artifacts, flag it)
                 const hasArtifacts = gif.pipelines.some(p => {
                     const minScore = Math.min(p.disposal_artifacts_pre || 1, p.disposal_artifacts_post || 1);
-                    const deltaThreshold = Math.abs(p.disposal_artifacts_delta || 0) > 0.3;
-                    return minScore < 0.7 || deltaThreshold;
+                    const deltaThreshold = Math.abs(p.disposal_artifacts_delta || 0) > 0.1;
+                    return minScore < 0.85 || deltaThreshold;
                 });
                 
                 return {
@@ -849,8 +878,19 @@
                 fileLink.textContent = 'View File';
                 fileLink.title = `Open ${options.src} in new tab`;
                 
+                // Add copy path button
+                const copyButton = document.createElement('button');
+                copyButton.className = 'copy-path-button';
+                copyButton.textContent = '📋 Copy Path';
+                copyButton.title = 'Copy absolute file path to clipboard';
+                copyButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.copyAbsolutePath(options.src, copyButton);
+                });
+                
                 title.appendChild(titleText);
                 title.appendChild(fileLink);
+                title.appendChild(copyButton);
                 
                 const metadata = document.createElement('div');
                 metadata.className = 'metadata';
@@ -1214,6 +1254,29 @@
                     return date.toLocaleDateString('en-AU', {day: '2-digit', month: '2-digit', year: '2-digit'}) + ' ' + 
                            date.toLocaleTimeString('en-AU', {hour: '2-digit', minute:'2-digit'});
                 }
+            }
+
+            copyAbsolutePath(relativePath, buttonElement) {
+                // Convert relative path to absolute path
+                const basePath = '/Users/lachlants/repos/animately/giflab/results';
+                const absolutePath = `${basePath}/${relativePath}`;
+                
+                // Copy to clipboard
+                navigator.clipboard.writeText(absolutePath).then(() => {
+                    // Visual feedback
+                    const originalText = buttonElement.textContent;
+                    buttonElement.textContent = '✅ Copied!';
+                    buttonElement.classList.add('copied');
+                    
+                    setTimeout(() => {
+                        buttonElement.textContent = originalText;
+                        buttonElement.classList.remove('copied');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy path:', err);
+                    // Fallback: show path in alert
+                    alert(`Copy this path:\\n${absolutePath}`);
+                });
             }
 
             showError(message) {
