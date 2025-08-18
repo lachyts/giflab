@@ -319,6 +319,10 @@ def compress_with_gifsicle(
         )
     cmd = [gifsicle_path, "--optimize"]
 
+    # Add disposal method handling for frame reduction to prevent stacking artifacts
+    if frame_keep_ratio < 1.0:
+        cmd.extend(["--disposal=background"])
+
     # Add lossy compression if level > 0
     if lossy_level > 0:
         cmd.extend([f"--lossy={lossy_level}"])

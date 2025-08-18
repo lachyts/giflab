@@ -497,8 +497,10 @@ class CompressionPipeline:
             )
 
             # Calculate quality metrics
+            # Determine if frame reduction is being used
+            is_frame_reduction = job.frame_keep_ratio < 1.0
             metrics_result = calculate_comprehensive_metrics(
-                original_path=job.gif_path, compressed_path=job.output_path
+                original_path=job.gif_path, compressed_path=job.output_path, frame_reduction_context=is_frame_reduction
             )
 
             # Create compression result

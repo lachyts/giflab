@@ -74,18 +74,29 @@ class QualityThresholdValidator:
             ValidationResult indicating if quality degradation is acceptable
         """
         try:
+            # Determine if this is a frame reduction operation
+            is_frame_reduction = operation_type == "frame_reduction"
+            
             # Calculate comprehensive quality metrics
             metrics = calculate_comprehensive_metrics(
                 input_path,
                 output_path,
-                config=self.metrics_config
+                config=self.metrics_config,
+                frame_reduction_context=is_frame_reduction
             )
             
             # Calculate composite quality scores
             if self.metrics_config.USE_ENHANCED_COMPOSITE_QUALITY:
                 composite_quality = calculate_enhanced_composite_quality(metrics, self.metrics_config)
                 quality_type = "enhanced_composite"
-                min_quality_threshold = self.catastrophic_thresholds["min_enhanced_composite_quality"]
+                
+                # Use context-aware threshold for frame reduction operations
+                if is_frame_reduction:
+                    # Frame reduction operations naturally have lower quality due to temporal gaps
+                    # Use more lenient threshold based on research findings
+                    min_quality_threshold = 0.05  # 5% threshold for frame reduction
+                else:
+                    min_quality_threshold = self.catastrophic_thresholds["min_enhanced_composite_quality"]
             else:
                 # Use legacy 4-metric composite quality
                 composite_quality = self._calculate_legacy_composite_quality(metrics)
@@ -96,7 +107,7 @@ class QualityThresholdValidator:
             quality_acceptable = composite_quality >= min_quality_threshold
             
             # Additional checks for severe outliers in individual metrics
-            outlier_checks = self._check_metric_outliers(metrics)
+            outlier_checks = self._check_metric_outliers(metrics, frame_reduction_context=is_frame_reduction)
             outliers_acceptable = all(check["acceptable"] for check in outlier_checks.values())
             
             # Overall validation result
@@ -194,7 +205,7 @@ class QualityThresholdValidator:
         
         return composite_quality / total_weight if total_weight > 0 else 0.0
     
-    def _check_metric_outliers(self, metrics: dict[str, float]) -> dict[str, dict[str, Any]]:
+    def _check_metric_outliers(self, metrics: dict[str, float], frame_reduction_context: bool = False) -> dict[str, dict[str, Any]]:
         """Check for severe outliers in individual metrics.
         
         Returns dict with outlier check results for each metric.
@@ -234,10 +245,19 @@ class QualityThresholdValidator:
         # Temporal consistency check (for animations)
         if "temporal_consistency" in metrics:
             temporal_value = metrics["temporal_consistency"]
+            
+            # Use context-aware threshold for frame reduction operations
+            if frame_reduction_context:
+                # Frame reduction operations naturally have lower temporal consistency
+                # Use more lenient threshold based on research findings
+                temporal_threshold = 0.05  # 5% threshold for frame reduction (vs 10% normal)
+            else:
+                temporal_threshold = self.catastrophic_thresholds["min_temporal_consistency"]
+            
             checks["temporal"] = {
                 "value": temporal_value,
-                "threshold": self.catastrophic_thresholds["min_temporal_consistency"],
-                "acceptable": temporal_value >= self.catastrophic_thresholds["min_temporal_consistency"],
+                "threshold": temporal_threshold,
+                "acceptable": temporal_value >= temporal_threshold,
                 "description": "Temporal consistency"
             }
         
@@ -256,6 +276,7 @@ class QualityThresholdValidator:
         """
         try:
             # Calculate metrics - the comprehensive metrics should include per-frame data
+            # Note: variance validation doesn't need frame reduction context since it's checking variance, not artifacts
             metrics = calculate_comprehensive_metrics(
                 input_path,
                 output_path,

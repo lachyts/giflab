@@ -628,6 +628,11 @@ class ExperimentalRunner:
             "applied_lossy",
             "applied_frame_ratio",
             "actual_pipeline_steps",
+            "frame_count",
+            "compressed_frame_count",
+            "disposal_artifacts_pre",
+            "disposal_artifacts_post",
+            "disposal_artifacts_delta",
             "error",
             "error_traceback",
             "error_timestamp",
@@ -1131,6 +1136,11 @@ class ExperimentalRunner:
                         "applied_lossy": result.get("applied_lossy", None),
                         "applied_frame_ratio": result.get("applied_frame_ratio", None),
                         "actual_pipeline_steps": result.get("actual_pipeline_steps", 0),
+                        "frame_count": result.get("frame_count", 0),
+                        "compressed_frame_count": result.get("compressed_frame_count", 0),
+                        "disposal_artifacts_pre": result.get("disposal_artifacts_pre", 1.0),
+                        "disposal_artifacts_post": result.get("disposal_artifacts_post", 1.0),
+                        "disposal_artifacts_delta": result.get("disposal_artifacts_delta", 0.0),
                         "error": result.get("error", ""),
                         "error_traceback": result.get("error_traceback", ""),
                         "error_timestamp": result.get("error_timestamp", ""),
@@ -1305,9 +1315,15 @@ class ExperimentalRunner:
             copy(current_input, output_path)
 
             # Calculate comprehensive quality metrics using GPU-accelerated system if available
+            # Determine if frame reduction is being used
+            is_frame_reduction = (
+                params.get("frame_ratio", 1.0) != 1.0 and
+                self._pipeline_uses_frame_reduction(pipeline)
+            )
+            
             try:
                 quality_metrics = self._calculate_gpu_accelerated_metrics(
-                    gif_path, output_path
+                    gif_path, output_path, frame_reduction_context=is_frame_reduction
                 )
             except Exception as e:
                 self.logger.warning(
@@ -1315,11 +1331,11 @@ class ExperimentalRunner:
                 )
                 try:
                     quality_metrics = calculate_comprehensive_metrics(
-                        gif_path, output_path
+                        gif_path, output_path, frame_reduction_context=is_frame_reduction
                     )
                 except Exception as e2:
                     self.logger.warning(f"Quality metrics calculation failed: {e2}")
-                    quality_metrics = self._get_fallback_metrics(gif_path, output_path)
+                    quality_metrics = self._get_fallback_metrics(gif_path, output_path, frame_reduction_context=is_frame_reduction)
 
             # Compile complete result with all metrics
             # Filter out any empty entries and build final signature
@@ -1390,6 +1406,12 @@ class ExperimentalRunner:
                 else None,
                 # Actual processing steps (exclude no-ops)
                 "actual_pipeline_steps": self._count_actual_steps(pipeline),
+                # Frame and disposal artifact metrics
+                "frame_count": quality_metrics.get("frame_count", 0),
+                "compressed_frame_count": quality_metrics.get("compressed_frame_count", 0),
+                "disposal_artifacts_pre": quality_metrics.get("disposal_artifacts_pre", 1.0),
+                "disposal_artifacts_post": quality_metrics.get("disposal_artifacts_post", 1.0),
+                "disposal_artifacts_delta": quality_metrics.get("disposal_artifacts_delta", 0.0),
             }
 
             # Save visual outputs for inspection (before temp directory cleanup)
@@ -1478,7 +1500,8 @@ class ExperimentalRunner:
                     "original_info": {
                         "filename": original_gif_path.name,
                         "size_kb": round(original_gif_path.stat().st_size / 1024, 2),
-                        "content_type": result.get("content_type", "unknown")
+                        "content_type": result.get("content_type", "unknown"),
+                        "frame_count": result.get("frame_count", 0)
                     },
                     "compressions": {}
                 }
@@ -1527,7 +1550,13 @@ class ExperimentalRunner:
                 "efficiency": result.get("efficiency", 0.0),
                 
                 # Frame count information
-                "frame_count": result.get("frame_count", 0)
+                "frame_count": result.get("frame_count", 0),
+                "compressed_frame_count": result.get("compressed_frame_count", 0),
+                
+                # Disposal artifacts detection
+                "disposal_artifacts_pre": result.get("disposal_artifacts_pre", 1.0),
+                "disposal_artifacts_post": result.get("disposal_artifacts_post", 1.0),
+                "disposal_artifacts_delta": result.get("disposal_artifacts_delta", 0.0)
             }
             
             all_metrics["compressions"][compressed_filename] = compression_metrics
@@ -1569,7 +1598,7 @@ class ExperimentalRunner:
 
 
     def _calculate_gpu_accelerated_metrics(
-        self, original_path: Path, compressed_path: Path
+        self, original_path: Path, compressed_path: Path, frame_reduction_context: bool = False
     ) -> dict:
         """Calculate quality metrics with GPU acceleration where possible."""
         if not self.use_gpu:
@@ -1579,7 +1608,7 @@ class ExperimentalRunner:
             )
             from ..metrics import calculate_comprehensive_metrics
 
-            return calculate_comprehensive_metrics(original_path, compressed_path)
+            return calculate_comprehensive_metrics(original_path, compressed_path, frame_reduction_context=frame_reduction_context)
 
         try:
             import cv2
@@ -1598,12 +1627,12 @@ class ExperimentalRunner:
                 self.logger.info("💡 Performance may be slower than expected")
                 from ..metrics import calculate_comprehensive_metrics
 
-                return calculate_comprehensive_metrics(original_path, compressed_path)
+                return calculate_comprehensive_metrics(original_path, compressed_path, frame_reduction_context=frame_reduction_context)
 
             self.logger.info("🚀 Computing quality metrics using GPU acceleration")
 
             # Use GPU-accelerated version
-            return self._calculate_cuda_metrics(original_path, compressed_path)
+            return self._calculate_cuda_metrics(original_path, compressed_path, frame_reduction_context)
 
         except ImportError:
             # OpenCV CUDA not available, fall back to CPU with clear explanation
@@ -1616,10 +1645,10 @@ class ExperimentalRunner:
             )
             from ..metrics import calculate_comprehensive_metrics
 
-            return calculate_comprehensive_metrics(original_path, compressed_path)
+            return calculate_comprehensive_metrics(original_path, compressed_path, frame_reduction_context=frame_reduction_context)
 
     def _calculate_cuda_metrics(
-        self, original_path: Path, compressed_path: Path
+        self, original_path: Path, compressed_path: Path, frame_reduction_context: bool = False
     ) -> dict:
         """GPU-accelerated quality metrics calculation using CUDA."""
         import time
@@ -2216,7 +2245,7 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save checkpoint: {e}")
 
-    def _get_fallback_metrics(self, original_path: Path, compressed_path: Path) -> dict:
+    def _get_fallback_metrics(self, original_path: Path, compressed_path: Path, frame_reduction_context: bool = False) -> dict:
         """Get basic fallback metrics if comprehensive calculation fails."""
         try:
             _ = original_path.stat().st_size  # Check file exists

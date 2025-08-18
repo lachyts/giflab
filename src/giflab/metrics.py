@@ -416,6 +416,92 @@ def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
     return float(max(0.0, min(1.0, consistency)))
 
 
+def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context: bool = False) -> float:
+    """Detect disposal method artifacts like frame stacking or ghosting.
+    
+    Disposal artifacts occur when frames accumulate instead of being properly
+    cleared between animation frames. This creates a characteristic pattern
+    where content increases rather than changes between frames.
+    
+    Args:
+        frames: List of consecutive frames
+        frame_reduction_context: If True, adjusts detection for legitimate frame reduction
+                               vs actual disposal method artifacts
+        
+    Returns:
+        Artifact score between 0.0 and 1.0 (0.0 = severe artifacts, 1.0 = clean)
+    """
+    if len(frames) < 3:
+        return 1.0  # Need at least 3 frames to detect stacking
+        
+    # Calculate cumulative content density across frames
+    content_densities = []
+    for frame in frames:
+        # Convert to grayscale for simpler analysis
+        if len(frame.shape) == 3:
+            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = frame
+            
+        # Calculate non-background pixel density (assuming 0 or low values are background)
+        non_bg_pixels = np.sum(gray > 25)  # Threshold for non-background
+        total_pixels = gray.shape[0] * gray.shape[1]
+        density = non_bg_pixels / total_pixels
+        content_densities.append(density)
+    
+    # Adjust detection thresholds based on context
+    if frame_reduction_context:
+        # Frame reduction context: Focus on visual stacking artifacts only
+        # Allow larger temporal discontinuities as they're expected
+        density_threshold = 1.2   # 20% increase threshold (more lenient)
+        diff_threshold = 1.1      # 10% increase threshold (more lenient)
+        # Weight visual stacking detection more heavily than temporal changes
+        density_weight = 0.8
+        diff_weight = 0.2
+    else:
+        # Normal context: Detect both visual stacking and temporal artifacts
+        density_threshold = 1.1   # 10% increase threshold (strict)
+        diff_threshold = 1.05     # 5% increase threshold (strict)
+        # Balanced detection of both artifact types
+        density_weight = 0.5
+        diff_weight = 0.5
+    
+    # Check for increasing density pattern (characteristic of stacking)
+    density_increases = 0
+    for i in range(1, len(content_densities)):
+        if content_densities[i] > content_densities[i-1] * density_threshold:
+            density_increases += 1
+    
+    # Also check for frame difference accumulation
+    cumulative_diff = 0.0
+    diff_accumulations = []
+    
+    for i in range(1, len(frames)):
+        frame1 = frames[i-1].astype(np.float32)
+        frame2 = frames[i].astype(np.float32)
+        
+        # Calculate absolute difference
+        diff = np.mean(np.abs(frame2 - frame1))
+        cumulative_diff += diff
+        diff_accumulations.append(cumulative_diff)
+    
+    # Clean animations should have stable or decreasing cumulative differences
+    # Stacking artifacts cause increasing cumulative differences
+    increasing_diffs = 0
+    for i in range(1, len(diff_accumulations)):
+        if diff_accumulations[i] > diff_accumulations[i-1] * diff_threshold:
+            increasing_diffs += 1
+    
+    # Calculate final score (lower = more artifacts)
+    max_increases = len(frames) - 1
+    density_score = 1.0 - (density_increases / max_increases)
+    diff_score = 1.0 - (increasing_diffs / max(1, len(diff_accumulations) - 1))
+    
+    # Combine scores with context-aware weighting
+    final_score = (density_score * density_weight + diff_score * diff_weight)
+    return float(max(0.0, min(1.0, final_score)))
+
+
 # Legacy compatibility functions
 def calculate_ssim(original_path: Path, compressed_path: Path) -> float:
     """Calculate Structural Similarity Index (SSIM) between two GIFs.
@@ -821,7 +907,7 @@ def _calculate_positional_samples(
 
 
 def calculate_comprehensive_metrics(
-    original_path: Path, compressed_path: Path, config: MetricsConfig | None = None
+    original_path: Path, compressed_path: Path, config: MetricsConfig | None = None, frame_reduction_context: bool = False
 ) -> dict[str, float]:
     """Calculate comprehensive quality metrics between original and compressed GIFs.
 
@@ -832,6 +918,7 @@ def calculate_comprehensive_metrics(
         original_path: Path to original GIF file
         compressed_path: Path to compressed GIF file
         config: Optional metrics configuration (uses default if None)
+        frame_reduction_context: If True, adjusts disposal artifact detection for frame reduction
 
     Returns:
         Dictionary with comprehensive metrics including:
@@ -1001,6 +1088,23 @@ def calculate_comprehensive_metrics(
 
         temporal_delta = abs(temporal_post - temporal_pre)
 
+        # Calculate disposal artifact detection
+        disposal_artifacts_pre = detect_disposal_artifacts(original_frames, frame_reduction_context)
+        disposal_artifacts_post = detect_disposal_artifacts(compressed_frames, frame_reduction_context)
+        disposal_artifacts_delta = abs(disposal_artifacts_post - disposal_artifacts_pre)
+        
+        # Extract frame count information
+        try:
+            from .meta import extract_gif_metadata
+            original_metadata = extract_gif_metadata(original_path)
+            compressed_metadata = extract_gif_metadata(compressed_path)
+            original_frame_count = original_metadata.orig_frames
+            compressed_frame_count = compressed_metadata.orig_frames
+        except Exception:
+            # Fallback to extracted frames count
+            original_frame_count = len(original_frames)
+            compressed_frame_count = len(compressed_frames)
+
         # Aggregate all metrics with descriptive statistics
         result = {}
 
@@ -1019,6 +1123,19 @@ def calculate_comprehensive_metrics(
         result["temporal_consistency_pre"] = float(temporal_pre)
         result["temporal_consistency_post"] = float(temporal_post)
         result["temporal_consistency_delta"] = float(temporal_delta)
+        
+        # Add disposal artifact metrics
+        result["disposal_artifacts"] = float(disposal_artifacts_post)
+        result["disposal_artifacts_std"] = 0.0
+        result["disposal_artifacts_min"] = float(disposal_artifacts_post)
+        result["disposal_artifacts_max"] = float(disposal_artifacts_post)
+        result["disposal_artifacts_pre"] = float(disposal_artifacts_pre)
+        result["disposal_artifacts_post"] = float(disposal_artifacts_post)
+        result["disposal_artifacts_delta"] = float(disposal_artifacts_delta)
+        
+        # Add frame count information
+        result["frame_count"] = int(original_frame_count)
+        result["compressed_frame_count"] = int(compressed_frame_count)
 
         # Calculate composite quality using enhanced metrics system
         from .enhanced_metrics import process_metrics_with_enhanced_quality
