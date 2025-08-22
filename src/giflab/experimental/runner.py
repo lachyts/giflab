@@ -594,16 +594,31 @@ class ExperimentalRunner:
         # Setup streaming CSV file for results
         streaming_csv_path = self.output_dir / "streaming_results.csv"
         csv_fieldnames = [
+            # Primary identifiers and metadata
+            "gif_sha",                      # SHA hash for deduplication (from main pipeline)
             "gif_name",
+            "orig_filename",                # Original filename preservation (from main pipeline)
             "content_type",
             "pipeline_id",
             "connection_signature",
             "success",
+            
+            # File size and compression metrics
             "file_size_kb",
             "original_size_kb",
             "compression_ratio",
+            
+            # Original GIF properties (from main pipeline)
+            "orig_width",                   # Original width (from main pipeline)
+            "orig_height",                  # Original height (from main pipeline) 
+            "orig_frames",                  # Original frame count (from main pipeline)
+            "orig_fps",                     # Original FPS (from main pipeline)
+            "orig_n_colors",                # Original color count (from main pipeline)
+            "entropy",                      # Image entropy measure (from main pipeline)
+            
+            # Comprehensive quality metrics (experimental pipeline strength)
             "ssim_mean",
-            "ssim_std",
+            "ssim_std", 
             "ssim_min",
             "ssim_max",
             "ms_ssim_mean",
@@ -620,6 +635,8 @@ class ExperimentalRunner:
             "composite_quality",
             "enhanced_composite_quality",
             "efficiency",
+            
+            # Performance and processing metrics
             "render_time_ms",
             "total_processing_time_ms",
             "pipeline_steps",
@@ -628,11 +645,24 @@ class ExperimentalRunner:
             "applied_lossy",
             "applied_frame_ratio",
             "actual_pipeline_steps",
+            
+            # Frame analysis
             "frame_count",
             "compressed_frame_count",
             "disposal_artifacts_pre",
-            "disposal_artifacts_post",
+            "disposal_artifacts_post", 
             "disposal_artifacts_delta",
+            
+            # Source and versioning information (from main pipeline)
+            "source_platform",              # Platform detection (from main pipeline)
+            "source_metadata",              # Platform metadata (from main pipeline)
+            "timestamp",                    # Processing timestamp (from main pipeline)
+            "giflab_version",               # Version tracking (from main pipeline)
+            "code_commit",                  # Git commit hash (from main pipeline)
+            "dataset_version",              # Dataset version (from main pipeline)
+            "engine_version",               # Tool version tracking (from main pipeline)
+            
+            # Error handling
             "error",
             "error_traceback",
             "error_timestamp",
@@ -788,12 +818,82 @@ class ExperimentalRunner:
                             )
                             # Add validation failure to completed jobs and continue
                             failed_result = {
+                                # Primary identifiers and metadata
+                                "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
                                 "gif_name": gif_path.stem,
+                                "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
                                 "content_type": content_type,
                                 "pipeline_id": pipeline.identifier(),
                                 "connection_signature": "FAIL",  # Validation failed before execution
                                 "success": False,
+                                
+                                # File size metrics (failed before processing)
+                                "file_size_kb": None,
+                                "original_size_kb": gif_path.stat().st_size / 1024,
+                                "compression_ratio": None,
+                                
+                                # Original GIF properties (from metadata if available)
+                                "orig_width": gif_metadata.orig_width if gif_metadata else None,
+                                "orig_height": gif_metadata.orig_height if gif_metadata else None,
+                                "orig_frames": gif_metadata.orig_frames if gif_metadata else None,
+                                "orig_fps": gif_metadata.orig_fps if gif_metadata else None,
+                                "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else None,
+                                "entropy": gif_metadata.entropy if gif_metadata else None,
+                                
+                                # Quality metrics (all None for failed validation)
+                                "ssim_mean": None,
+                                "ssim_std": None,
+                                "ssim_min": None,
+                                "ssim_max": None,
+                                "ms_ssim_mean": None,
+                                "psnr_mean": None,
+                                "temporal_consistency": None,
+                                "mse_mean": None,
+                                "rmse_mean": None,
+                                "fsim_mean": None,
+                                "gmsd_mean": None,
+                                "chist_mean": None,
+                                "edge_similarity_mean": None,
+                                "texture_similarity_mean": None,
+                                "sharpness_similarity_mean": None,
+                                "composite_quality": None,
+                                "enhanced_composite_quality": None,
+                                "efficiency": None,
+                                
+                                # Performance metrics
+                                "render_time_ms": None,
+                                "total_processing_time_ms": None,
+                                
+                                # Pipeline details
+                                "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, 'steps') else 0,
+                                "tools_used": [step.tool_cls.NAME for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
+                                "applied_colors": None,  # Failed before application
+                                "applied_lossy": None,   # Failed before application
+                                "applied_frame_ratio": None,  # Failed before application
+                                "actual_pipeline_steps": None,
+                                
+                                # Frame metrics
+                                "frame_count": None,
+                                "compressed_frame_count": None,
+                                "disposal_artifacts_pre": None,
+                                "disposal_artifacts_post": None,
+                                "disposal_artifacts_delta": None,
+                                
+                                # Source and versioning information
+                                "source_platform": source_platform,
+                                "source_metadata": str(source_metadata) if source_metadata else None,
+                                "timestamp": datetime.now().isoformat(),
+                                "giflab_version": GIFLAB_VERSION,
+                                "code_commit": _get_git_commit_hash(),
+                                "dataset_version": "v1.0",
+                                "engine_version": None,  # Failed before execution
+                                
+                                # Error information 
                                 "error": error_msg,
+                                "error_traceback": "",
+                                "error_timestamp": datetime.now().isoformat(),
+                                
+                                # Legacy test parameters for debugging
                                 "test_colors": params.get("colors", 0),
                                 "test_lossy": params.get("lossy", 0),
                                 "test_frame_ratio": params.get("frame_ratio", 1.0),
@@ -840,12 +940,82 @@ class ExperimentalRunner:
                                 )
                                 # Add validation failure to completed jobs and skip this pipeline
                                 failed_result = {
+                                    # Primary identifiers and metadata
+                                    "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
                                     "gif_name": gif_path.stem,
+                                    "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
                                     "content_type": content_type,
                                     "pipeline_id": pipeline.identifier(),
                                     "connection_signature": "FAIL",  # Tool validation failed before execution
                                     "success": False,
+                                    
+                                    # File size metrics (failed before processing)
+                                    "file_size_kb": None,
+                                    "original_size_kb": gif_path.stat().st_size / 1024,
+                                    "compression_ratio": None,
+                                    
+                                    # Original GIF properties (from metadata if available)
+                                    "orig_width": gif_metadata.orig_width if gif_metadata else None,
+                                    "orig_height": gif_metadata.orig_height if gif_metadata else None,
+                                    "orig_frames": gif_metadata.orig_frames if gif_metadata else None,
+                                    "orig_fps": gif_metadata.orig_fps if gif_metadata else None,
+                                    "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else None,
+                                    "entropy": gif_metadata.entropy if gif_metadata else None,
+                                    
+                                    # Quality metrics (all None for failed validation)
+                                    "ssim_mean": None,
+                                    "ssim_std": None,
+                                    "ssim_min": None,
+                                    "ssim_max": None,
+                                    "ms_ssim_mean": None,
+                                    "psnr_mean": None,
+                                    "temporal_consistency": None,
+                                    "mse_mean": None,
+                                    "rmse_mean": None,
+                                    "fsim_mean": None,
+                                    "gmsd_mean": None,
+                                    "chist_mean": None,
+                                    "edge_similarity_mean": None,
+                                    "texture_similarity_mean": None,
+                                    "sharpness_similarity_mean": None,
+                                    "composite_quality": None,
+                                    "enhanced_composite_quality": None,
+                                    "efficiency": None,
+                                    
+                                    # Performance metrics
+                                    "render_time_ms": None,
+                                    "total_processing_time_ms": None,
+                                    
+                                    # Pipeline details
+                                    "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, 'steps') else 0,
+                                    "tools_used": [step.tool_cls.NAME for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
+                                    "applied_colors": None,  # Failed before application
+                                    "applied_lossy": None,   # Failed before application
+                                    "applied_frame_ratio": None,  # Failed before application
+                                    "actual_pipeline_steps": None,
+                                    
+                                    # Frame metrics
+                                    "frame_count": None,
+                                    "compressed_frame_count": None,
+                                    "disposal_artifacts_pre": None,
+                                    "disposal_artifacts_post": None,
+                                    "disposal_artifacts_delta": None,
+                                    
+                                    # Source and versioning information
+                                    "source_platform": source_platform,
+                                    "source_metadata": str(source_metadata) if source_metadata else None,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "giflab_version": GIFLAB_VERSION,
+                                    "code_commit": _get_git_commit_hash(),
+                                    "dataset_version": "v1.0",
+                                    "engine_version": None,  # Failed before execution
+                                    
+                                    # Error information 
                                     "error": error_msg,
+                                    "error_traceback": "",
+                                    "error_timestamp": datetime.now().isoformat(),
+                                    
+                                    # Legacy test parameters for debugging
                                     "test_colors": params.get("colors", 0),
                                     "test_lossy": params.get("lossy", 0),
                                     "test_frame_ratio": params.get("frame_ratio", 1.0),
@@ -895,33 +1065,29 @@ class ExperimentalRunner:
 
                         # Record comprehensive failure information
                         failed_result = {
+                            # Primary identifiers and metadata
+                            "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
                             "gif_name": gif_path.stem,
+                            "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
                             "content_type": content_type,
                             "pipeline_id": pipeline.identifier(),
                             "connection_signature": "ERROR",  # Pipeline failed during execution
-                            "error": clean_error_message(
-                                str(e)
-                            ),  # Clean error message for CSV
-                            "error_traceback": traceback.format_exc().replace(
-                                "\n", " | "
-                            ),  # Preserve full traceback
-                            "error_timestamp": datetime.now().isoformat(),
                             "success": False,
-                            "pipeline_steps": [step.name for step in pipeline.steps]
-                            if hasattr(pipeline, "steps")
-                            else [],
-                            "tools_used": pipeline.tools_used()
-                            if hasattr(pipeline, "tools_used")
-                            else [],
-                            # For failed pipelines, applied parameters are always None since pipeline failed
-                            "applied_colors": None,
-                            "applied_lossy": None,
-                            "applied_frame_ratio": None,
-                            "actual_pipeline_steps": None,
-                            # Add placeholders for metrics that would be in successful results
+                            
+                            # File size metrics (partial failure - original size available)
                             "file_size_kb": None,
-                            "original_size_kb": None,
+                            "original_size_kb": gif_path.stat().st_size / 1024,
                             "compression_ratio": None,
+                            
+                            # Original GIF properties (from metadata if available)
+                            "orig_width": gif_metadata.orig_width if gif_metadata else None,
+                            "orig_height": gif_metadata.orig_height if gif_metadata else None,
+                            "orig_frames": gif_metadata.orig_frames if gif_metadata else None,
+                            "orig_fps": gif_metadata.orig_fps if gif_metadata else None,
+                            "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else None,
+                            "entropy": gif_metadata.entropy if gif_metadata else None,
+                            
+                            # Quality metrics (all None for runtime failure)
                             "ssim_mean": None,
                             "ssim_std": None,
                             "ssim_min": None,
@@ -940,8 +1106,39 @@ class ExperimentalRunner:
                             "composite_quality": None,
                             "enhanced_composite_quality": None,
                             "efficiency": None,
+                            
+                            # Performance metrics
                             "render_time_ms": None,
                             "total_processing_time_ms": None,
+                            
+                            # Pipeline details (runtime failure has access to pipeline info)
+                            "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, "steps") else 0,
+                            "tools_used": pipeline.tools_used() if hasattr(pipeline, "tools_used") else [],
+                            "applied_colors": None,  # Failed during execution
+                            "applied_lossy": None,   # Failed during execution  
+                            "applied_frame_ratio": None,  # Failed during execution
+                            "actual_pipeline_steps": None,
+                            
+                            # Frame metrics
+                            "frame_count": None,
+                            "compressed_frame_count": None,
+                            "disposal_artifacts_pre": None,
+                            "disposal_artifacts_post": None,
+                            "disposal_artifacts_delta": None,
+                            
+                            # Source and versioning information
+                            "source_platform": source_platform,
+                            "source_metadata": str(source_metadata) if source_metadata else None,
+                            "timestamp": datetime.now().isoformat(),
+                            "giflab_version": GIFLAB_VERSION,
+                            "code_commit": _get_git_commit_hash(),
+                            "dataset_version": "v1.0",
+                            "engine_version": None,  # Failed during execution
+                            
+                            # Error information (runtime exception details)
+                            "error": clean_error_message(str(e)),  # Clean error message for CSV
+                            "error_traceback": traceback.format_exc().replace("\n", " | "),  # Preserve full traceback
+                            "error_timestamp": datetime.now().isoformat(),
                         }
 
                         # Queue failure for debugging analysis (in addition to CSV/logs)
@@ -1165,10 +1362,53 @@ class ExperimentalRunner:
         """Execute a single pipeline and calculate comprehensive quality metrics."""
         import tempfile
         import time
+        from datetime import datetime
 
         from ..metrics import calculate_comprehensive_metrics
+        from ..meta import extract_gif_metadata
+        from ..directory_source_detection import detect_source_from_directory
+        from .. import __version__ as GIFLAB_VERSION
+        
+        # Import git commit hash function from pipeline module
+        import subprocess
+        def _get_git_commit_hash() -> str:
+            """Return short git commit hash if repository is available, else 'unknown'."""
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    cwd=gif_path.parent,  # Use gif path as base for git detection
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except Exception:
+                pass
+            return "unknown"
 
         start_time = time.perf_counter()
+        
+        # Extract GIF metadata for main pipeline compatibility fields
+        try:
+            # Detect source platform from directory structure
+            try:
+                source_platform, source_metadata = detect_source_from_directory(gif_path)
+            except Exception:
+                source_platform, source_metadata = "unknown", None
+                
+            gif_metadata = extract_gif_metadata(
+                gif_path, 
+                source_platform=source_platform, 
+                source_metadata=source_metadata
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to extract GIF metadata: {e}")
+            # Fallback metadata if extraction fails
+            gif_metadata = None
+            source_platform = "unknown"
+            source_metadata = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -1346,17 +1586,29 @@ class ExperimentalRunner:
             )
 
             result = {
+                # Primary identifiers and metadata (with main pipeline fields)
+                "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
                 "gif_name": gif_path.stem,
+                "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
                 "content_type": content_type,
                 "pipeline_id": pipeline.identifier(),
                 "connection_signature": final_signature,
                 "success": True,
-                # File metrics
+                
+                # File size and compression metrics
                 "file_size_kb": quality_metrics.get("kilobytes", 0),
                 "original_size_kb": gif_path.stat().st_size / 1024,
                 "compression_ratio": self._calculate_compression_ratio(
                     gif_path, output_path
                 ),
+                
+                # Original GIF properties (from main pipeline)
+                "orig_width": gif_metadata.orig_width if gif_metadata else 0,
+                "orig_height": gif_metadata.orig_height if gif_metadata else 0,
+                "orig_frames": gif_metadata.orig_frames if gif_metadata else 0,
+                "orig_fps": gif_metadata.orig_fps if gif_metadata else 0.0,
+                "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else 0,
+                "entropy": gif_metadata.entropy if gif_metadata else None,
                 # Traditional quality metrics
                 "ssim_mean": quality_metrics.get("ssim", 0.0),
                 "ssim_std": quality_metrics.get("ssim_std", 0.0),
@@ -1412,6 +1664,15 @@ class ExperimentalRunner:
                 "disposal_artifacts_pre": quality_metrics.get("disposal_artifacts_pre", 1.0),
                 "disposal_artifacts_post": quality_metrics.get("disposal_artifacts_post", 1.0),
                 "disposal_artifacts_delta": quality_metrics.get("disposal_artifacts_delta", 0.0),
+                
+                # Source and versioning information (from main pipeline)
+                "source_platform": source_platform,
+                "source_metadata": str(source_metadata) if source_metadata else None,
+                "timestamp": datetime.now().isoformat(),
+                "giflab_version": GIFLAB_VERSION,
+                "code_commit": _get_git_commit_hash(),
+                "dataset_version": "v1.0",  # Default dataset version 
+                "engine_version": self._get_engine_version(pipeline),
             }
 
             # Save visual outputs for inspection (before temp directory cleanup)
@@ -1461,6 +1722,130 @@ class ExperimentalRunner:
                 if not tool_name.startswith("none-"):
                     actual_steps += 1
         return actual_steps
+
+    def _get_engine_version(self, pipeline: Any) -> str:
+        """Get version information for the tools used in the pipeline."""
+        try:
+            # Get the primary engine from the first tool in pipeline
+            if not hasattr(pipeline, 'steps') or not pipeline.steps:
+                return "unknown"
+                
+            primary_tool = pipeline.steps[0].tool_cls
+            tool_name = getattr(primary_tool, 'NAME', 'unknown')
+            
+            # Map tool names to version detection methods
+            if 'gifsicle' in tool_name.lower():
+                return self._get_gifsicle_version()
+            elif 'ffmpeg' in tool_name.lower():
+                return self._get_ffmpeg_version()  
+            elif 'imagemagick' in tool_name.lower():
+                return self._get_imagemagick_version()
+            elif 'animately' in tool_name.lower():
+                return self._get_animately_version()
+            elif 'gifski' in tool_name.lower():
+                return self._get_gifski_version()
+            else:
+                return "unknown"
+        except Exception:
+            return "unknown"
+            
+    def _get_gifsicle_version(self) -> str:
+        """Get gifsicle version."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["gifsicle", "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Extract version from output like "Gifsicle 1.93"
+                lines = result.stdout.strip().split('\n')
+                if lines:
+                    return lines[0].strip()
+            return "unknown"
+        except Exception:
+            return "unknown"
+            
+    def _get_ffmpeg_version(self) -> str:
+        """Get FFmpeg version."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["ffmpeg", "-version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Extract version from output like "ffmpeg version 4.4.2"
+                lines = result.stdout.strip().split('\n')
+                if lines:
+                    first_line = lines[0]
+                    if "ffmpeg version" in first_line:
+                        return first_line.split(" ")[2] if len(first_line.split(" ")) > 2 else "unknown"
+            return "unknown"
+        except Exception:
+            return "unknown"
+            
+    def _get_imagemagick_version(self) -> str:
+        """Get ImageMagick version."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["magick", "-version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Extract version from output
+                lines = result.stdout.strip().split('\n')
+                if lines:
+                    first_line = lines[0]
+                    if "ImageMagick" in first_line:
+                        parts = first_line.split()
+                        for i, part in enumerate(parts):
+                            if "ImageMagick" in part and i + 1 < len(parts):
+                                return parts[i + 1]
+            return "unknown"
+        except Exception:
+            return "unknown"
+            
+    def _get_animately_version(self) -> str:
+        """Get Animately version (if available)."""
+        try:
+            # Animately might not have a standard version command
+            # Return a placeholder for now
+            return "internal"
+        except Exception:
+            return "unknown"
+            
+    def _get_gifski_version(self) -> str:
+        """Get gifski version."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["gifski", "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Extract version from output like "gifski 1.6.4"
+                version_str = result.stdout.strip()
+                if "gifski" in version_str:
+                    parts = version_str.split()
+                    if len(parts) >= 2:
+                        return parts[1]
+            return "unknown"
+        except Exception:
+            return "unknown"
 
     def _save_visual_outputs(
         self, original_gif_path: Path, compressed_gif_path: Path, pipeline: Any, params: dict, result: dict
