@@ -184,6 +184,9 @@ pipeline_*.gif
 docs/archive/
 .claude/
 
+# Serena MCP cache files
+.serena/
+
 # Database files
 *.db
 *.sqlite
