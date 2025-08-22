@@ -21,20 +21,14 @@ import cv2
 import numpy as np
 from PIL import Image
 
-if os.environ.get("GIFLAB_DISABLE_CLIP"):
+try:
+    import torch
+    import open_clip
+    CLIP_AVAILABLE = not bool(os.environ.get("GIFLAB_DISABLE_CLIP"))
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    open_clip = None  # type: ignore[assignment]
     CLIP_AVAILABLE = False
-    torch = None
-    open_clip = None
-else:
-    try:
-        import open_clip
-        import torch
-
-        CLIP_AVAILABLE = True
-    except ImportError:
-        CLIP_AVAILABLE = False
-        torch = None
-        open_clip = None
 
 from .meta import extract_gif_metadata
 
@@ -649,12 +643,13 @@ class HybridCompressionTagger:
             # Calculate static ratio (inverse of motion)
             motion_pixels = np.sum(motion_mask > 50)  # Pixels with significant motion
             total_pixels = motion_mask.size
+            static_ratio: float
             if total_pixels > 0:
-                static_ratio = (total_pixels - motion_pixels) / total_pixels
+                static_ratio = float((total_pixels - motion_pixels) / total_pixels)
             else:
                 static_ratio = 1.0  # No pixels means completely static
 
-            return float(max(0, min(static_ratio, 1.0)))
+            return float(max(0.0, min(float(static_ratio), 1.0)))
 
         except Exception:
             return 0.5
@@ -761,7 +756,7 @@ class HybridCompressionTagger:
 
         try:
             # Convert frames to grayscale and flatten
-            temporal_data = []
+            temporal_data: list[int] = []
             for frame in frames:
                 gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
                 temporal_data.extend(gray.flatten())

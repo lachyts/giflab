@@ -544,9 +544,9 @@ class ExperimentalAnalyzer:
                         f"Consider debugging {comp.strategy_name} - low success rate ({comp.success_rate:.1%})"
                     )
 
-                if comp.avg_quality_score < 0.6:
+                if comp.quality_score < 0.6:
                     recommendations.append(
-                        f"Consider tuning {comp.strategy_name} - low quality score ({comp.avg_quality_score:.3f})"
+                        f"Consider tuning {comp.strategy_name} - low quality score ({comp.quality_score:.3f})"
                     )
 
         # Analyze anomalies

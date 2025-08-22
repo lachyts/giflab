@@ -1,6 +1,7 @@
 """Experimental pipeline testing command."""
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -11,7 +12,7 @@ from .utils import (
 )
 
 
-def create_custom_preset_from_cli(variable_slots, lock_slots, slot_params_list):
+def create_custom_preset_from_cli(variable_slots: tuple, lock_slots: tuple, slot_params_list: tuple) -> Any:
     """Create a custom experiment preset from CLI arguments.
 
     Args:

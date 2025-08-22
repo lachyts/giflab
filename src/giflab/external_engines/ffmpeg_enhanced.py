@@ -189,7 +189,7 @@ def test_bayer_scale_performance(
     """
     import tempfile
 
-    from ..metrics import calculate_ssim_metrics
+    from ..metrics import calculate_comprehensive_metrics  # Use available function
 
     results = {}
     bayer_methods = [
@@ -234,7 +234,7 @@ def analyze_dithering_by_content_type(
 
     This helps validate research findings about content-specific dithering recommendations.
     """
-    results = {}
+    results: dict[str, dict[str, Any]] = {}
 
     for content_type, gif_path in test_gifs.items():
         results[content_type] = {}
@@ -264,7 +264,7 @@ def validate_sierra2_vs_floyd_steinberg(
     Tests both methods across multiple GIFs and compares size/quality trade-offs.
     Research claims Sierra2 provides better quality/size balance for size-constrained scenarios.
     """
-    comparison_results = {}
+    comparison_results: dict[str, dict[str, Any]] = {}
 
     for gif_path in test_gifs:
         gif_name = gif_path.stem

@@ -442,7 +442,7 @@ def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context:
     
     # Ensure frames are the same size
     if first_frame.shape != last_frame.shape:
-        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))
+        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))  # type: ignore[assignment]
     
     scores = []
     
@@ -530,7 +530,7 @@ def detect_transparency_corruption(frames: list[np.ndarray]) -> float:
         frame2 = frames[i].astype(np.float32)
         
         if frame1.shape != frame2.shape:
-            frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+            frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))  # type: ignore[assignment]
         
         # Detect unexpected white/bright pixels (transparency bleeding)
         if len(frame1.shape) == 3:
@@ -627,7 +627,7 @@ def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray)
             # Disposal artifacts cause edge multiplication (ratio > 1.2 for charts/diagrams)
             if edge_ratio > 1.2:
                 # More aggressive penalization for edge duplication
-                edge_increase_score = max(0.0, 1.0 - ((edge_ratio - 1.2) * 1.5))
+                edge_increase_score = max(0.0, 1.0 - ((edge_ratio - 1.2) * 1.5))  # type: ignore[assignment]
             else:
                 edge_increase_score = 1.0
         

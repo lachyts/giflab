@@ -121,11 +121,15 @@ class TargetedPipelineGenerator:
         """
         if slot_config.type == "locked":
             # Locked slot: find specific implementation
+            if slot_config.implementation is None:
+                raise ValueError(f"Locked slot for {variable} missing implementation")
             return self._resolve_locked_implementation(
                 variable, slot_config.implementation
             )
         elif slot_config.type == "variable":
             # Variable slot: expand scope to tool classes
+            if slot_config.scope is None:
+                raise ValueError(f"Variable slot for {variable} missing scope")
             return self._expand_variable_scope(variable, slot_config.scope)
         else:
             raise ValueError(f"Unknown slot type: {slot_config.type}")
@@ -241,7 +245,7 @@ class TargetedPipelineGenerator:
         Returns:
             Dictionary with validation results and resource estimates
         """
-        results = {
+        results: dict[str, Any] = {
             "valid": True,
             "errors": [],
             "warnings": [],

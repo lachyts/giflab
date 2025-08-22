@@ -2,6 +2,23 @@
 
 This directory contains scope documents for planned features in GifLab. These documents follow a standardized format that enables Claude Code to easily consume, understand, and update implementation progress.
 
+## 🚨 CRITICAL REQUIREMENT: Scope Document Updates Are Mandatory
+
+**WHEN WORKING WITH ANY SCOPE DOCUMENT, UPDATING PROGRESS IS NON-NEGOTIABLE.**
+
+### Absolute Requirements:
+- **MUST** update document status after every completed subtask
+- **MUST** update phase progress percentages in real-time  
+- **MUST** change phase status icons when phases complete
+- **MUST** update "Current Focus" descriptions as work progresses
+- **FAILURE TO UPDATE** renders the document system worthless
+
+### For Claude Code:
+You are **REQUIRED** to update scope documents as an integral part of every task. Never complete work without updating the corresponding scope document. This is not optional - it's a core responsibility.
+
+### For Human Contributors:
+Treating scope document updates as "nice to have" breaks the entire system. Progress tracking is as important as the code changes themselves.
+
 ## Table of Contents
 
 - [Document Structure](#document-structure)
@@ -126,10 +143,24 @@ Example:
 
 ## Claude Code Integration
 
-Claude Code (AI assistant) automatically updates scope documents during implementation. Human contributors should also follow these patterns when manually updating progress.
+**Claude Code MUST update scope documents as an integral part of every implementation task.** This is a core requirement, not an optional feature.
+
+### Mandatory Update Protocol:
+1. **Before starting any task**: Verify scope document exists and is current
+2. **During implementation**: Update progress after each completed subtask
+3. **After each work session**: Update phase progress percentage and current focus
+4. **Upon task completion**: Mark phases/subtasks as complete with timestamps
+
+### Enforcement Rules:
+- **NO TASK IS COMPLETE** until its scope document is updated
+- **EVERY SUBTASK COMPLETION** requires immediate document update  
+- **PHASE TRANSITIONS** must be reflected in real-time
+- **FAILURE TO UPDATE** means the work is considered incomplete
+
+Human contributors must follow identical patterns when manually updating progress.
 
 ### Status Updates
-Update phase status immediately upon completion:
+**MANDATORY**: Update phase status immediately upon completion - no exceptions:
 
 ```markdown
 ### Phase 2: Implementation ✅ COMPLETE
@@ -137,8 +168,10 @@ Update phase status immediately upon completion:
 **Completed:** 2025-01-15
 ```
 
+**⚠️ WARNING**: Completing implementation work without updating the scope document violates project requirements.
+
 ### Progress Tracking
-Use specific completion percentages and current focus descriptions:
+**REQUIRED**: You must use specific completion percentages and current focus descriptions:
 
 ```markdown
 ### Phase 3: Testing 🔄 IN PROGRESS
@@ -148,7 +181,7 @@ Use specific completion percentages and current focus descriptions:
 ```
 
 ### Completion Criteria
-Each phase should have clear, measurable completion criteria:
+**MANDATORY**: Each phase must have clear, measurable completion criteria that are updated when met:
 
 ```markdown
 #### Completion Criteria
@@ -171,10 +204,12 @@ Each phase should have clear, measurable completion criteria:
 - Include dependency resolution in planning phases
 
 ### Documentation Standards
-- Update status immediately upon phase completion
-- Include specific completion dates and metrics
-- Document key decisions and architectural choices
-- Maintain clear current focus descriptions
+**CRITICAL REQUIREMENTS** - These are not suggestions:
+- **MUST** update status immediately upon phase completion
+- **MUST** include specific completion dates and metrics  
+- **MUST** document key decisions and architectural choices
+- **MUST** maintain clear current focus descriptions
+- **ZERO TOLERANCE** for outdated or incomplete documentation
 
 ## Template Usage
 
@@ -186,25 +221,33 @@ When creating new scope documents:
 4. Set up progress tracking with percentages and status indicators
 5. Plan for Claude Code updates with specific checkpoint tasks
 
-## Updating Progress
+## Updating Progress - MANDATORY CHECKPOINTS
 
 ### When You Complete a Subtask:
-1. Update the checkbox: `- [x] Completed task`
-2. Adjust the phase's **Progress:** percentage
-3. Update **Current Focus:** to reflect next priority (e.g., "Moving to Subtask 1.3")
-4. If the phase hits 100%, change its status icon to ✅ COMPLETE
-5. Add completion date: `**Completed:** 2025-01-15`
+**IMMEDIATE REQUIREMENT** - Complete ALL steps before moving to next task:
+1. **MUST** update the checkbox: `- [x] Completed task`
+2. **MUST** adjust the phase's **Progress:** percentage
+3. **MUST** update **Current Focus:** to reflect next priority (e.g., "Moving to Subtask 1.3")
+4. **MUST** change status icon to ✅ COMPLETE if phase hits 100%
+5. **MUST** add completion date: `**Completed:** 2025-01-15`
+
+**⚠️ FAILURE TO COMPLETE ALL 5 STEPS = INCOMPLETE TASK**
 
 ### When You Start a New Phase:
-1. Change status from ⏳ PLANNED to 🔄 IN PROGRESS
-2. Set initial **Progress:** percentage (typically 0-10%)
-3. Set **Current Focus:** to first major subtask (e.g., "Working on Subtask 2.1")
-4. Mark first subtask as in progress if applicable
+**PRE-WORK REQUIREMENT** - Update document before writing any code:
+1. **MUST** change status from ⏳ PLANNED to 🔄 IN PROGRESS
+2. **MUST** set initial **Progress:** percentage (typically 0-10%)
+3. **MUST** set **Current Focus:** to first major subtask (e.g., "Working on Subtask 2.1")
+4. **MUST** mark first subtask as in progress if applicable
 
 ### Referencing Subtasks:
-- Use the numbered format when discussing specific tasks: "Subtask 3.2 is blocked"  
+**MANDATORY PROTOCOL**:
+- **ALWAYS** use the numbered format when discussing specific tasks: "Subtask 3.2 is blocked"  
 - This enables precise communication about progress and dependencies
-- Claude Code can efficiently update specific subtasks using these references
+- Claude Code MUST efficiently update specific subtasks using these references
+
+### Consequence of Non-Compliance:
+**Tasks without corresponding scope document updates are considered incomplete and must be redone.**
 
 ## Examples
 

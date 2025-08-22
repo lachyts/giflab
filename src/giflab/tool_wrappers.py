@@ -559,7 +559,7 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
         if result is not None:
             return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
         else:
-            return {"error": "ImageMagick compression failed - no result returned", "success": False}
+            return {"error": "ImageMagick compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 
 
 # ---------------------------------------------------------------------------
@@ -610,7 +610,7 @@ class FFmpegColorReducer(ColorReductionTool):
         if result is not None:
             return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
         else:
-            return {"error": "FFmpeg color reduction failed - no result returned", "success": False}
+            return {"error": "FFmpeg color reduction failed - no result returned", "success": False}  # type: ignore[unreachable]
 
 
 class FFmpegFrameReducer(FrameReductionTool):
@@ -698,7 +698,7 @@ class FFmpegLossyCompressor(LossyCompressionTool):
         if result is not None:
             return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
         else:
-            return {"error": "FFmpeg lossy compression failed - no result returned", "success": False}
+            return {"error": "FFmpeg lossy compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 
 
 # ---------------------------------------------------------------------------
@@ -1181,7 +1181,7 @@ class GifskiLossyCompressor(LossyCompressionTool):
         if result is not None:
             return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
         else:
-            return {"error": "Gifski compression failed - no result returned", "success": False}
+            return {"error": "Gifski compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 
 
 # ---------------------------------------------------------------------------

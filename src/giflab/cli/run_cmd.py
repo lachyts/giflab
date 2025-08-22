@@ -76,7 +76,7 @@ def run(
     renders_dir: Path | None,
     detect_source_from_directory: bool,
     pipelines: Path | None,
-):
+) -> None:
     """Run compression analysis on GIFs in RAW_DIR.
 
     Generates a grid of compression variants for every GIF and writes
@@ -127,7 +127,7 @@ def run(
         display_path_info("Bad GIFs directory", path_config.BAD_GIFS_DIR, "❌")
         display_worker_info(validated_workers)
         click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
-        if pipelines:
+        if pipelines and selected_pipes:
             click.echo(f"🎛️  Selected pipelines: {len(selected_pipes)} from {pipelines}")
         click.echo(
             f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}"

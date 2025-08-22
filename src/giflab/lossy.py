@@ -929,7 +929,8 @@ def _setup_png_sequence_directory(
         logger.info(f"Exporting {total_frames} frames to PNG sequence")
         png_export_result = export_png_sequence(input_path, png_sequence_dir)
 
-        if int(png_export_result.get("frame_count", 0)) < 1:
+        frame_count = png_export_result.get("frame_count", 0)
+        if not isinstance(frame_count, (int, float)) or int(frame_count) < 1:
             logger.error("PNG sequence export failed: no frames generated")
             raise RuntimeError("Failed to export PNG sequence: no frames generated")
 

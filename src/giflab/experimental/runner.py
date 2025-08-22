@@ -405,10 +405,10 @@ class ExperimentalRunner:
         from importlib import import_module
 
         try:
-            tqdm = import_module("tqdm").tqdm
+            TqdmProgressBar = import_module("tqdm").tqdm
         except ModuleNotFoundError:  # pragma: no cover – fallback if tqdm not installed
 
-            class tqdm:  # noqa: WPS430 – simple fallback
+            class TqdmProgressBar:  # type: ignore[no-redef] # noqa: WPS430 – simple fallback
                 def __init__(self, iterable: Any, **kwargs: Any) -> None:
                     self.iterable = iterable
 
@@ -432,7 +432,7 @@ class ExperimentalRunner:
         temp_synthetic_dir.mkdir(parents=True, exist_ok=True)
         
         gif_paths = []
-        with tqdm(
+        with TqdmProgressBar(
             self.synthetic_specs, desc="🖼️  Synthetic GIFs", unit="gif"
         ) as progress:
             for spec in progress:
@@ -527,10 +527,10 @@ class ExperimentalRunner:
         from ..metrics import DEFAULT_METRICS_CONFIG, calculate_comprehensive_metrics
 
         try:
-            from tqdm import tqdm
+            from tqdm import tqdm as TqdmProgressCounter
         except ImportError:
             # Fallback if tqdm is not available
-            class tqdm:
+            class TqdmProgressCounter:  # type: ignore[no-redef]
                 def __init__(
                     self,
                     total: Any = None,
@@ -695,7 +695,7 @@ class ExperimentalRunner:
         self.logger.info(f"Estimated completion time: {estimated_time}")
 
         # Setup progress bar with proper line management
-        progress = tqdm(
+        progress = TqdmProgressCounter(
             total=total_jobs,
             initial=len(completed_job_ids),
             desc="Testing pipelines",
@@ -1048,7 +1048,7 @@ class ExperimentalRunner:
                 "success": "boolean",  # Boolean type for success flag
             }
             results_df = pd.read_csv(
-                streaming_csv_path, dtype=dtype_spec, low_memory=False
+                streaming_csv_path, dtype=dtype_spec, low_memory=False  # type: ignore[arg-type]
             )
             self.logger.info(f"📊 Loaded {len(results_df)} results from streaming CSV")
             return results_df
@@ -1568,7 +1568,7 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save visual outputs for {original_gif_path.name}: {e}")
 
-    def _generate_compressed_filename(self, pipeline, params: dict) -> str:
+    def _generate_compressed_filename(self, pipeline: Any, params: dict) -> str:
         """Generate descriptive filename for compressed GIF based on pipeline and parameters."""
         # Extract meaningful parts from pipeline
         parts = []
@@ -1683,7 +1683,7 @@ class ExperimentalRunner:
             raise ValueError("No frame pairs could be aligned")
 
         # GPU-accelerated metric calculations
-        metric_values = {
+        metric_values: dict[str, list[float]] = {
             "ssim": [],
             "ms_ssim": [],
             "psnr": [],
@@ -1907,7 +1907,7 @@ class ExperimentalRunner:
         return float(np.mean(squared_cpu))
 
     def _gpu_edge_similarity(
-        self, gpu_img1: Any, gpu_img2: Any, config
+        self, gpu_img1: Any, gpu_img2: Any, config: Any
     ) -> float:  # cv2.cuda_GpuMat
         """GPU-accelerated edge similarity using Canny edge detection."""
         import cv2
@@ -1917,13 +1917,13 @@ class ExperimentalRunner:
             # Convert to grayscale on GPU if needed
             if gpu_img1.channels() == 3:
                 gpu_gray1 = cv2.cuda.cvtColor(gpu_img1, cv2.COLOR_RGB2GRAY)  # type: ignore[attr-defined]
-                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)
+                gpu_gray2 = cv2.cuda.cvtColor(gpu_img2, cv2.COLOR_RGB2GRAY)  # type: ignore[attr-defined]
             else:
                 gpu_gray1 = gpu_img1
                 gpu_gray2 = gpu_img2
 
             # GPU Canny edge detection
-            detector = cv2.cuda.createCannyEdgeDetector(
+            detector = cv2.cuda.createCannyEdgeDetector(  # type: ignore[attr-defined]
                 config.EDGE_CANNY_THRESHOLD1, config.EDGE_CANNY_THRESHOLD2
             )
         except Exception as e:
@@ -1988,7 +1988,7 @@ class ExperimentalRunner:
 
         return float(calculate_ms_ssim(frame1, frame2))
 
-    def _calculate_temporal_consistency(self, aligned_pairs) -> float:
+    def _calculate_temporal_consistency(self, aligned_pairs: list[Any]) -> float:
         """Calculate temporal consistency between frames."""
         if len(aligned_pairs) < 2:
             return 1.0
@@ -2290,8 +2290,9 @@ class ExperimentalRunner:
         experiment_result = ExperimentResult()
 
         # Filter out failed jobs for analysis
+        successful_results: pd.DataFrame
         if "success" in results_df.columns:
-            successful_results = results_df[results_df["success"] is True].copy()
+            successful_results = results_df[results_df["success"] is True].copy()  # type: ignore[assignment]
         else:
             # If no success column, assume all results are successful
             successful_results = results_df.copy()
@@ -2484,7 +2485,7 @@ class ExperimentalRunner:
                             experiment_result.elimination_reasons[
                                 pipeline
                             ] = f"Consistently poor performance (avg composite quality: {avg_quality:.3f})"
-                        else:
+                        else:  # type: ignore[unreachable]
                             experiment_result.elimination_reasons[
                                 pipeline
                             ] = "Invalid/missing composite quality metrics"
@@ -2494,7 +2495,7 @@ class ExperimentalRunner:
                             experiment_result.elimination_reasons[
                                 pipeline
                             ] = f"Consistently poor performance (avg SSIM: {avg_ssim:.3f})"
-                        else:
+                        else:  # type: ignore[unreachable]
                             experiment_result.elimination_reasons[
                                 pipeline
                             ] = "Invalid/missing SSIM metrics"
@@ -2613,7 +2614,8 @@ class ExperimentalRunner:
                 'color-focus': 'Color Reduction Analysis',
                 'lossy-focus': 'Lossy Compression Study'
             }
-            base_name = str(preset_names.get(self._current_preset, self._current_preset.replace('-', ' ').title()))
+            preset_key = str(self._current_preset) if hasattr(self._current_preset, 'name') and self._current_preset.name else str(self._current_preset)
+            base_name = str(preset_names.get(preset_key, preset_key.replace('-', ' ').title()))
         else:
             base_name = "Custom Experiment"
         
@@ -2632,7 +2634,8 @@ class ExperimentalRunner:
                 'color-focus': 'Analyze color palette reduction techniques and quality impact',
                 'lossy-focus': 'Study lossy compression levels and quality trade-offs'
             }
-            return str(preset_descriptions.get(self._current_preset, f"Targeted analysis using {self._current_preset} preset"))
+            preset_key = str(self._current_preset) if hasattr(self._current_preset, 'name') and self._current_preset.name else str(self._current_preset)
+            return str(preset_descriptions.get(preset_key, f"Targeted analysis using {preset_key} preset"))
         else:
             return "Custom experiment with comprehensive GIF compression analysis"
 
@@ -2719,7 +2722,7 @@ class ExperimentalRunner:
             self.logger.warning(f"Failed to update master history file: {e}")
 
 
-    def _get_git_commit(self) -> str:
+    def _get_git_commit(self) -> str | None:
         """Get current git commit hash if available."""
         try:
             import subprocess
@@ -2768,7 +2771,7 @@ class ExperimentalRunner:
     def _save_failed_pipelines_log(self, failed_results: pd.DataFrame) -> None:
         """Create and save detailed failed pipelines log."""
 
-        def _sanitize_for_json(value):
+        def _sanitize_for_json(value: Any) -> Any:
             """Convert pandas NA values to None for JSON serialization."""
             if pd.isna(value):
                 return None
@@ -2813,7 +2816,7 @@ class ExperimentalRunner:
         self, failed_pipeline_log: list, failed_count: int
     ) -> Any:
         """Analyze error patterns and log failure statistics."""
-        error_types = Counter()
+        error_types: Counter[str] = Counter()
         for entry in failed_pipeline_log:
             error_msg = entry["error_message"]
             error_type = ErrorTypes.categorize_error(error_msg)
@@ -2926,9 +2929,9 @@ class ExperimentalRunner:
         report_lines.append("")
 
         # Error type analysis
-        error_types = Counter()
+        error_types: Counter[str] = Counter()
         tool_failures = defaultdict(list)
-        content_type_failures = defaultdict(int)
+        content_type_failures: dict[str, int] = defaultdict(int)
 
         for _, row in failed_results.iterrows():
             error_msg = str(row.get("error", ""))
@@ -3031,7 +3034,7 @@ class ExperimentalRunner:
                     )
 
                     # Show most common failure patterns
-                    failure_patterns = Counter()
+                    failure_patterns: Counter[str] = Counter()
                     for pipeline in failures:
                         # Extract pattern (simplified)
                         parts = pipeline.split("__")
