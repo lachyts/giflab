@@ -547,10 +547,10 @@
 
             async loadExperimentFromVisualOutputs(experimentId) {
                 // Try to get list of GIFs from visual_outputs directory
-                const visualOutputsPath = `experiments/${experimentId}/visual_outputs`;
+                const visualOutputsPath = `runs/${experimentId}/visual_outputs`;
                 
                 // First get experiment metadata
-                const metadataResponse = await fetch(`experiments/${experimentId}/run_metadata.json`);
+                const metadataResponse = await fetch(`runs/${experimentId}/run_metadata.json`);
                 const metadata = await metadataResponse.json();
                 
                 this.currentExperiment = {
@@ -815,7 +815,7 @@
 
                 // Always show original first
                 this.addGifCard({
-                    src: `experiments/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/original.gif`,
+                    src: `runs/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/original.gif`,
                     title: 'Original',
                     metadata: {
                         size: `${this.currentGif.original.file_size_kb.toFixed(1)} KB`,
@@ -831,7 +831,7 @@
 
                 selectedPipelineData.forEach(pipeline => {
                     this.addGifCard({
-                        src: `experiments/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/${pipeline.id}.gif`,
+                        src: `runs/${this.currentExperiment.experiment.id}/visual_outputs/${this.currentGif.name}/${pipeline.id}.gif`,
                         title: pipeline.display_name,
                         metadata: {
                             size: `${pipeline.file_size_kb.toFixed(1)} KB`,
@@ -975,50 +975,67 @@
                 console.log('🔍 Starting experiment discovery from filesystem...');
                 const experiments = [];
                 
-                // Fetch actual directory listing from web server
-                console.log('📂 Fetching experiment directories from server...');
-                try {
-                    const response = await fetch('experiments/');
-                    const html = await response.text();
-                    console.log('📋 Got directory listing');
-                    
-                    // Parse directory names from HTML listing
-                    const dirRegex = /href="([^"]+\/)"/g;
-                    const directories = [];
-                    let match;
-                    
-                    while ((match = dirRegex.exec(html)) !== null) {
-                        const dirName = match[1].replace('/', ''); // Remove trailing slash
-                        // Skip system directories
-                        if (!dirName.startsWith('.') && dirName !== 'latest' && !dirName.includes('cache')) {
-                            directories.push(dirName);
-                            console.log(`   📁 Found directory: ${dirName}`);
+                // Check only current runs directory
+                const searchLocations = [
+                    { path: 'runs/', label: 'current runs', prefix: 'runs' }
+                ];
+                
+                for (const location of searchLocations) {
+                    console.log(`📂 Fetching ${location.label} from ${location.path}...`);
+                    try {
+                        const response = await fetch(location.path);
+                        const html = await response.text();
+                        console.log(`📋 Got ${location.label} directory listing`);
+                        
+                        // Parse directory names from HTML listing
+                        const dirRegex = /href="([^"]+\/)"/g;
+                        const directories = [];
+                        let match;
+                        
+                        while ((match = dirRegex.exec(html)) !== null) {
+                            const dirName = match[1].replace('/', ''); // Remove trailing slash
+                            // Skip system directories
+                            if (!dirName.startsWith('.') && dirName !== 'latest' && !dirName.includes('cache') && !dirName.includes('pipeline_results_cache')) {
+                                directories.push(dirName);
+                                console.log(`   📁 Found ${location.label} directory: ${dirName}`);
+                            }
                         }
+                        
+                        console.log(`📊 Found ${directories.length} potential ${location.label} directories`);
+                        
+                        // Check each directory to see if it's a valid experiment
+                        for (const expId of directories) {
+                            console.log(`🔍 Checking ${location.label}: ${expId}`);
+                            const experiment = await this.checkExperimentExists(expId, location.prefix);
+                            if (experiment) {
+                                experiments.push(experiment);
+                                console.log(`✅ Valid ${location.label}: ${expId}`);
+                            } else {
+                                console.log(`❌ Invalid ${location.label}: ${expId}`);
+                            }
+                        }
+                        
+                    } catch (error) {
+                        console.log(`❌ Failed to fetch ${location.label}: ${error.message}`);
                     }
+                }
+                
+                // Fallback to testing known experiments if none found
+                if (experiments.length === 0) {
+                    console.log('📂 No experiments found, trying fallback to known experiments...');
+                    const knownExperiments = [
+                        '021-quick-test-18-08-25',
+                        '001-gifsicle-frame-validation-16-08-25',
+                        '061-quick-test-18-08-25'
+                    ];
                     
-                    console.log(`📊 Found ${directories.length} potential experiment directories`);
-                    
-                    // Check each directory to see if it's a valid experiment
-                    for (const expId of directories) {
-                        console.log(`🔍 Checking experiment: ${expId}`);
-                        const experiment = await this.checkExperimentExists(expId);
+                    for (const expId of knownExperiments) {
+                        const experiment = await this.checkExperimentExists(expId, 'runs');
                         if (experiment) {
                             experiments.push(experiment);
-                            console.log(`✅ Valid experiment: ${expId}`);
-                        } else {
-                            console.log(`❌ Invalid experiment: ${expId}`);
+                            console.log('✅ Found fallback experiment:', experiment.id);
+                            break; // Just need one to get started
                         }
-                    }
-                    
-                } catch (error) {
-                    console.log(`❌ Failed to fetch directory listing: ${error.message}`);
-                    console.log('📂 Falling back to known experiment test...');
-                    
-                    // Fallback to testing known experiment
-                    const knownExperiment = await this.checkExperimentExists('001-gifsicle-frame-validation-16-08-25');
-                    if (knownExperiment) {
-                        experiments.push(knownExperiment);
-                        console.log('✅ Found known experiment:', knownExperiment.id);
                     }
                 }
                 
@@ -1047,7 +1064,7 @@
                 
                 for (const date of datePatterns) {
                     const expId = `${baseName}-${date}`;
-                    const experiment = await this.checkExperimentExists(expId);
+                    const experiment = await this.checkExperimentExists(expId, 'runs');
                     if (experiment && !experiments.find(e => e.id === experiment.id)) {
                         experiments.push(experiment);
                         console.log(`✅ Discovered: ${expId}`);
@@ -1055,20 +1072,20 @@
                 }
                 
                 // Also try without date suffix
-                const experiment = await this.checkExperimentExists(baseName);
+                const experiment = await this.checkExperimentExists(baseName, 'runs');
                 if (experiment && !experiments.find(e => e.id === experiment.id)) {
                     experiments.push(experiment);
                     console.log(`✅ Discovered: ${baseName}`);
                 }
             }
             
-            async checkExperimentExists(expId) {
+            async checkExperimentExists(expId, locationPrefix = 'runs') {
                 try {
-                    console.log(`🔍 Checking experiment: ${expId}`);
+                    console.log(`🔍 Checking experiment: ${expId} in ${locationPrefix}/`);
                     
                     // Check if experiment has required structure
-                    const metadataPath = `experiments/${expId}/run_metadata.json`;
-                    const visualOutputsPath = `experiments/${expId}/visual_outputs`;
+                    const metadataPath = `${locationPrefix}/${expId}/run_metadata.json`;
+                    const visualOutputsPath = `${locationPrefix}/${expId}/visual_outputs`;
                     
                     console.log(`   📄 Checking metadata: ${metadataPath}`);
                     const hasMetadata = await this.checkFileExists(metadataPath);
@@ -1078,9 +1095,14 @@
                     const hasVisualOutputs = await this.checkDirectoryExists(visualOutputsPath);
                     console.log(`   📁 Visual outputs exists: ${hasVisualOutputs}`);
                     
-                    if (!hasMetadata || !hasVisualOutputs) {
-                        console.log(`   ❌ ${expId} missing required files (metadata: ${hasMetadata}, visual_outputs: ${hasVisualOutputs})`);
+                    // Require metadata, but allow experiments without visual outputs (with fallback)
+                    if (!hasMetadata) {
+                        console.log(`   ❌ ${expId} missing required metadata file`);
                         return null;
+                    }
+                    
+                    if (!hasVisualOutputs) {
+                        console.log(`   ⚠️ ${expId} missing visual outputs - will use fallback display`);
                     }
                     
                     console.log(`   ✅ ${expId} has required structure`);
@@ -1088,7 +1110,7 @@
                     // Load metadata
                     let metadata = {};
                     try {
-                        const metadataResponse = await fetch(`experiments/${expId}/run_metadata.json`);
+                        const metadataResponse = await fetch(`${locationPrefix}/${expId}/run_metadata.json`);
                         if (metadataResponse.ok) {
                             metadata = await metadataResponse.json();
                         }
@@ -1097,7 +1119,7 @@
                     }
                     
                     // Count GIFs
-                    const gifCount = await this.countGifsInVisualOutputs(`experiments/${expId}/visual_outputs`);
+                    const gifCount = await this.countGifsInVisualOutputs(`${locationPrefix}/${expId}/visual_outputs`);
                     
                     // Use actual metadata timestamp if available, otherwise extract from ID
                     let date = new Date().toISOString();
@@ -1123,7 +1145,8 @@
                         date: date,
                         gifs_count: gifCount,
                         pipelines_count: metadata.pipeline_count || 'unknown',
-                        path: `experiments/${expId}`
+                        path: `${locationPrefix}/${expId}`,
+                        has_visual_outputs: hasVisualOutputs
                     };
                     
                 } catch (error) {
@@ -1313,10 +1336,10 @@
                 }
             };
             
-            window.debugCheckExperiment = async function(expId) {
-                console.log(`🔧 Manual debug: Checking experiment ${expId}`);
+            window.debugCheckExperiment = async function(expId, locationPrefix = 'runs') {
+                console.log(`🔧 Manual debug: Checking experiment ${expId} in ${locationPrefix}/`);
                 try {
-                    const result = await app.checkExperimentExists(expId);
+                    const result = await app.checkExperimentExists(expId, locationPrefix);
                     console.log('🔧 Manual debug: Check complete');
                     console.log('🔧 Result:', result);
                     return result;
@@ -1344,7 +1367,7 @@
                 console.log('🧪 Testing discovery fix...');
                 
                 // Test the known experiment
-                const result = await app.checkExperimentExists('001-gifsicle-frame-validation-16-08-25');
+                const result = await app.checkExperimentExists('001-gifsicle-frame-validation-16-08-25', 'runs');
                 console.log(`Test result: ${result ? '✅ SUCCESS' : '❌ FAILED'}`);
                 
                 if (result) {

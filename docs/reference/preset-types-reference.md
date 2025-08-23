@@ -1,10 +1,10 @@
 # Preset Types Reference Guide
 
-This reference provides detailed technical information about all available experiment preset types, their configurations, and specific use cases.
+This reference provides detailed technical information about all available preset types, their configurations, and specific use cases.
 
 ## Preset Classification
 
-GifLab experiment presets are organized into several categories based on their research purpose and complexity:
+GifLab presets are organized into several categories based on their research purpose and complexity:
 
 ### Research Presets
 Focused studies comparing specific algorithm dimensions while controlling other variables.
@@ -67,7 +67,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.05
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.05
 ```
 
 ---
@@ -123,7 +123,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset color-optimization --output-dir color_study
+poetry run python -m giflab run --preset color-optimization --output-dir color_study
 ```
 
 ---
@@ -180,7 +180,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset lossy-quality-sweep --use-gpu
+poetry run python -m giflab run --preset lossy-quality-sweep --use-gpu
 ```
 
 ---
@@ -233,7 +233,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset tool-comparison-baseline --quality-threshold 0.1
+poetry run python -m giflab run --preset tool-comparison-baseline --quality-threshold 0.1
 ```
 
 ---
@@ -294,7 +294,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset dithering-focus --output-dir dithering_analysis
+poetry run python -m giflab run --preset dithering-focus --output-dir dithering_analysis
 ```
 
 ---
@@ -345,7 +345,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset png-optimization --quality-threshold 0.02
+poetry run python -m giflab run --preset png-optimization --quality-threshold 0.02
 ```
 
 ---
@@ -399,7 +399,7 @@ lossy_slot:
 
 **Example Usage**:
 ```bash
-poetry run python -m giflab experiment --preset quick-test --output-dir test_run
+poetry run python -m giflab run --preset quick-test --output-dir test_run
 ```
 
 ---

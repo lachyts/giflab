@@ -1,87 +1,87 @@
 # Unified Results Directory
 
-This directory contains all experimental results, samples, and cached data in a unified, organized structure.
+This directory contains all analysis results, samples, and cached data in a clean, organized structure following the pipeline consolidation.
 
 ## 📁 Directory Structure
 
 ```
 results/
-├── archive/                    # Historical data (read-only)
-│   ├── legacy-runs/           # Pre-unification experiment_results content
-│   └── pre-enhanced-metrics/  # Pre-unification test-workspace content
-├── experiments/               # Active experiments (organized by type)
-│   ├── frame-comparison/      # Frame algorithm studies
-│   │   ├── enhanced-metrics-study_20250807/
-│   │   │   └── run_20250807_123641/  # Key enhanced metrics experiment
-│   │   └── latest -> enhanced-metrics-study_20250807/run_20250807_123641/
-│   ├── matrix-analysis/       # Matrix pipeline experiments  
-│   ├── quality-validation/    # Enhanced metrics validation
-│   └── custom-studies/        # One-off investigations
+├── runs/                      # Active analysis runs (unified pipeline)
+│   ├── 001-frame-focus-22-08-25/
+│   ├── 002-quick-test-22-08-25/
+│   ├── latest -> 004-custom-experiment-22-08-25/
+│   └── pipeline_results_cache.db
 ├── samples/                   # Test GIF samples (centralized)
 │   ├── synthetic/            # Generated test content
 │   └── real-world/           # Actual user content
-└── cache/                     # Shared cache files
-    ├── pipeline_results_cache.db
-    └── elimination_history_master.csv
+├── archive/                   # Historical data (read-only)
+│   └── experiments/          # Pre-consolidation experiment runs (171 runs, 116MB)
+└── cache/                     # Additional shared cache files
+    └── performance/
 ```
 
-## 🎯 Experiment Organization
+## 🎯 Analysis Organization
 
 ### Naming Convention
-Experiments are organized by type, then by study name and date:
+Analysis runs are organized with sequential numbering and descriptive names:
 ```
-experiments/{type}/{study-name}_{YYYYMMDD}/
-└── run_{YYYYMMDD_HHMMSS}/
-    ├── enhanced_streaming_results.csv
-    ├── run_metadata.json
-    └── analysis_outputs/
+runs/{NNN-description-DD-MM-YY}/
+├── streaming_results.csv      # Main results with 54+ fields
+├── run_metadata.json         # Experiment configuration
+├── elimination_progress.json # Progress tracking
+└── visual_outputs/           # Generated visualizations
 ```
 
-### Current Experiments
-- **frame-comparison/**: Frame reduction algorithm studies
-  - `enhanced-metrics-study_20250807/`: Key study using 11-metric enhanced quality system
-- **matrix-analysis/**: Future matrix pipeline experiments
-- **quality-validation/**: Enhanced metrics validation studies
-- **custom-studies/**: One-off investigations
+### Current Active Runs
+All new analysis runs use the unified `giflab run` command and are saved in `results/runs/`:
+- **Presets**: `--preset frame-focus`, `--preset quick-test`, etc.
+- **Sampling**: `--sampling representative`, `--sampling quick`, etc.
+- **Output**: Comprehensive 54+ field CSV with all engines and metrics
 
 ## 🔗 Compatibility
 
-- **Legacy symlink**: `experiment_results -> results/archive/legacy-runs/`
-- **Latest symlinks**: Each experiment type has a `latest` link to most recent run
-- **Backward compatibility**: All existing analysis scripts continue to work
+- **Latest symlink**: `results/runs/latest` points to most recent run
+- **Cache sharing**: Unified cache database preserves all historical results
+- **Tool compatibility**: All analysis tools work with new structure:
+  ```bash
+  giflab view-failures results/runs/latest/
+  giflab select-pipelines results/runs/latest/streaming_results.csv --top 3
+  ```
 
 ## 🧹 Usage Guidelines
 
-1. **Active Work**: Use `experiments/{type}/` for ongoing studies
-2. **Samples**: Add test GIFs to appropriate `samples/` subdirectory  
-3. **Archives**: Historical data in `archive/` is read-only
-4. **Cache**: Shared cache files benefit all experiments
+1. **Active Analysis**: Use `giflab run` - saves automatically to `results/runs/`
+2. **Historical Data**: Access old experiment data in `results/archive/experiments/` 
+3. **Samples**: Test GIFs available in `results/samples/synthetic/`
+4. **Cache**: Shared cache benefits all runs and preserves historical results
 
 ## 🚀 Migration Summary
 
-This unified system consolidates:
-- ✅ All `experiment_results/` content → `archive/legacy-runs/`
-- ✅ Key `test-workspace/` experiments → `archive/pre-enhanced-metrics/`  
-- ✅ Enhanced metrics study → `experiments/frame-comparison/`
-- ✅ GIF samples → `samples/synthetic/`
-- ✅ Cache files → `cache/`
-- ✅ Updated system defaults to use `results/experiments/`
+This unified system consolidates the pipeline architecture:
+- ✅ Single `giflab run` command replaces dual pipeline system
+- ✅ Unified output directory `results/runs/` (no more experiments vs runs confusion)
+- ✅ Preserved all historical data in `results/archive/experiments/` (171 runs)
+- ✅ Migrated cache database for seamless continuation
+- ✅ Updated all tool references and documentation
 
-## 📊 Key Results Available
+## 📊 Key Capabilities
 
-### Enhanced Metrics Study (`experiments/frame-comparison/latest/`)
-- **450 successful pipeline tests** with comprehensive 11-metric quality assessment
-- **Frame reduction algorithm comparison** (gifsicle, imagemagick, animately, ffmpeg, none)
-- **Enhanced composite quality** using research-based 11-metric weights
-- **Efficiency scoring** balancing compression × quality
-- **Content type analysis** across 14 different GIF categories
+### Unified Pipeline Features
+- **All 5 engines**: gifsicle, Animately, ImageMagick, FFmpeg, gifski
+- **54+ metrics**: Enhanced CSV output combining all previous pipeline fields
+- **Targeted presets**: 14+ research presets for efficient analysis
+- **Intelligent sampling**: representative, quick, full, targeted strategies
+- **GPU acceleration**: Optional CUDA-accelerated quality metrics
+- **Resume functionality**: Progress tracking and resume capability
+- **Comprehensive caching**: Results cache preserves computation across runs
 
-**Access the data:**
+**Access the latest data:**
 ```bash
-cd results/experiments/frame-comparison/latest/
-# Main results: enhanced_streaming_results.csv
+cd results/runs/latest/
+# Main results: streaming_results.csv (54+ fields)
 # Metadata: run_metadata.json
+# Progress: elimination_progress.json
 ```
 
 ---
-*This unified system provides single source of truth for all experimental results while preserving complete historical data.*
+*This unified system provides a single source of truth for all analysis results while preserving complete historical data and enabling seamless workflow continuation.*

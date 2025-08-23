@@ -1,22 +1,22 @@
-# 🧪 Experimental Testing Framework
+# 🧪 Compression Testing Framework
 
-The experimental testing framework provides a structured way to test and compare different GIF compression workflows before running on large datasets. It's designed to help you understand the performance characteristics of different compression strategies and identify optimal settings.
+The compression testing framework provides a structured way to test and compare different GIF compression workflows before running on large datasets. It's designed to help you understand the performance characteristics of different compression strategies and identify optimal settings.
 
 ## Overview
 
-The experimental framework tests multiple compression strategies on a small set of diverse GIFs (~10 by default) to validate workflows, compare engines, and identify anomalies. This is essential for understanding what's worth testing before scaling to larger datasets.
+The testing framework tests multiple compression strategies on a small set of diverse GIFs (~10 by default) to validate workflows, compare engines, and identify anomalies. This is essential for understanding what's worth testing before scaling to larger datasets.
 
 ## Quick Start
 
 ```bash
 # Run experiment with default settings (10 GIFs, all strategies)
-poetry run python -m giflab experiment
+poetry run python -m giflab run
 
 # Run experiment with custom settings
-poetry run python -m giflab experiment --gifs 15 --strategies pure_gifsicle --strategies gifsicle_dithered
+poetry run python -m giflab run --gifs 15 --strategies pure_gifsicle --strategies gifsicle_dithered
 
 # Use your own sample GIFs
-poetry run python -m giflab experiment --sample-gifs-dir data/my_samples --gifs 5
+poetry run python -m giflab run --sample-gifs-dir data/my_samples --gifs 5
 ```
 
 ## Compression Strategy Model (Dynamic)
@@ -32,13 +32,13 @@ The experimental runner now generates strategies **dynamically** using the slot-
 Run only pipelines that use Gifsicle in any slot:
 
 ```bash
-poetry run python -m giflab experiment --include-tool gifsicle
+poetry run python -m giflab run --include-tool gifsicle
 ```
 
 Run pipelines where Animately handles Color reduction (no matter what fills the other slots):
 
 ```bash
-poetry run python -m giflab experiment --include color=animately
+poetry run python -m giflab run --include color=animately
 ```
 
 The legacy **pure_gifsicle**, **pure_animately**, and **animately_then_gifsicle** names still work as convenience aliases, but internally they resolve to the new dynamic model.
@@ -78,7 +78,7 @@ This ensures you're testing across different content types that may respond diff
 ## Command Line Options
 
 ```bash
-poetry run python -m giflab experiment [OPTIONS]
+poetry run python -m giflab run [OPTIONS]
 ```
 
 ### Options
@@ -94,13 +94,13 @@ poetry run python -m giflab experiment [OPTIONS]
 
 ```bash
 # Test only pure gifsicle strategies
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies gifsicle_dithered
+poetry run python -m giflab run --strategies pure_gifsicle --strategies gifsicle_dithered
 
 # Test workflow comparison
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies animately_then_gifsicle
+poetry run python -m giflab run --strategies pure_gifsicle --strategies animately_then_gifsicle
 
 # Test all strategies (default)
-poetry run python -m giflab experiment --strategies all
+poetry run python -m giflab run --strategies all
 ```
 
 ## Output Structure
@@ -179,7 +179,7 @@ To specifically answer your question about comparing workflows:
 
 ```bash
 # Compare a single-tool pipeline against a combined pipeline generated dynamically
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --include-tool gifsicle --slots frame,color,lossy \
   --include frame=animately --include lossy=gifsicle
 ```
@@ -194,7 +194,7 @@ This will help you understand:
 
 ```bash
 # Test dithering options
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies gifsicle_dithered
+poetry run python -m giflab run --strategies pure_gifsicle --strategies gifsicle_dithered
 ```
 
 This will show:
@@ -238,7 +238,7 @@ The framework automatically detects:
 ### 2. Use Your Own GIFs
 ```bash
 # Test with your actual content
-poetry run python -m giflab experiment --sample-gifs-dir data/my_test_gifs
+poetry run python -m giflab run --sample-gifs-dir data/my_test_gifs
 ```
 
 ### 3. Iterative Testing
@@ -264,7 +264,7 @@ poetry run python -m giflab experiment --sample-gifs-dir data/my_test_gifs
 
 ```bash
 # Run with single worker for easier debugging
-poetry run python -m giflab experiment --workers 1 --gifs 3
+poetry run python -m giflab run --workers 1 --gifs 3
 ```
 
 ## Integration with Main Pipeline
@@ -287,19 +287,19 @@ poetry run python -m giflab run data/raw data/
 ### Example 1: Validate Current Workflow
 ```bash
 # Test current implementation
-poetry run python -m giflab experiment --strategies pure_gifsicle --gifs 10
+poetry run python -m giflab run --strategies pure_gifsicle --gifs 10
 ```
 
 ### Example 2: Compare Workflows
 ```bash
 # Compare pure gifsicle vs hybrid approach
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies animately_then_gifsicle
+poetry run python -m giflab run --strategies pure_gifsicle --strategies animately_then_gifsicle
 ```
 
 ### Example 3: Test Dithering Impact
 ```bash
 # Test dithering options
-poetry run python -m giflab experiment --strategies pure_gifsicle --strategies gifsicle_dithered --strategies gifsicle_ordered_dither
+poetry run python -m giflab run --strategies pure_gifsicle --strategies gifsicle_dithered --strategies gifsicle_ordered_dither
 ```
 
 ### Example 4: Use Your Own GIFs
@@ -307,7 +307,7 @@ poetry run python -m giflab experiment --strategies pure_gifsicle --strategies g
 # Test with your specific content
 mkdir -p data/my_samples
 cp /path/to/your/gifs/*.gif data/my_samples/
-poetry run python -m giflab experiment --sample-gifs-dir data/my_samples
+poetry run python -m giflab run --sample-gifs-dir data/my_samples
 ```
 
 ## Results Interpretation

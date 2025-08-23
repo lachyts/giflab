@@ -9,10 +9,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from giflab.experimental import (
-    ExperimentalRunner, 
+from giflab.core import (
+    GifLabRunner, 
     SyntheticGifSpec,
-    ExperimentResult
+    AnalysisResult
 )
 
 
@@ -22,7 +22,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_mixed_content_frame_generation(self, tmp_path):
         """Test mixed content frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test different sizes and frames
         test_cases = [
@@ -44,7 +44,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_data_visualization_frame_generation(self, tmp_path):
         """Test data visualization (charts) frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test with different frame indices for animation
         for frame_idx in [0, 5, 9]:
@@ -55,7 +55,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_transitions_frame_generation(self, tmp_path):
         """Test transitions (morphing) frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test both halves of the morphing animation
         total_frames = 15
@@ -67,7 +67,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_single_pixel_anim_frame_generation(self, tmp_path):
         """Test single pixel animation frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test minimal motion detection
         frame1 = eliminator._frame_generator.create_frame("micro_detail", (100, 100), 0, 10)
@@ -84,7 +84,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_static_minimal_change_frame_generation(self, tmp_path):
         """Test static minimal change frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test edge cases that previously caused modulo by zero
         test_sizes = [
@@ -102,7 +102,7 @@ class TestNewFrameGenerationMethods:
     @pytest.mark.fast
     def test_high_frequency_detail_frame_generation(self, tmp_path):
         """Test high frequency detail frame generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test aliasing patterns
         frame = eliminator._frame_generator.create_frame("detail", (200, 200), 0, 12)
@@ -121,7 +121,7 @@ class TestExpandedSyntheticSpecs:
     @pytest.mark.fast
     def test_all_new_content_types_present(self, tmp_path):
         """Test that all new content types are included in specs."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         content_types = {spec.content_type for spec in eliminator.synthetic_specs}
         
@@ -136,7 +136,7 @@ class TestExpandedSyntheticSpecs:
     @pytest.mark.fast
     def test_size_variations_present(self, tmp_path):
         """Test that size variations are properly included."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         spec_names = {spec.name for spec in eliminator.synthetic_specs}
         
@@ -151,7 +151,7 @@ class TestExpandedSyntheticSpecs:
     @pytest.mark.fast
     def test_frame_variations_present(self, tmp_path):
         """Test that frame count variations are included."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         spec_names = {spec.name for spec in eliminator.synthetic_specs}
         
@@ -163,14 +163,14 @@ class TestExpandedSyntheticSpecs:
     @pytest.mark.fast
     def test_expanded_spec_count(self, tmp_path):
         """Test that we have the expected number of specs."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Should have expanded from 10 to 25 total specs
         assert len(eliminator.synthetic_specs) == 25
     
     def test_all_specs_generate_successfully(self, tmp_path):
         """Test that all expanded specs can generate GIFs without errors."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test each spec individually
         for spec in eliminator.synthetic_specs:
@@ -190,7 +190,7 @@ class TestTargetedExpansionStrategy:
     @pytest.mark.fast
     def test_targeted_strategy_in_sampling_strategies(self, tmp_path):
         """Test that targeted strategy is available."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         assert "targeted" in eliminator.SAMPLING_STRATEGIES
         
@@ -202,7 +202,7 @@ class TestTargetedExpansionStrategy:
     @pytest.mark.fast
     def test_targeted_sampling_method(self, tmp_path):
         """Test the targeted sampling method."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Create mock pipelines
         mock_pipelines = [MagicMock() for _ in range(100)]
@@ -220,7 +220,7 @@ class TestTargetedExpansionStrategy:
     
     def test_get_targeted_synthetic_gifs(self, tmp_path):
         """Test targeted GIF generation."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         targeted_gifs = eliminator.get_targeted_synthetic_gifs()
         
@@ -236,7 +236,7 @@ class TestTargetedExpansionStrategy:
     
     def test_targeted_gifs_content_selection(self, tmp_path):
         """Test that targeted GIFs include the right content."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         targeted_gifs = eliminator.get_targeted_synthetic_gifs()
         targeted_names = {gif.stem for gif in targeted_gifs}
@@ -265,7 +265,7 @@ class TestTargetedExpansionStrategy:
     
     def test_select_pipelines_intelligently_targeted(self, tmp_path):
         """Test intelligent pipeline selection with targeted strategy."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Create mock pipelines
         mock_pipelines = [MagicMock() for _ in range(100)]
@@ -283,7 +283,7 @@ class TestEdgeCaseFixes:
     
     def test_empty_pipeline_list_handling(self, tmp_path):
         """Test that empty pipeline lists don't cause division by zero."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Should not crash with empty list
         result = eliminator.select_pipelines_intelligently(
@@ -296,7 +296,7 @@ class TestEdgeCaseFixes:
     
     def test_small_gif_size_handling(self, tmp_path):
         """Test that very small GIF sizes don't cause modulo by zero."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Test problematic sizes that previously crashed
         test_cases = [
@@ -313,7 +313,7 @@ class TestEdgeCaseFixes:
     
     def test_single_frame_generation(self, tmp_path):
         """Test that single frame GIFs can be generated."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Create a single-frame spec
         spec = SyntheticGifSpec("test_single", 1, (50, 50), "gradient", "Single frame test")
@@ -332,7 +332,7 @@ class TestIntegrationWithCLI:
     
     def test_targeted_strategy_cli_integration(self, tmp_path):
         """Test that CLI correctly handles targeted strategy."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Simulate CLI logic
         sampling_strategy = 'targeted'
@@ -350,7 +350,7 @@ class TestIntegrationWithCLI:
     
     def test_run_elimination_analysis_with_targeted_gifs(self, tmp_path):
         """Test that elimination analysis works with targeted GIF flag."""
-        eliminator = ExperimentalRunner(tmp_path)
+        eliminator = GifLabRunner(tmp_path)
         
         # Mock dependencies to avoid full integration issues
         with patch('giflab.dynamic_pipeline.generate_all_pipelines') as mock_gen:
@@ -361,12 +361,12 @@ class TestIntegrationWithCLI:
                 mock_test.return_value = pd.DataFrame()
                 
                 with patch.object(eliminator, '_analyze_and_experiment') as mock_analyze:
-                    mock_analyze.return_value = ExperimentResult()
+                    mock_analyze.return_value = AnalysisResult()
                     
                     # Should work with targeted GIFs enabled
-                    result = eliminator.run_experimental_analysis(use_targeted_gifs=True)
+                    result = eliminator.run_analysis(use_targeted_gifs=True)
                     
-                    assert isinstance(result, ExperimentResult)
+                    assert isinstance(result, AnalysisResult)
 
 
 # Fixtures

@@ -13,7 +13,7 @@ The targeted experiment presets system replaces the inefficient `generate_all_pi
 │   Preset System    │    │  Pipeline Generator  │    │ Experiment Runner   │
 │                     │    │                      │    │                     │
 │ ┌─────────────────┐ │    │ ┌──────────────────┐ │    │ ┌─────────────────┐ │
-│ │ SlotConfiguration│ │    │ │TargetedPipeline  │ │    │ │ ExperimentalRunner│ │
+│ │ SlotConfiguration│ │    │ │TargetedPipeline  │ │    │ │ GifLabRunner│ │
 │ │                 │ │    │ │    Generator     │ │    │ │                 │ │
 │ │ • Variable Slot │ │───▶│ │                  │ │───▶│ │ • Preset Integration│
 │ │ • Locked Slot   │ │    │ │ • Scope Expansion│ │    │ │ • Pipeline Execution│
@@ -27,7 +27,7 @@ The targeted experiment presets system replaces the inefficient `generate_all_pi
 │ │ • Metadata      │ │    │   CLI Integration    │              │
 │ │ • Validation    │ │    │                      │              │
 │ └─────────────────┘ │    │ ┌──────────────────┐ │              │
-│                     │    │ │ experiment_cmd.py│ │              │
+│                     │    │ │ run_cmd.py│ │              │
 │ ┌─────────────────┐ │    │ │                  │ │              │
 │ │ PresetRegistry  │ │    │ │ • Preset Options │ │              │
 │ │                 │ │    │ │ • Custom Slots   │ │──────────────┘
@@ -44,7 +44,7 @@ The targeted experiment presets system replaces the inefficient `generate_all_pi
 ### 1. Slot Configuration System
 
 **Purpose**: Define algorithm behavior for each compression stage
-**Location**: `src/giflab/experimental/targeted_presets.py`
+**Location**: `src/giflab/core/targeted_presets.py`
 
 ```python
 @dataclass
@@ -80,7 +80,7 @@ def __post_init__(self):
 ### 2. Experiment Preset System
 
 **Purpose**: Combine slot configurations into complete experiment definitions
-**Location**: `src/giflab/experimental/targeted_presets.py`
+**Location**: `src/giflab/core/targeted_presets.py`
 
 ```python
 @dataclass
@@ -110,7 +110,7 @@ class ExperimentPreset:
 ### 3. Pipeline Generation Engine
 
 **Purpose**: Convert presets into specific pipeline combinations
-**Location**: `src/giflab/experimental/targeted_generator.py`
+**Location**: `src/giflab/core/targeted_generator.py`
 
 ```python
 class TargetedPipelineGenerator:
@@ -149,7 +149,7 @@ class TargetedPipelineGenerator:
 ### 4. Preset Registry System
 
 **Purpose**: Global management of available presets
-**Location**: `src/giflab/experimental/targeted_presets.py`
+**Location**: `src/giflab/core/targeted_presets.py`
 
 ```python
 class PresetRegistry:
@@ -183,13 +183,13 @@ class PresetRegistry:
 
 ## Integration Architecture
 
-### 1. ExperimentalRunner Integration
+### 1. GifLabRunner Integration
 
 **Purpose**: Integrate targeted generation with existing experiment infrastructure
-**Location**: `src/giflab/experimental/runner.py`
+**Location**: `src/giflab/core/runner.py`
 
 ```python
-class ExperimentalRunner:
+class GifLabRunner:
     """Enhanced with targeted preset support."""
     
     def generate_targeted_pipelines(self, preset_id: str) -> List[Pipeline]:
@@ -201,7 +201,7 @@ class ExperimentalRunner:
     def run_targeted_experiment(self, preset_id: str, **kwargs) -> ExperimentResult:
         """Complete targeted experiment workflow."""
         test_pipelines = self.generate_targeted_pipelines(preset_id)
-        return self.run_experimental_analysis(test_pipelines=test_pipelines, **kwargs)
+        return self.run_analysis(test_pipelines=test_pipelines, **kwargs)
     
     def list_available_presets(self) -> Dict[str, str]:
         """List all available presets with descriptions."""
@@ -216,7 +216,7 @@ class ExperimentalRunner:
 ### 2. CLI Integration Architecture
 
 **Purpose**: Expose targeted presets via command-line interface
-**Location**: `src/giflab/cli/experiment_cmd.py`
+**Location**: `src/giflab/cli/run_cmd.py`
 
 ```python
 @click.command()
@@ -253,7 +253,7 @@ def experiment(**kwargs):
 ### 3. Built-in Presets Architecture
 
 **Purpose**: Provide research-validated preset configurations
-**Location**: `src/giflab/experimental/builtin_presets.py`
+**Location**: `src/giflab/core/builtin_presets.py`
 
 ```python
 # Auto-registration pattern
@@ -300,7 +300,7 @@ User Input (--preset frame-focus)
     Pipeline Generation (itertools.product())
          │
          ▼
-    Experiment Execution (run_experimental_analysis())
+    Experiment Execution (run_analysis())
          │
          ▼
     Results Analysis (standard experiment pipeline)
@@ -336,7 +336,7 @@ No Preset Options
     Apply Sampling Strategy (select_pipelines_intelligently())
          │
          ▼
-    Experiment Execution (run_experimental_analysis())
+    Experiment Execution (run_analysis())
 ```
 
 ## Performance Architecture
@@ -447,7 +447,7 @@ tests/
 **Integration Test Coverage**:
 - Complete preset experiment execution
 - CLI integration and parameter processing
-- ExperimentalRunner integration
+- GifLabRunner integration
 - Performance comparison validation
 - Backward compatibility verification
 
@@ -476,7 +476,7 @@ def test_pipeline_generation():
 ```python
 def test_end_to_end_execution():
     """Test complete experiment workflow."""
-    runner = ExperimentalRunner(output_dir=Path(temp_dir), use_cache=False)
+    runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)
     result = runner.run_targeted_experiment("frame-focus", quality_threshold=0.1)
     assert result.total_jobs_run > 0
 ```

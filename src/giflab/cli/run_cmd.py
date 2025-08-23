@@ -1,23 +1,12 @@
-"""Run compression analysis command."""
+"""Comprehensive GIF compression analysis and optimization command."""
 
 import multiprocessing
-import sys
-from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
-from ..config import DEFAULT_COMPRESSION_CONFIG, PathConfig
-from ..pipeline import CompressionPipeline
-from ..utils_pipeline_yaml import read_pipelines_yaml
 from .utils import (
-    display_common_header,
-    display_path_info,
-    display_worker_info,
-    ensure_csv_parent_exists,
-    estimate_pipeline_time,
-    generate_timestamped_csv_path,
-    get_cpu_count,
     handle_generic_error,
     handle_keyboard_interrupt,
     validate_and_get_raw_dir,
@@ -29,6 +18,14 @@ from .utils import (
 @click.argument(
     "raw_dir",
     type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    required=False,
+)
+@click.option(
+    "--output-dir",
+    "-o", 
+    type=click.Path(path_type=Path),
+    default=Path("results/runs"),
+    help="Base directory for timestamped results (default: results/runs)",
 )
 @click.option(
     "--workers",
@@ -38,214 +35,238 @@ from .utils import (
     help=f"Number of worker processes (default: {multiprocessing.cpu_count()} = CPU count)",
 )
 @click.option(
-    "--resume/--no-resume", default=True, help="Skip existing renders (default: true)"
+    "--sampling",
+    type=click.Choice(["representative", "full", "factorial", "progressive", "targeted", "quick"]),
+    default="representative",
+    help="Sampling strategy to optimize testing time (default: representative)",
 )
 @click.option(
-    "--fail-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Folder for bad GIFs (default: data/bad_gifs)",
+    "--threshold",
+    "-t",
+    type=float,
+    default=0.3,
+    help="Quality threshold for pipeline elimination (default: 0.3, lower = stricter)",
 )
 @click.option(
-    "--csv",
-    type=click.Path(dir_okay=False, path_type=Path),
-    help="Output CSV path (default: auto-date in data/csv/)",
-)
-@click.option("--dry-run", is_flag=True, help="List work only, don't execute")
-@click.option(
-    "--renders-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Directory for rendered variants (default: data/renders)",
+    "--max-pipelines",
+    type=int,
+    default=0,
+    help="Limit number of pipelines to test (0 = no limit, useful for quick tests)",
 )
 @click.option(
-    "--detect-source-from-directory/--no-detect-source-from-directory",
-    default=True,
-    help="Detect source platform from directory structure (default: true)",
+    "--resume",
+    is_flag=True,
+    help="Resume from previous incomplete run (uses progress tracking)",
 )
 @click.option(
-    "--pipelines",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="YAML file listing pipeline identifiers to run (overrides engine grid)",
+    "--estimate-time",
+    is_flag=True,
+    help="Show time estimate and exit (no actual testing)",
+)
+@click.option(
+    "--use-gpu",
+    is_flag=True,
+    help="Enable GPU acceleration for quality metrics calculation",
+)
+@click.option(
+    "--use-cache",
+    is_flag=True,
+    help="Enable cache for pipeline test results (faster but may use stale results)",
+)
+@click.option(
+    "--clear-cache",
+    is_flag=True,
+    help="Clear the pipeline results cache before running (forces fresh start)",
+)
+@click.option(
+    "--preset",
+    "-p",
+    type=str,
+    default=None,
+    help="Use targeted preset (e.g., 'frame-focus', 'color-optimization'). Use 'list' to see available presets.",
+)
+@click.option(
+    "--list-presets",
+    is_flag=True,
+    help="List all available presets and exit",
 )
 def run(
-    raw_dir: Path,
+    raw_dir: Path | None,
+    output_dir: Path,
     workers: int,
+    sampling: str,
+    threshold: float,
+    max_pipelines: int,
     resume: bool,
-    fail_dir: Path | None,
-    csv: Path | None,
-    dry_run: bool,
-    renders_dir: Path | None,
-    detect_source_from_directory: bool,
-    pipelines: Path | None,
+    estimate_time: bool,
+    use_gpu: bool,
+    use_cache: bool,
+    clear_cache: bool,
+    preset: str,
+    list_presets: bool,
 ) -> None:
-    """Run compression analysis on GIFs in RAW_DIR.
+    """Run comprehensive GIF compression analysis and optimization.
 
-    Generates a grid of compression variants for every GIF and writes
-    one CSV row per variant with quality metrics and metadata.
+    This command tests pipeline combinations on GIFs in RAW_DIR with diverse
+    characteristics and eliminates underperforming pipelines based on quality
+    metrics like SSIM, compression ratio, and processing speed.
+
+    Results are saved in timestamped directories to preserve historical data.
+    Smart caching and resume functionality make large analysis runs efficient.
 
     RAW_DIR: Directory containing original GIF files to analyze
     """
     try:
-        # Validate RAW_DIR input
-        validated_raw_dir = validate_and_get_raw_dir(raw_dir, require_gifs=not dry_run)
+        # Import from core module
+        from ..core import GifLabRunner
+
+        # Handle operations that don't need RAW_DIR
+        if list_presets:
+            # Create pipeline runner with settings
+            runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+            try:
+                presets = runner.list_available_presets()
+                click.echo("🎯 Available Presets:")
+                click.echo()
+                for preset_id, description in presets.items():
+                    click.echo(f"  {preset_id}")
+                    click.echo(f"    {description}")
+                    click.echo()
+                return
+            except Exception as e:
+                click.echo(f"❌ Error listing presets: {e}")
+                return
+
+        # Validate RAW_DIR is provided for other operations (except estimate-time with presets)
+        if raw_dir is None:
+            if estimate_time and preset:
+                # Allow estimate-time with presets to work without RAW_DIR
+                # Create a dummy path that won't be used
+                validated_raw_dir = Path(".")
+            else:
+                click.echo("❌ Error: RAW_DIR argument is required unless using --list-presets")
+                click.echo("💡 Use 'giflab run --help' for usage information")
+                return
+        else:
+            # Validate RAW_DIR input
+            validated_raw_dir = validate_and_get_raw_dir(raw_dir, require_gifs=not estimate_time)
 
         # Validate worker count
         validated_workers = validate_and_get_worker_count(workers)
 
-        # Create path configuration
-        path_config = PathConfig()
+        # Create pipeline runner with settings
+        runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
 
-        # Override paths if provided
-        if fail_dir:
-            path_config.BAD_GIFS_DIR = fail_dir
-        if renders_dir:
-            path_config.RENDERS_DIR = renders_dir
+        # Clear cache if requested
+        if clear_cache and runner.cache:
+            click.echo("🗑️ Clearing pipeline results cache...")
+            runner.cache.clear_cache()
 
-        selected_pipes = None
-        if pipelines is not None:
-            selected_pipes = read_pipelines_yaml(pipelines)
-
-        pipeline = CompressionPipeline(
-            compression_config=DEFAULT_COMPRESSION_CONFIG,
-            path_config=path_config,
-            workers=validated_workers,
-            resume=resume,
-            detect_source_from_directory=detect_source_from_directory,
-            selected_pipelines=selected_pipes,
-        )
-
-        # Generate CSV path if not provided
-        if csv is None:
-            csv = generate_timestamped_csv_path(path_config.CSV_DIR)
-
-        # Ensure CSV parent directory exists
-        ensure_csv_parent_exists(csv)
-
-        display_common_header("GifLab Compression Pipeline")
-        display_path_info("Input directory", validated_raw_dir)
-        display_path_info("Output CSV", csv, "📊")
-        display_path_info("Renders directory", path_config.RENDERS_DIR, "🎬")
-        display_path_info("Bad GIFs directory", path_config.BAD_GIFS_DIR, "❌")
-        display_worker_info(validated_workers)
-        click.echo(f"🔄 Resume: {'Yes' if resume else 'No'}")
-        if pipelines and selected_pipes:
-            click.echo(f"🎛️  Selected pipelines: {len(selected_pipes)} from {pipelines}")
-        click.echo(
-            f"🗂️  Directory source detection: {'Yes' if detect_source_from_directory else 'No'}"
-        )
-
-        if dry_run:
-            click.echo("🔍 DRY RUN MODE - Analysis only")
-            _run_dry_run(pipeline, validated_raw_dir, csv)
+        # Determine analysis approach
+        if preset:
+            # Use targeted preset approach
+            try:
+                click.echo(f"🎯 Using targeted preset: {preset}")
+                
+                if estimate_time:
+                    # Quick time estimate for preset
+                    synthetic_gifs = runner.get_targeted_synthetic_gifs()
+                    test_pipelines = runner.generate_targeted_pipelines(preset)
+                    total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+                    estimated_time = runner._estimate_execution_time(total_jobs)
+                    
+                    click.echo(f"📊 Total jobs: {total_jobs:,}")
+                    click.echo(f"⏱️ Estimated time: {estimated_time}")
+                    click.echo("✅ Time estimation complete. Remove --estimate-time to run analysis.")
+                    return
+                
+                # Run targeted analysis
+                elimination_result = runner.run_targeted_experiment(
+                    preset_id=preset,
+                    quality_threshold=threshold,
+                    use_targeted_gifs=True,
+                )
+                analysis_type = f"targeted preset ({preset})"
+                
+            except Exception as e:
+                click.echo(f"❌ Error with preset '{preset}': {e}")
+                click.echo("💡 Use --list-presets to see available presets")
+                return
         else:
-            click.echo("🚀 Starting compression pipeline...")
-            _run_pipeline(pipeline, validated_raw_dir, csv)
+            # Use traditional sampling approach
+            from ..dynamic_pipeline import generate_all_pipelines
+            
+            all_pipelines = generate_all_pipelines()
+            
+            if sampling != "full":
+                test_pipelines = runner.select_pipelines_intelligently(all_pipelines, sampling)
+                strategy_info = runner.SAMPLING_STRATEGIES[sampling]
+                click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
+                click.echo(f"📋 {strategy_info.description}")
+                analysis_type = f"sampling ({sampling})"
+            elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
+                test_pipelines = all_pipelines[:max_pipelines]
+                click.echo(f"⚠️ Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+                analysis_type = f"limited testing ({max_pipelines} pipelines)"
+            else:
+                test_pipelines = all_pipelines
+                click.echo("🔬 Full comprehensive testing: Using all available pipelines")
+                analysis_type = "full comprehensive"
+
+            # Calculate job estimates
+            synthetic_gifs = runner.generate_synthetic_gifs()
+            total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+            estimated_time = runner._estimate_execution_time(total_jobs)
+
+            if estimate_time:
+                click.echo(f"📊 Total jobs: {total_jobs:,}")
+                click.echo(f"⏱️ Estimated time: {estimated_time}")
+                click.echo("✅ Time estimation complete. Remove --estimate-time to run analysis.")
+                return
+
+            # Run traditional analysis
+            elimination_result = runner.run_analysis(
+                test_pipelines=test_pipelines,
+                quality_threshold=threshold,
+                use_targeted_gifs=False,
+            )
+
+        # Display results header
+        click.echo("🧪 GifLab Compression Analysis & Optimization")
+        click.echo(f"📁 Input directory: {validated_raw_dir}")
+        click.echo(f"📁 Output directory: {output_dir}")
+        click.echo(f"👥 Workers: {validated_workers}")
+        click.echo(f"🎯 Quality threshold: {threshold}")
+        click.echo(f"🔄 Resume enabled: {resume}")
+        click.echo(f"🧠 Analysis approach: {analysis_type}")
+
+        # Display GPU status
+        if use_gpu:
+            click.echo("🚀 GPU acceleration: Enabled")
+        else:
+            click.echo("🖥️ GPU acceleration: Disabled")
+
+        # Display results summary
+        click.echo("\n📊 Analysis Results Summary:")
+        click.echo(f"   📉 Eliminated pipelines: {len(elimination_result.eliminated_pipelines)}")
+        click.echo(f"   ✅ Retained pipelines: {len(elimination_result.retained_pipelines)}")
+        
+        total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
+        if total_pipelines > 0:
+            elimination_rate = (len(elimination_result.eliminated_pipelines) / total_pipelines * 100)
+            click.echo(f"   📈 Elimination rate: {elimination_rate:.1f}%")
+
+        # Show top performers
+        if elimination_result.retained_pipelines:
+            click.echo("\n🏆 Top performing pipelines:")
+            for i, pipeline in enumerate(list(elimination_result.retained_pipelines)[:5], 1):
+                click.echo(f"   {i}. {pipeline}")
+
+        click.echo("\n✅ Compression analysis complete!")
+        click.echo(f"📁 Results saved to: {output_dir}")
+        click.echo(f"💡 Use 'giflab select-pipelines {output_dir}/latest/results.csv --top 3' to get production configs")
 
     except KeyboardInterrupt:
-        handle_keyboard_interrupt("Pipeline")
+        handle_keyboard_interrupt("Compression analysis")
     except Exception as e:
-        handle_generic_error("Pipeline", e)
-
-
-def _run_dry_run(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path) -> None:
-    """Run dry-run analysis showing what work would be done."""
-
-    # Discover GIFs
-    click.echo("\n📋 Discovering GIF files...")
-    gif_paths = pipeline.discover_gifs(raw_dir)
-
-    if not gif_paths:
-        click.echo(f"⚠️  No GIF files found in {raw_dir}")
-        return
-
-    click.echo(f"✅ Found {len(gif_paths)} GIF files")
-
-    # Generate jobs
-    click.echo("\n🔧 Generating compression jobs...")
-    all_jobs = pipeline.generate_jobs(gif_paths)
-
-    if not all_jobs:
-        click.echo("⚠️  No valid compression jobs could be generated")
-        return
-
-    # Filter existing jobs if resume is enabled
-    jobs_to_run = pipeline.filter_existing_jobs(all_jobs, csv_path)
-
-    # Show summary
-    engines = DEFAULT_COMPRESSION_CONFIG.ENGINES or []
-    frame_ratios = DEFAULT_COMPRESSION_CONFIG.FRAME_KEEP_RATIOS or []
-    color_counts = DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS or []
-    lossy_levels = DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS or []
-
-    variants_per_gif = (
-        len(engines) * len(frame_ratios) * len(color_counts) * len(lossy_levels)
-    )
-
-    click.echo("\n📊 Compression Matrix:")
-    click.echo(f"   • Engines: {', '.join(engines)}")
-    click.echo(f"   • Frame ratios: {', '.join(f'{r:.2f}' for r in frame_ratios)}")
-    click.echo(f"   • Color counts: {', '.join(str(c) for c in color_counts)}")
-    click.echo(f"   • Lossy levels: {', '.join(str(level) for level in lossy_levels)}")
-    click.echo(f"   • Variants per GIF: {variants_per_gif}")
-
-    click.echo("\n📈 Job Summary:")
-    click.echo(f"   • Total jobs: {len(all_jobs)}")
-    click.echo(f"   • Jobs to run: {len(jobs_to_run)}")
-    click.echo(f"   • Jobs to skip: {len(all_jobs) - len(jobs_to_run)}")
-
-    if not jobs_to_run:
-        click.echo("✅ All jobs already completed")
-    else:
-        estimated_time = estimate_pipeline_time(len(jobs_to_run))
-        click.echo(f"⏱️  Estimated runtime: {estimated_time}")
-
-    # Show sample jobs
-    if jobs_to_run:
-        click.echo("\n📝 Sample jobs to execute:")
-        for i, job in enumerate(jobs_to_run[:5]):  # Show first 5 jobs
-            click.echo(f"   {i+1}. {job.metadata.orig_filename}")
-            click.echo(
-                f"      • {job.engine}, lossy={job.lossy}, frames={job.frame_keep_ratio:.2f}, colors={job.color_keep_count}"
-            )
-            click.echo(f"      • Output: {job.output_path}")
-
-        if len(jobs_to_run) > 5:
-            click.echo(f"   ... and {len(jobs_to_run) - 5} more jobs")
-
-
-def _run_pipeline(pipeline: CompressionPipeline, raw_dir: Path, csv_path: Path) -> None:
-    """Execute the compression pipeline."""
-
-    result = pipeline.run(raw_dir, csv_path)
-
-    # Report results
-    status = result["status"]
-    processed = result["processed"]
-    failed = result["failed"]
-    skipped = result["skipped"]
-
-    click.echo("\n📊 Pipeline Results:")
-    click.echo(f"   • Status: {status}")
-    click.echo(f"   • Processed: {processed}")
-    click.echo(f"   • Failed: {failed}")
-    click.echo(f"   • Skipped: {skipped}")
-
-    if "total_jobs" in result:
-        click.echo(f"   • Total jobs: {result['total_jobs']}")
-
-    if "csv_path" in result:
-        click.echo(f"   • Results saved to: {result['csv_path']}")
-
-    if status == "completed":
-        click.echo("✅ Pipeline completed successfully!")
-    elif status == "no_files":
-        click.echo("⚠️  No GIF files found to process")
-    elif status == "no_jobs":
-        click.echo("⚠️  No valid compression jobs could be generated")
-    elif status == "all_complete":
-        click.echo("✅ All jobs were already completed")
-    elif status == "error":
-        error_msg = result.get("error", "Unknown error")
-        click.echo(f"❌ Pipeline failed: {error_msg}")
-        sys.exit(1)
-    else:
-        click.echo(f"⚠️  Pipeline completed with status: {status}")
+        handle_generic_error("Compression analysis", e)

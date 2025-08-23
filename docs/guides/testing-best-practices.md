@@ -53,7 +53,7 @@ mkdir test-workspace/manual/feature-debugging-YYYYMMDD
 cd test-workspace/manual/feature-debugging-YYYYMMDD
 
 # Run your tests
-python -m giflab experiment sample.gif
+python -m giflab run sample.gif
 
 # Clean up when done (see cleanup section)
 ```
@@ -158,7 +158,7 @@ rm -rf ../gifski-memory-leak-20240728
 ```bash
 # DON'T DO THIS - pollutes root directory
 cd /
-python -m giflab experiment sample.gif  # Creates files in root
+python -m giflab run sample.gif  # Creates files in root
 mkdir debug_test                        # Clutters root
 # ... leaves mess everywhere ...
 ```

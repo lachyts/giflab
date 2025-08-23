@@ -51,17 +51,17 @@ GifLab underwent a comprehensive test infrastructure optimization that transform
 **Critical Fix Applied**:
 ```python
 # ❌ BROKEN PATTERN (Before)
-@patch('giflab.experimental.ExperimentalRunner')
+@patch('giflab.core.GifLabRunner')
 def test_integration(self, mock_class, tmp_path):
     mock_instance = MagicMock()
     mock_class.return_value = mock_instance
     
     # BUG: Creates real object instead of using mock
-    eliminator = ExperimentalRunner(tmp_path)  # 82.47s execution
+    eliminator = GifLabRunner(tmp_path)  # 82.47s execution
     result = eliminator.run_experimental_analysis()
 
 # ✅ FIXED PATTERN (After)
-@patch('giflab.experimental.ExperimentalRunner')
+@patch('giflab.core.GifLabRunner')
 def test_integration(self, mock_class, tmp_path):
     mock_instance = MagicMock()
     mock_class.return_value = mock_instance
@@ -189,7 +189,7 @@ pytest tests/ --tb=short --durations=20 --maxfail=10
 
 #### Pattern A: Class-Level Mocking (Recommended)
 ```python
-@patch('giflab.experimental.ExperimentalRunner')
+@patch('giflab.core.GifLabRunner')
 def test_integration(self, mock_class, tmp_path):
     mock_instance = MagicMock()
     mock_class.return_value = mock_instance
@@ -206,7 +206,7 @@ def test_integration(self, mock_class, tmp_path):
 #### Pattern B: Method-Level Mocking (Alternative)
 ```python
 def test_integration(self, tmp_path):
-    eliminator = ExperimentalRunner(tmp_path)
+    eliminator = GifLabRunner(tmp_path)
     with patch.object(eliminator, 'run_experimental_analysis') as mock_method:
         mock_method.return_value = mock_result
         result = eliminator.run_experimental_analysis()
@@ -217,8 +217,8 @@ def test_integration(self, tmp_path):
 ```python
 @pytest.fixture
 def fast_experimental_runner(tmp_path, monkeypatch):
-    """Provide ExperimentalRunner with fast operations."""
-    runner = ExperimentalRunner(tmp_path)
+    """Provide GifLabRunner with fast operations."""
+    runner = GifLabRunner(tmp_path)
     
     # Mock only expensive operations, keep business logic
     monkeypatch.setattr(runner, '_run_comprehensive_testing', lambda: mock_result)

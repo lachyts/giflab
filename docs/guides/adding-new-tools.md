@@ -1,6 +1,6 @@
 # 🔧 Adding New GIF Compression Tools
 
-This guide explains how to add new GIF compression tools to GifLab's experimental framework.
+This guide explains how to add new GIF compression tools to GifLab's compression framework.
 
 ---
 
@@ -331,7 +331,7 @@ result = tool.compress(
 poetry run python -m giflab test-tool your_tool --input test.gif
 
 # Test in experimental framework
-poetry run python -m giflab experiment --strategies your_tool
+poetry run python -m giflab run --strategies your_tool
 ```
 
 ### Automated Testing

@@ -8,15 +8,15 @@ This file provides project-specific guidance for AI assistants working with the 
 
 ### ❌ **WRONG** - These will fail with ModuleNotFoundError:
 ```bash
-python -m giflab experiment --preset quick-test
+python -m giflab run --preset quick-test
 python -m pytest tests/
 python -c "from giflab.metrics import calculate_metrics"
-PYTHONPATH=src python -m giflab experiment
+PYTHONPATH=src python -m giflab run
 ```
 
 ### ✅ **CORRECT** - Always use Poetry:
 ```bash
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 poetry run pytest tests/
 poetry run python -c "from giflab.metrics import calculate_metrics"
 ```
@@ -44,11 +44,11 @@ poetry run pytest tests/ --tb=short
 
 ### GifLab Operations
 ```bash
-# Experimental pipeline
-poetry run python -m giflab experiment --preset frame-focus
-poetry run python -m giflab experiment --sampling representative
+# Pipeline analysis and optimization
+poetry run python -m giflab run --preset frame-focus
+poetry run python -m giflab run --sampling representative
 
-# Production pipeline
+# Large-scale processing
 poetry run python -m giflab run data/raw --workers 8
 
 # Analysis tools

@@ -13,7 +13,7 @@ The preset system is designed to be easily extensible. Developers can create cus
 All presets follow the same basic structure using the `ExperimentPreset` dataclass:
 
 ```python
-from giflab.experimental.targeted_presets import ExperimentPreset, SlotConfiguration
+from giflab.core.targeted_presets import ExperimentPreset, SlotConfiguration
 
 preset = ExperimentPreset(
     name="Descriptive Name",
@@ -433,7 +433,7 @@ def create_safe_preset(name: str, config: dict) -> Optional[ExperimentPreset]:
 ### Unit Testing
 ```python
 import pytest
-from giflab.experimental.targeted_presets import ExperimentPreset, SlotConfiguration
+from giflab.core.targeted_presets import ExperimentPreset, SlotConfiguration
 
 def test_custom_preset_validation():
     """Test that custom preset validates correctly."""
@@ -465,8 +465,8 @@ def test_preset_pipeline_generation():
 ### Integration Testing
 ```python
 def test_preset_with_experimental_runner():
-    """Test preset integration with ExperimentalRunner."""
-    from giflab.experimental.runner import ExperimentalRunner
+    """Test preset integration with GifLabRunner."""
+    from giflab.core.runner import GifLabRunner
     from giflab.experimental.targeted_presets import PRESET_REGISTRY
     
     # Register custom preset
@@ -474,7 +474,7 @@ def test_preset_with_experimental_runner():
     PRESET_REGISTRY.register("test-integration", custom_preset)
     
     # Test with runner
-    runner = ExperimentalRunner(use_cache=False)
+    runner = GifLabRunner(use_cache=False)
     pipelines = runner.generate_targeted_pipelines("test-integration")
     
     assert len(pipelines) > 0

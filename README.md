@@ -17,37 +17,29 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 - **Frame keep ratios**: 1.00, 0.90, 0.80, 0.70, 0.50
 - **Palette sizes**: 256, 128, 64 colors  
 - **Lossy levels**: 0%, 60%, 100% (universal percentages, mapped to engine-specific ranges)
-- **Production Engines**: **gifsicle**, **Animately** (main pipeline)
-- **Experimental Engines**: **ImageMagick**, **FFmpeg**, **gifski** (experimental pipeline)
+- **Engines**: **gifsicle**, **Animately**, **ImageMagick**, **FFmpeg**, **gifski**
 
 Each variant is measured for file size, comprehensive quality metrics, render time, and **efficiency score** (balanced 50/50 weighting of quality and compression).
 
-### Dual Pipeline Architecture
+### Unified Compression Pipeline
 
-GifLab uses a **two-pipeline approach** to balance stability and innovation:
+GifLab provides a **comprehensive compression pipeline** with access to all major GIF processing engines:
 
-#### 🏭 **Production Pipeline** (`run` command)
-- **Engines**: gifsicle, Animately (proven, reliable)
-- **Purpose**: Large-scale processing, production workflows
-- **Usage**: `poetry run python -m giflab run data/raw`
-
-#### 🧪 **Experimental Pipeline** (`experiment` command)  
-- **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
 - **Purpose**: Comprehensive testing, pipeline elimination, finding optimal combinations
-- **Traditional Usage**: `poetry run python -m giflab experiment --sampling representative`
-- **🆕 Targeted Presets**: `poetry run python -m giflab experiment --preset frame-focus` (**93-99% more efficient!**)
+- **Usage**: `poetry run python -m giflab run --sampling representative`
+- **🆕 Targeted Presets**: `poetry run python -m giflab run --preset frame-focus` (**93-99% more efficient!**)
 
-| Engine | Pipeline | Color | Frame | Lossy | Best For |
-|--------|----------|-------|-------|--------|----------|
-| **gifsicle** | Both | ✅ | ✅ | ✅ | Fast, lightweight, widely compatible |
-| **Animately** | Both | ✅ | ✅ | ✅ | Complex gradients, photo-realistic content |
-| **ImageMagick** | Experimental | ✅ | ✅ | ✅ | General-purpose, wide format support |
-| **FFmpeg** | Experimental | ✅ | ✅ | ✅ | High-quality video-based processing |
-| **gifski** | Experimental | ❌ | ❌ | ✅ | Highest quality lossy compression |
+| Engine | Color | Frame | Lossy | Best For |
+|--------|-------|-------|--------|----------|
+| **gifsicle** | ✅ | ✅ | ✅ | Fast, lightweight, widely compatible |
+| **Animately** | ✅ | ✅ | ✅ | Complex gradients, photo-realistic content |
+| **ImageMagick** | ✅ | ✅ | ✅ | General-purpose, wide format support |
+| **FFmpeg** | ✅ | ✅ | ✅ | High-quality video-based processing |
+| **gifski** | ❌ | ❌ | ✅ | Highest quality lossy compression |
 
-## 🎯 **NEW: Targeted Experiment Presets**
+## 🎯 **Targeted Presets**
 
-**Transform your experiment workflow with 93-99% efficiency gains!**
+**Transform your compression workflow with 93-99% efficiency gains!**
 
 Instead of generating all 935 possible pipeline combinations and sampling from them, targeted presets create only the specific combinations you need for focused research studies.
 
@@ -55,16 +47,16 @@ Instead of generating all 935 possible pipeline combinations and sampling from t
 
 ```bash
 # List all available presets
-poetry run python -m giflab experiment --list-presets
+poetry run python -m giflab run --list-presets
 
 # Compare all frame reduction algorithms (5 pipelines vs 935)
-poetry run python -m giflab experiment --preset frame-focus
+poetry run python -m giflab run --preset frame-focus
 
 # Compare color quantization methods (17 pipelines vs 935)  
-poetry run python -m giflab experiment --preset color-optimization
+poetry run python -m giflab run --preset color-optimization
 
 # Quick testing preset (2 pipelines)
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 ```
 
 ### Efficiency Comparison
@@ -87,22 +79,23 @@ poetry run python -m giflab experiment --preset quick-test
 
 📚 **Learn more:** [Targeted Presets Quick Start Guide](docs/quickstart/targeted-presets-quickstart.md)
 
-### Dual-Mode Workflow
+### Analysis Workflow
 
-GifLab is intentionally split into **two complementary modes**:
+GifLab provides a **comprehensive analysis workflow** for systematic optimization:
 
-1. **Experimental Mode** – Generate a *small* synthetic or curated GIF set and exhaustively test *all* valid tool-pipelines (produced by the dynamic matrix generator).  This surfaces the most promising combinations **before** touching large datasets.
-2. **Production Mode** – Run the *selected* top pipelines on full datasets (thousands of GIFs) to produce final compressed outputs and metric CSVs.
+1. **Explore** – Generate synthetic GIFs and test pipeline combinations with intelligent sampling or targeted presets to surface the most promising combinations.
+2. **Analyze** – Use built-in analysis tools to identify optimal pipelines for your content type.
+3. **Scale** – Apply selected pipelines to full datasets with optimal performance.
 
 Workflow summary:
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| 1. Explore | `giflab experiment --sampling representative` | Tests pipeline combinations on synthetic GIFs, eliminates underperformers, writes results to `results/experiments/`. |
-| 2. Analyse | Use notebooks / `giflab select-pipelines` | Analyze results and select top performing pipelines for production. |
-| 3. Run | `giflab run data/raw/` | Executes chosen pipelines at scale, writing results and renders. |
+| 1. Explore | `giflab run --sampling representative` or `--preset frame-focus` | Tests pipeline combinations on synthetic GIFs, eliminates underperformers, writes results to `results/runs/`. |
+| 2. Analyse | Use notebooks / `giflab select-pipelines` | Analyze results and select top performing pipelines for your use case. |
+| 3. Scale | `giflab run data/raw/ --preset top-performers` | Apply optimized pipelines to full datasets for production use. |
 
-The **Experiment → Analyse → Run** loop keeps production runs fast and data-driven.
+The **Explore → Analyze → Scale** workflow ensures data-driven compression optimization.
 
 > ⚠️ **Job-count warning**: With dynamic matrix mode enabled (default from S6
 > onward) GifLab will test *every* combination of frame-ratio × palette size ×
@@ -141,14 +134,14 @@ GifLab's experimental framework tests multiple algorithmic combinations to:
 
 *See [ML Strategy Documentation](docs/technical/ml-strategy.md) for detailed implementation plans.*
 
-### Integration with Main Pipeline
-After experimental validation, apply findings to your main compression pipeline:
+### Integration with Production Workflows
+After analysis validation, apply findings to your production compression pipeline:
 ```bash
 # 1. Run experiments to identify optimal strategy
-poetry run python -m giflab experiment --sampling representative
+poetry run python -m giflab run --sampling representative
 
 # 2. Select top performing pipelines
-poetry run python -m giflab select-pipelines results/experiments/latest/enhanced_streaming_results.csv --top 3 -o winners.yaml
+poetry run python -m giflab select-pipelines results/runs/latest/enhanced_streaming_results.csv --top 3 -o winners.yaml
 
 # 3. Run full pipeline with optimized settings
 poetry run python -m giflab run data/raw --pipelines winners.yaml
@@ -343,13 +336,13 @@ Traditional pipeline comparison fails when pipelines achieve different quality l
 
 ```bash
 # Run comprehensive experiments with Pareto analysis
-poetry run python -m giflab experiment --sampling representative
+poetry run python -m giflab run --sampling representative
 
 # View experiment results and top performers
-poetry run python -m giflab select-pipelines results/experiments/latest/enhanced_streaming_results.csv --top 5
+poetry run python -m giflab select-pipelines results/runs/latest/enhanced_streaming_results.csv --top 5
 
 # Use quick sampling for faster testing during development
-poetry run python -m giflab experiment --sampling quick
+poetry run python -m giflab run --sampling quick
 ```
 
 ### Interpretation Guide
@@ -388,10 +381,10 @@ This answers your key question: **"Which pipeline provides better file size for 
 poetry install
 
 # Test all compression strategies with intelligent sampling
-poetry run python -m giflab experiment --sampling representative
+poetry run python -m giflab run --sampling representative
 
 # Pick top 3 pipelines by SSIM
-poetry run python -m giflab select-pipelines results/experiments/latest/enhanced_streaming_results.csv --top 3 -o winners.yaml
+poetry run python -m giflab select-pipelines results/runs/latest/enhanced_streaming_results.csv --top 3 -o winners.yaml
 
 # Run production compression on full dataset with chosen pipelines
 poetry run python -m giflab run data/raw --pipelines winners.yaml
@@ -402,7 +395,7 @@ poetry run python -m giflab tag results.csv data/raw
 
 ## Pipeline Usage Examples
 
-### 🏭 Production Pipeline (Reliable, Fast)
+### 🏭 Standard Workflow (Reliable, Fast)
 ```bash
 # Standard production processing with gifsicle + Animately
 poetry run python -m giflab run data/raw
@@ -414,23 +407,23 @@ poetry run python -m giflab run data/raw --workers 8 --resume
 poetry run python -m giflab run data/raw --pipelines custom_pipelines.yaml
 ```
 
-### 🧪 Experimental Pipeline (All 5 Engines)
+### 🧪 Comprehensive Testing (All 5 Engines)
 ```bash
 # Test all 5 engines with comprehensive sampling
-poetry run python -m giflab experiment --sampling representative
+poetry run python -m giflab run --sampling representative
 
 # Quick experimental test for development
-poetry run python -m giflab experiment --sampling quick
+poetry run python -m giflab run --sampling quick
 
 # Full comprehensive testing (slower but thorough)
-poetry run python -m giflab experiment --sampling full
+poetry run python -m giflab run --sampling full
 
 # Targeted testing with strategic synthetic GIFs
-poetry run python -m giflab experiment --sampling targeted
+poetry run python -m giflab run --sampling targeted
 ```
 
 ### 🔬 Engine-Specific Testing
-To test specific engines, use the experimental pipeline which automatically includes:
+To test specific engines, use the compression pipeline which automatically includes:
 - **ImageMagick**: General-purpose processing
 - **FFmpeg**: High-quality video-based compression  
 - **gifski**: Premium lossy compression quality
@@ -448,14 +441,14 @@ poetry run python -m giflab run data/raw --workers 8 --resume
 **For Engine Comparison:**
 ```bash  
 # Compare all engines to find the best for your content
-poetry run python -m giflab experiment --sampling representative
-poetry run python -m giflab select-pipelines results/experiments/latest/enhanced_streaming_results.csv --top 3
+poetry run python -m giflab run --sampling representative
+poetry run python -m giflab select-pipelines results/runs/latest/enhanced_streaming_results.csv --top 3
 ```
 
 **For Research & Development:**
 ```bash
 # Full experimental testing with comprehensive analysis
-poetry run python -m giflab experiment --sampling full --use-gpu
+poetry run python -m giflab run --sampling full --use-gpu
 ```
 
 ## Project Structure
@@ -634,14 +627,14 @@ make clean-temp
 ### 🗑️ Clear All Cached Data
 If you need to reset all cached pipeline results (SQLite database):
 ```bash
-poetry run python -m giflab experiment --clear-cache --estimate-time
+poetry run python -m giflab run --clear-cache --estimate-time
 ```
 This clears all cached test results from `results/cache/pipeline_results_cache.db`.
 
 ### 🔄 Force Fresh Results (Without Clearing Cache)
 To run fresh tests while keeping cached data intact:
 ```bash
-poetry run python -m giflab experiment --no-cache --sampling quick
+poetry run python -m giflab run --use-cache=false --sampling quick
 ```
 
 ### 📊 Check Cache Performance

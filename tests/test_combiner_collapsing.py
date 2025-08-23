@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from giflab.dynamic_pipeline import Pipeline, PipelineStep
-from giflab.experimental.runner import (
+from giflab.core.runner import (
     ExperimentalConfig,
     ExperimentalPipeline,
     ExperimentJob,

@@ -1,18 +1,18 @@
-# CLI Reference: Targeted Experiment Presets
+# CLI Reference: Targeted Presets
 
-This reference provides complete documentation for all command-line options and usage patterns for the targeted experiment presets system.
+This reference provides complete documentation for all command-line options and usage patterns for the targeted presets system.
 
 ## Basic Command Structure
 
 ```bash
-poetry run python -m giflab experiment [OPTIONS]
+poetry run python -m giflab run [OPTIONS]
 ```
 
 ## Preset-Based Options
 
 ### `--preset, -p TEXT`
 
-Use a predefined experiment preset.
+Use a predefined compression preset.
 
 **Usage**: `--preset PRESET_ID` or `-p PRESET_ID`
 
@@ -28,12 +28,12 @@ Use a predefined experiment preset.
 **Examples**:
 ```bash
 # Basic preset usage
-poetry run python -m giflab experiment --preset frame-focus
-poetry run python -m giflab experiment -p color-optimization
+poetry run python -m giflab run --preset frame-focus
+poetry run python -m giflab run -p color-optimization
 
 # Preset with additional options
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.1
-poetry run python -m giflab experiment -p quick-test --output-dir test_results
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.1
+poetry run python -m giflab run -p quick-test --output-dir test_results
 ```
 
 ### `--list-presets`
@@ -54,7 +54,7 @@ lossy-quality-sweep: Evaluate lossy compression effectiveness across different e
 
 **Example**:
 ```bash
-poetry run python -m giflab experiment --list-presets
+poetry run python -m giflab run --list-presets
 ```
 
 ---
@@ -200,23 +200,23 @@ Enable GPU acceleration if available.
 
 ```bash
 # Simple preset execution
-poetry run python -m giflab experiment --preset frame-focus
+poetry run python -m giflab run --preset frame-focus
 
 # Preset with custom output directory
-poetry run python -m giflab experiment --preset color-optimization --output-dir color_study
+poetry run python -m giflab run --preset color-optimization --output-dir color_study
 
 # Preset with custom quality threshold
-poetry run python -m giflab experiment --preset lossy-quality-sweep --quality-threshold 0.1
+poetry run python -m giflab run --preset lossy-quality-sweep --quality-threshold 0.1
 
 # Preset with performance options
-poetry run python -m giflab experiment --preset tool-comparison-baseline --use-cache --use-gpu
+poetry run python -m giflab run --preset tool-comparison-baseline --use-cache --use-gpu
 ```
 
 ### Custom Slot Configurations
 
 ```bash
 # Frame algorithm comparison
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot frame=* \
   --lock-slot color=ffmpeg-color \
   --lock-slot lossy=animately-advanced-lossy \
@@ -224,14 +224,14 @@ poetry run python -m giflab experiment \
   --slot-params lossy=level:40
 
 # Color algorithm comparison with specific tools
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot color=ffmpeg-color,gifsicle-color,imagemagick-color \
   --lock-slot frame=animately-frame \
   --lock-slot lossy=none-lossy \
   --slot-params frame=ratio:1.0
 
 # Multi-dimensional comparison
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot frame=animately-frame,ffmpeg-frame \
   --variable-slot color=ffmpeg-color,gifsicle-color \
   --lock-slot lossy=none-lossy \
@@ -239,7 +239,7 @@ poetry run python -m giflab experiment \
   --slot-params color=colors:[64,32]
 
 # Lossy compression study
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot lossy=* \
   --lock-slot frame=none-frame \
   --lock-slot color=ffmpeg-color \
@@ -251,21 +251,21 @@ poetry run python -m giflab experiment \
 
 ```bash
 # High-quality study with strict threshold
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --preset png-optimization \
   --quality-threshold 0.02 \
   --output-dir high_quality_study \
   --use-gpu
 
 # Development testing with caching
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --preset quick-test \
   --use-cache \
   --use-targeted-gifs \
   --output-dir dev_test
 
 # Custom dithering study
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot color=ffmpeg-color-floyd,ffmpeg-color-bayer2,imagemagick-color-floyd \
   --lock-slot frame=none-frame \
   --lock-slot lossy=none-lossy \
@@ -327,7 +327,7 @@ poetry run python -m giflab experiment \
 **Solution**: Use `--list-presets` to see available presets.
 
 ```bash
-poetry run python -m giflab experiment --list-presets
+poetry run python -m giflab run --list-presets
 ```
 
 #### `Error: Invalid slot name: 'slot-name'`
@@ -395,13 +395,13 @@ print('Lossy tools:', [t.NAME for t in tools_for('lossy_compression')])
 #### Validate Configuration
 ```bash
 # Test configuration with quick-test preset first
-poetry run python -m giflab experiment --preset quick-test --output-dir validation_test
+poetry run python -m giflab run --preset quick-test --output-dir validation_test
 ```
 
 #### Debug Mode
 ```bash
 # Enable verbose logging for debugging
-poetry run python -m giflab experiment --preset frame-focus --output-dir debug_test -v
+poetry run python -m giflab run --preset frame-focus --output-dir debug_test -v
 ```
 
 ---
@@ -473,7 +473,7 @@ BASE_DIR="results_$(date +%Y%m%d)"
 
 for preset in "${PRESETS[@]}"; do
     echo "Running $preset experiment..."
-    poetry run python -m giflab experiment \
+    poetry run python -m giflab run \
         --preset "$preset" \
         --output-dir "$BASE_DIR/$preset" \
         --use-cache \
@@ -535,7 +535,7 @@ jobs:
     
     - name: Run quick validation
       run: |
-        poetry run python -m giflab experiment --preset quick-test --output-dir ci_test
+        poetry run python -m giflab run --preset quick-test --output-dir ci_test
     
     - name: Archive results
       uses: actions/upload-artifact@v2

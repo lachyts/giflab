@@ -1,6 +1,6 @@
-"""Analysis tools for experimental compression results.
+"""Analysis tools for compression results.
 
-This module provides tools to analyze and visualize experimental compression
+This module provides tools to analyze and visualize compression
 results, identify optimal strategies, detect anomalies, and generate
 comprehensive reports for decision-making.
 """
@@ -42,14 +42,14 @@ class AnomalyDetection:
         return f"Found {len(self.outliers)} outliers and {len(self.suspicious_patterns)} suspicious patterns"
 
 
-class ExperimentalAnalyzer:
-    """Analyzer for experimental compression results."""
+class ResultsAnalyzer:
+    """Analyzer for compression results."""
 
     def __init__(self, results_csv: Path):
         """Initialize analyzer with results CSV file.
 
         Args:
-            results_csv: Path to experimental results CSV file
+            results_csv: Path to results CSV file
         """
         self.results_csv = results_csv
         self.df = self._load_results()
@@ -372,7 +372,7 @@ class ExperimentalAnalyzer:
         return analysis
 
     def create_visualizations(self, output_dir: Path) -> list[Path]:
-        """Create visualization charts for the experimental results.
+        """Create visualization charts for the results.
 
         Args:
             output_dir: Directory to save visualization files
@@ -574,16 +574,16 @@ class ExperimentalAnalyzer:
 def analyze_results(
     results_csv: Path, output_dir: Path | None = None
 ) -> dict[str, Any]:
-    """Analyze experimental results and generate comprehensive report.
+    """Analyze results and generate comprehensive report.
 
     Args:
-        results_csv: Path to experimental results CSV file
+        results_csv: Path to results CSV file
         output_dir: Directory to save analysis outputs (optional)
 
     Returns:
         Dictionary containing analysis results
     """
-    analyzer = ExperimentalAnalyzer(results_csv)
+    analyzer = ResultsAnalyzer(results_csv)
 
     # Generate analysis
     analysis = {

@@ -348,19 +348,19 @@ python -m giflab run data/raw --workers 8 --resume
 **🧪 Experimental Testing (All 5 Engines):**
 ```bash
 # Test all engines with comprehensive matrix
-python -m giflab experiment --matrix
+python -m giflab run --matrix
 
 # Quick experimental test
-python -m giflab experiment --matrix --gifs 5
+python -m giflab run --matrix --gifs 5
 
 # Experimental with custom sample GIFs
-python -m giflab experiment --matrix --sample-gifs-dir my_test_gifs/
+python -m giflab run --matrix --sample-gifs-dir my_test_gifs/
 ```
 
 **📊 Workflow Recommendations:**
 ```bash
 # 1. Find best engines for your content
-python -m giflab experiment --matrix --gifs 10
+python -m giflab run --matrix --gifs 10
 
 # 2. Use production pipeline for large-scale processing
 python -m giflab run data/raw --workers 8 --resume
@@ -422,7 +422,7 @@ Each row in your results CSV represents one compressed variant of one GIF:
 
 **Quick recommendations:**
 - **Production work**: Use `python -m giflab run` (gifsicle + Animately, proven reliability)
-- **Engine comparison**: Use `python -m giflab experiment --matrix` (tests all 5 engines)
+- **Engine comparison**: Use `python -m giflab run --matrix` (tests all 5 engines)
 - **Photo-like GIFs**: Experimental pipeline will test gifski and Animately automatically
 - **Best quality**: Experimental pipeline includes gifski (highest quality compression)
 - **Large datasets**: Production pipeline optimized for scale and stability

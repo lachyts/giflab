@@ -1,4 +1,4 @@
-"""Built-in experiment presets for common research scenarios.
+"""Built-in presets for common research scenarios.
 
 This module provides pre-configured presets for typical GIF compression
 research studies, implementing the use cases defined in Phase 1 analysis.
@@ -20,11 +20,11 @@ Efficiency Gains:
 
 Usage:
     # Access presets via global registry
-    from giflab.experimental.targeted_presets import PRESET_REGISTRY
+    from giflab.core.targeted_presets import PRESET_REGISTRY
     preset = PRESET_REGISTRY.get("frame-focus")
     
     # Or use via CLI
-    poetry run python -m giflab experiment --preset frame-focus
+    poetry run python -m giflab run --preset frame-focus
 """
 
 from .targeted_presets import PRESET_REGISTRY, ExperimentPreset, SlotConfiguration

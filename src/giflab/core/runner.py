@@ -1,6 +1,6 @@
-"""Core experimental runner for systematic pipeline testing.
+"""Core pipeline runner for systematic pipeline testing and optimization.
 
-This module contains the main ExperimentalRunner class responsible for
+This module contains the main GifLabRunner class responsible for
 systematic testing and analysis of pipeline combinations.
 """
 
@@ -44,8 +44,8 @@ from .targeted_presets import ExperimentPreset
 
 
 @dataclass
-class ExperimentResult:
-    """Result of experimental pipeline analysis."""
+class AnalysisResult:
+    """Result of pipeline analysis and elimination testing."""
 
     eliminated_pipelines: set[str] = field(default_factory=set)
     retained_pipelines: set[str] = field(default_factory=set)
@@ -64,10 +64,10 @@ class ExperimentResult:
     )
 
 
-class ExperimentalRunner:
-    """Systematic experimental pipeline testing through competitive analysis."""
+class GifLabRunner:
+    """Systematic pipeline testing and analysis for GIF compression optimization."""
 
-    # Available sampling strategies (imported from experimental.sampling)
+    # Available sampling strategies (imported from core.sampling)
     SAMPLING_STRATEGIES = SAMPLING_STRATEGIES
 
     # Constants for progress tracking and memory management
@@ -76,7 +76,7 @@ class ExperimentalRunner:
 
     def __init__(
         self,
-        output_dir: Path = Path("results/experiments"),
+        output_dir: Path = Path("results/runs"),
         use_gpu: bool = False,
         use_cache: bool = True,
     ):
@@ -87,7 +87,7 @@ class ExperimentalRunner:
             # For relative paths, resolve from the project root (where .git exists)
             project_root = Path(
                 __file__
-            ).parent.parent.parent.parent  # Go up from src/giflab/experimental/runner.py
+            ).parent.parent.parent.parent  # Go up from src/giflab/core/runner.py
             self.base_output_dir = (project_root / output_dir).resolve()
         self.use_gpu = use_gpu
         self.use_cache = use_cache
@@ -157,7 +157,7 @@ class ExperimentalRunner:
     ) -> Image.Image:
         """Create a single synthetic frame via the vectorized SyntheticFrameGenerator.
 
-        This thin wrapper keeps the ExperimentalRunner API aligned with the
+        This thin wrapper keeps the GifLabRunner API aligned with the
         frame-generation cleanup plan and simplifies external callers/tests.
         """
         return self._frame_generator.create_frame(
@@ -275,7 +275,7 @@ class ExperimentalRunner:
         preset_id: str,
         quality_threshold: float = 0.05,
         use_targeted_gifs: bool = False,
-    ) -> ExperimentResult:
+    ) -> AnalysisResult:
         """Run a targeted experiment using a specific preset configuration.
 
         This is the main entry point for preset-based experiments, replacing
@@ -287,7 +287,7 @@ class ExperimentalRunner:
             use_targeted_gifs: Whether to use targeted GIF subset
 
         Returns:
-            ExperimentResult with targeted testing results
+            AnalysisResult with targeted testing results
         """
         # Import builtin presets to ensure they're registered
         from . import builtin_presets
@@ -306,7 +306,7 @@ class ExperimentalRunner:
             targeted_pipelines = self.generate_targeted_pipelines(preset_id)
 
             # Run analysis with targeted pipelines
-            return self.run_experimental_analysis(
+            return self.run_analysis(
                 test_pipelines=targeted_pipelines,
                 quality_threshold=quality_threshold,
                 use_targeted_gifs=use_targeted_gifs,
@@ -333,7 +333,7 @@ class ExperimentalRunner:
         """Generate a strategically reduced set of synthetic GIFs for targeted testing."""
         return self.sampler.get_targeted_synthetic_gifs()
 
-    # NOTE: The rest of the ExperimentalRunner methods will be added in the next step
+    # NOTE: The rest of the GifLabRunner methods will be added in the next step
     # This is just the structure and constructor to start with
 
     def _test_gpu_availability(self) -> None:
@@ -465,12 +465,12 @@ class ExperimentalRunner:
                 loop=0,
             )
 
-    def run_experimental_analysis(
+    def run_analysis(
         self,
         test_pipelines: list[Pipeline] | None = None,
         quality_threshold: float = 0.05,
         use_targeted_gifs: bool = False,
-    ) -> ExperimentResult:
+    ) -> AnalysisResult:
         """Run competitive elimination analysis on synthetic GIFs.
 
         Args:
@@ -478,7 +478,7 @@ class ExperimentalRunner:
             quality_threshold: SSIM threshold for elimination (lower = stricter)
 
         Returns:
-            ExperimentResult with eliminated and retained pipelines
+            AnalysisResult with eliminated and retained pipelines
         """
         if test_pipelines is None:
             test_pipelines = generate_all_pipelines()
@@ -567,35 +567,38 @@ class ExperimentalRunner:
 
         # Calculate total jobs for progress tracking
         total_jobs = len(gif_paths) * len(pipelines) * len(self.test_params)
-        self.logger.info(
-            f"Starting comprehensive testing: {total_jobs:,} total pipeline combinations"
-        )
 
-        # Save total jobs count to metadata for monitor to pick up
-        self._save_total_jobs_to_metadata(total_jobs)
+        # Create results CSV with streaming capability
+        csv_path = self.output_dir / "streaming_results.csv"
+        results_buffer = []
+        buffer_size = 10  # Flush every N results to balance memory and I/O
 
-        # Load or create resume file - optimize memory by tracking only job IDs
-        resume_file = self.output_dir / "elimination_progress.json"
-        completed_jobs_full = self._load_resume_data(resume_file)
-
-        # Extract just job IDs for efficient memory usage during processing
-        completed_job_ids = set(completed_jobs_full.keys())
-
-        # Clear the full data to free memory, keeping only IDs for resume logic
+        # Resume functionality: detect completed jobs
+        completed_job_ids = set()
         completed_jobs_data_for_streaming = {}
 
-        # Add completed jobs to streaming buffer for any that haven't been written to CSV yet
-        for job_id, job_data in completed_jobs_full.items():
-            completed_jobs_data_for_streaming[job_id] = job_data
+        # Check for existing results to resume from
+        if csv_path.exists():
+            try:
+                existing_df = pd.read_csv(csv_path)
+                if not existing_df.empty and "gif_name" in existing_df.columns and "pipeline_id" in existing_df.columns:
+                    # Build completed job IDs from existing results
+                    for _, row in existing_df.iterrows():
+                        job_id = f"{row['gif_name']}_{row['pipeline_id']}_{row.get('applied_colors', 'unknown')}_{row.get('applied_lossy', 'unknown')}"
+                        completed_job_ids.add(job_id)
+                        # Store data for streaming (in case we need to re-stream existing results)
+                        completed_jobs_data_for_streaming[job_id] = row.to_dict()
+                    
+                    self.logger.info(f"Resume mode: Found {len(completed_job_ids)} completed jobs, will skip them")
+                else:
+                    self.logger.info("Existing CSV found but empty or missing required columns, starting fresh")
+            except Exception as e:
+                self.logger.warning(f"Could not read existing results for resume: {e}, starting fresh")
 
-        # Clear the full completed_jobs dict to save memory
-        del completed_jobs_full
-
-        # Setup streaming CSV file for results
-        streaming_csv_path = self.output_dir / "streaming_results.csv"
-        csv_fieldnames = [
-            # Primary identifiers and metadata
-            "gif_sha",                      # SHA hash for deduplication (from main pipeline)
+        # Define all CSV headers comprehensively to match unified pipeline output
+        csv_headers = [
+            # Primary identifiers and metadata (aligned with main pipeline)
+            "gif_sha",                      # Git hash for gif identification (from main pipeline) 
             "gif_name",
             "orig_filename",                # Original filename preservation (from main pipeline)
             "content_type",
@@ -650,95 +653,43 @@ class ExperimentalRunner:
             "frame_count",
             "compressed_frame_count",
             "disposal_artifacts_pre",
-            "disposal_artifacts_post", 
+            "disposal_artifacts_post",
             "disposal_artifacts_delta",
+
+            # Source and versioning (from main pipeline)
+            "source_platform",
+            "source_metadata", 
+            "timestamp",
+            "giflab_version",
+            "code_commit",
+            "dataset_version",
+            "engine_version",
             
-            # Source and versioning information (from main pipeline)
-            "source_platform",              # Platform detection (from main pipeline)
-            "source_metadata",              # Platform metadata (from main pipeline)
-            "timestamp",                    # Processing timestamp (from main pipeline)
-            "giflab_version",               # Version tracking (from main pipeline)
-            "code_commit",                  # Git commit hash (from main pipeline)
-            "dataset_version",              # Dataset version (from main pipeline)
-            "engine_version",               # Tool version tracking (from main pipeline)
-            
-            # Error handling
+            # Error tracking
             "error",
-            "error_traceback",
+            "error_traceback", 
             "error_timestamp",
         ]
 
-        # Initialize streaming CSV with headers
-        write_csv_header = not streaming_csv_path.exists()
-        csv_file = open(streaming_csv_path, "a", newline="", encoding="utf-8")
-        csv_writer = csv.DictWriter(csv_file, fieldnames=csv_fieldnames)
-        if write_csv_header:
-            csv_writer.writeheader()
+        with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
+            csv_writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
+            
+            # Only write header if file is new/empty
+            if csv_path.stat().st_size == 0:
+                csv_writer.writeheader()
 
-        # Register cleanup handlers to prevent data loss on unexpected termination
-        def _cleanup_csv() -> None:
-            """Ensure CSV file is properly flushed and closed on exit."""
-            try:
-                if csv_file and not csv_file.closed:
-                    # Final flush of any remaining buffer
-                    if "results_buffer" in locals() and results_buffer:
-                        self._flush_results_buffer(
-                            results_buffer, csv_writer, csv_file, force=True
-                        )
-                    csv_file.flush()
-                    csv_file.close()
-                    self.logger.info("📝 CSV file cleanup completed on exit")
-            except Exception as e:
-                # Log but don't raise - we're in cleanup
-                self.logger.warning(f"CSV cleanup warning: {e}")
-
-        # Register atexit handler
-        atexit.register(_cleanup_csv)
-
-        # Register signal handlers for common termination signals
-        def _signal_handler(signum: Any, frame: Any) -> None:
-            """Handle termination signals by cleaning up CSV and exiting gracefully."""
-            signal_name = (
-                signal.Signals(signum).name
-                if hasattr(signal, "Signals")
-                else str(signum)
-            )
-            self.logger.info(
-                f"🛑 Received {signal_name}, cleaning up CSV and exiting..."
-            )
-            _cleanup_csv()
-            sys.exit(1)
-
-        # Register handlers for common termination signals
-        try:
-            signal.signal(signal.SIGTERM, _signal_handler)  # Termination request
-            signal.signal(signal.SIGINT, _signal_handler)  # Ctrl+C
-            if hasattr(signal, "SIGHUP"):  # Not available on Windows
-                signal.signal(signal.SIGHUP, _signal_handler)  # Terminal disconnect
-        except (AttributeError, OSError) as e:
-            # Some signals may not be available on all platforms
-            self.logger.debug(f"Could not register some signal handlers: {e}")
-
-        # Estimate remaining time
-        remaining_jobs = total_jobs - len(completed_job_ids)
-        estimated_time = self._estimate_execution_time(remaining_jobs)
-        self.logger.info(f"Estimated completion time: {estimated_time}")
-
-        # Setup progress bar with proper line management
-        progress = TqdmProgressCounter(
+        # Initialize progress tracking
+        with TqdmProgressCounter(
             total=total_jobs,
             initial=len(completed_job_ids),
             desc="Testing pipelines",
             unit="jobs",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
-            ncols=100,
-            leave=True,
-        )
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]{postfix}",
+        ) as progress:
 
-        # Use small memory buffer for batching, not unlimited accumulation
-        results_buffer: list[dict] = []
-        buffer_size = 25  # Reduced from 100 for more frequent monitoring updates
-        failed_jobs = 0
+            # Re-open for appending results
+            with open(csv_path, "a", newline="", encoding="utf-8") as csv_file:
+                csv_writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
 
         # Test each combination
         cache_hits = 0
@@ -746,6 +697,9 @@ class ExperimentalRunner:
 
         for gif_path in gif_paths:
             content_type = self._get_content_type(gif_path.stem)
+            
+            # Initialize gif_metadata as None to prevent NameError in error handling blocks
+            gif_metadata = None
 
             for pipeline in pipelines:
                 for params in self.test_params:
@@ -827,9 +781,9 @@ class ExperimentalRunner:
                                 "connection_signature": "FAIL",  # Validation failed before execution
                                 "success": False,
                                 
-                                # File size metrics (failed before processing)
+                                # File size and compression metrics (all None for validation failure)
                                 "file_size_kb": None,
-                                "original_size_kb": gif_path.stat().st_size / 1024,
+                                "original_size_kb": gif_path.stat().st_size / 1024 if gif_path.exists() else None,
                                 "compression_ratio": None,
                                 
                                 # Original GIF properties (from metadata if available)
@@ -841,64 +795,48 @@ class ExperimentalRunner:
                                 "entropy": gif_metadata.entropy if gif_metadata else None,
                                 
                                 # Quality metrics (all None for failed validation)
-                                "ssim_mean": None,
-                                "ssim_std": None,
-                                "ssim_min": None,
-                                "ssim_max": None,
-                                "ms_ssim_mean": None,
-                                "psnr_mean": None,
-                                "temporal_consistency": None,
-                                "mse_mean": None,
-                                "rmse_mean": None,
-                                "fsim_mean": None,
-                                "gmsd_mean": None,
-                                "chist_mean": None,
-                                "edge_similarity_mean": None,
-                                "texture_similarity_mean": None,
-                                "sharpness_similarity_mean": None,
-                                "composite_quality": None,
-                                "enhanced_composite_quality": None,
+                                "ssim_mean": None, "ssim_std": None, "ssim_min": None, "ssim_max": None,
+                                "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
+                                "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
+                                "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
+                                "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
                                 "efficiency": None,
                                 
                                 # Performance metrics
                                 "render_time_ms": None,
                                 "total_processing_time_ms": None,
+                                "pipeline_steps": len(pipeline.steps),
+                                "tools_used": [step.tool_cls.NAME for step in pipeline.steps],
                                 
-                                # Pipeline details
-                                "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, 'steps') else 0,
-                                "tools_used": [step.tool_cls.NAME for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
-                                "applied_colors": None,  # Failed before application
-                                "applied_lossy": None,   # Failed before application
-                                "applied_frame_ratio": None,  # Failed before application
-                                "actual_pipeline_steps": None,
+                                # Applied parameters
+                                "applied_colors": None,
+                                "applied_lossy": None, 
+                                "applied_frame_ratio": None,
+                                "actual_pipeline_steps": 0,
                                 
-                                # Frame metrics
+                                # Frame analysis
                                 "frame_count": None,
                                 "compressed_frame_count": None,
                                 "disposal_artifacts_pre": None,
                                 "disposal_artifacts_post": None,
                                 "disposal_artifacts_delta": None,
                                 
-                                # Source and versioning information
-                                "source_platform": source_platform,
-                                "source_metadata": str(source_metadata) if source_metadata else None,
-                                "timestamp": datetime.now().isoformat(),
-                                "giflab_version": GIFLAB_VERSION,
-                                "code_commit": _get_git_commit_hash(),
-                                "dataset_version": "v1.0",
-                                "engine_version": None,  # Failed before execution
+                                # Source and versioning 
+                                "source_platform": "unknown",
+                                "source_metadata": None,
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                "giflab_version": "unknown",
+                                "code_commit": "unknown", 
+                                "dataset_version": "unknown",
+                                "engine_version": "unknown",
                                 
-                                # Error information 
+                                # Error information
                                 "error": error_msg,
                                 "error_traceback": "",
-                                "error_timestamp": datetime.now().isoformat(),
-                                
-                                # Legacy test parameters for debugging
-                                "test_colors": params.get("colors", 0),
-                                "test_lossy": params.get("lossy", 0),
-                                "test_frame_ratio": params.get("frame_ratio", 1.0),
+                                "error_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                             }
-                            completed_job_ids.add(job_id)
+                            
+                            # Add to buffer
                             self._add_result_to_buffer(
                                 failed_result,
                                 results_buffer,
@@ -906,39 +844,51 @@ class ExperimentalRunner:
                                 csv_file,
                                 buffer_size,
                             )
+                            
+                            # Update progress and continue
+                            completed_job_ids.add(job_id)
                             progress.update(1)
                             continue
 
-                        # Validate individual tool names
-                        validation_failed = False
-                        for step in pipeline.steps:
-                            if step.tool_cls.NAME == "external-tool":
-                                error_msg = f"Invalid tool with external-tool NAME in step: {step.name()}"
-                                self.logger.warning(
-                                    f"🚨 Tool validation failed: {error_msg}"
+                        # Execute pipeline and calculate metrics
+                        try:
+                            result = self._execute_pipeline_with_metrics(
+                                gif_path, pipeline, params, content_type
+                            )
+                            # Cache successful result
+                            if self.cache:
+                                self.cache.queue_result(
+                                    pipeline.identifier(), gif_path.stem, params, result
                                 )
-                                self.logger.info(
-                                    "💡 Filtering out base class tools that shouldn't be directly used"
-                                )
-                                if self.cache:
-                                    self.cache.queue_failure(
-                                        pipeline.identifier(),
-                                        gif_path.stem,
+
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Pipeline execution failed: {gif_path.stem} + {pipeline.identifier()} - {e}"
+                            )
+                            
+                            # Get the most detailed traceback available
+                            import traceback
+                            full_traceback = traceback.format_exc()
+                            
+                            if self.cache:
+                                self.cache.queue_failure(
+                                    pipeline.identifier(),
+                                    gif_path.stem,
                                     params,
                                     {
-                                        "error": error_msg,
-                                        "error_traceback": "",
+                                        "error": str(e),
+                                        "error_traceback": full_traceback,
                                         "pipeline_steps": [
                                             step.name() for step in pipeline.steps
                                         ],
                                         "tools_used": [
-                                            step.tool_cls.NAME
-                                            for step in pipeline.steps
+                                            step.tool_cls.NAME for step in pipeline.steps
                                         ],
-                                        "error_type": "validation",
+                                        "error_type": "execution",
                                     },
                                 )
-                                # Add validation failure to completed jobs and skip this pipeline
+                            # Create failed result entry with comprehensive error information  
+                            try:
                                 failed_result = {
                                     # Primary identifiers and metadata
                                     "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
@@ -946,12 +896,12 @@ class ExperimentalRunner:
                                     "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
                                     "content_type": content_type,
                                     "pipeline_id": pipeline.identifier(),
-                                    "connection_signature": "FAIL",  # Tool validation failed before execution
+                                    "connection_signature": "ERROR",  # Pipeline failed during execution
                                     "success": False,
                                     
-                                    # File size metrics (failed before processing)
+                                    # File size and compression metrics (all None for execution failure)
                                     "file_size_kb": None,
-                                    "original_size_kb": gif_path.stat().st_size / 1024,
+                                    "original_size_kb": gif_path.stat().st_size / 1024 if gif_path.exists() else None,
                                     "compression_ratio": None,
                                     
                                     # Original GIF properties (from metadata if available)
@@ -963,64 +913,48 @@ class ExperimentalRunner:
                                     "entropy": gif_metadata.entropy if gif_metadata else None,
                                     
                                     # Quality metrics (all None for failed validation)
-                                    "ssim_mean": None,
-                                    "ssim_std": None,
-                                    "ssim_min": None,
-                                    "ssim_max": None,
-                                    "ms_ssim_mean": None,
-                                    "psnr_mean": None,
-                                    "temporal_consistency": None,
-                                    "mse_mean": None,
-                                    "rmse_mean": None,
-                                    "fsim_mean": None,
-                                    "gmsd_mean": None,
-                                    "chist_mean": None,
-                                    "edge_similarity_mean": None,
-                                    "texture_similarity_mean": None,
-                                    "sharpness_similarity_mean": None,
-                                    "composite_quality": None,
-                                    "enhanced_composite_quality": None,
+                                    "ssim_mean": None, "ssim_std": None, "ssim_min": None, "ssim_max": None,
+                                    "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
+                                    "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
+                                    "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
+                                    "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
                                     "efficiency": None,
                                     
                                     # Performance metrics
                                     "render_time_ms": None,
                                     "total_processing_time_ms": None,
+                                    "pipeline_steps": len(pipeline.steps),
+                                    "tools_used": [step.tool_cls.NAME for step in pipeline.steps],
                                     
-                                    # Pipeline details
-                                    "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, 'steps') else 0,
-                                    "tools_used": [step.tool_cls.NAME for step in pipeline.steps] if hasattr(pipeline, 'steps') else [],
-                                    "applied_colors": None,  # Failed before application
-                                    "applied_lossy": None,   # Failed before application
-                                    "applied_frame_ratio": None,  # Failed before application
-                                    "actual_pipeline_steps": None,
+                                    # Applied parameters  
+                                    "applied_colors": params["colors"] if self._pipeline_uses_color_reduction(pipeline) else None,
+                                    "applied_lossy": params["lossy"] if self._pipeline_uses_lossy_compression(pipeline) else None,
+                                    "applied_frame_ratio": params.get("frame_ratio", 1.0) if self._pipeline_uses_frame_reduction(pipeline) else None,
+                                    "actual_pipeline_steps": len(pipeline.steps),
                                     
-                                    # Frame metrics
+                                    # Frame analysis
                                     "frame_count": None,
                                     "compressed_frame_count": None,
                                     "disposal_artifacts_pre": None,
                                     "disposal_artifacts_post": None,
                                     "disposal_artifacts_delta": None,
                                     
-                                    # Source and versioning information
-                                    "source_platform": source_platform,
-                                    "source_metadata": str(source_metadata) if source_metadata else None,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "giflab_version": GIFLAB_VERSION,
-                                    "code_commit": _get_git_commit_hash(),
-                                    "dataset_version": "v1.0",
-                                    "engine_version": None,  # Failed before execution
+                                    # Source and versioning 
+                                    "source_platform": "unknown",
+                                    "source_metadata": None,
+                                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    "giflab_version": "unknown",
+                                    "code_commit": "unknown", 
+                                    "dataset_version": "unknown",
+                                    "engine_version": "unknown",
                                     
-                                    # Error information 
-                                    "error": error_msg,
-                                    "error_traceback": "",
-                                    "error_timestamp": datetime.now().isoformat(),
-                                    
-                                    # Legacy test parameters for debugging
-                                    "test_colors": params.get("colors", 0),
-                                    "test_lossy": params.get("lossy", 0),
-                                    "test_frame_ratio": params.get("frame_ratio", 1.0),
+                                    # Error information
+                                    "error": str(e),
+                                    "error_traceback": full_traceback,
+                                    "error_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                 }
-                                completed_job_ids.add(job_id)
+                                
+                                # Add to buffer
                                 self._add_result_to_buffer(
                                     failed_result,
                                     results_buffer,
@@ -1028,231 +962,153 @@ class ExperimentalRunner:
                                     csv_file,
                                     buffer_size,
                                 )
-                                progress.update(1)
-                                validation_failed = True
-                                break  # Exit the step validation loop
+                            except Exception as buffer_error:
+                                self.logger.error(
+                                    f"Failed to create failed result entry: {buffer_error}"
+                                )
+                                # Create minimal failed result if even the failed result creation fails
+                                minimal_failed_result = {
+                                    "gif_name": gif_path.stem,
+                                    "pipeline_id": pipeline.identifier(),
+                                    "success": False,
+                                    "error": f"Pipeline failed: {str(e)} + Buffer error: {str(buffer_error)}",
+                                    "error_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    **{header: None for header in csv_headers if header not in ["gif_name", "pipeline_id", "success", "error", "error_timestamp"]}
+                                }
+                                self._add_result_to_buffer(
+                                    minimal_failed_result,
+                                    results_buffer,
+                                    csv_writer,
+                                    csv_file,
+                                    buffer_size,
+                                )
 
-                        if validation_failed:
-                            continue  # Skip to next pipeline combination
+                            completed_job_ids.add(job_id)
+                            progress.update(1)
+                            continue
 
-                        # Execute pipeline and measure comprehensive metrics
-                        result = self._execute_pipeline_with_metrics(
-                            gif_path, pipeline, params, content_type
+                    except Exception as critical_error:
+                        # Catch-all for any critical errors that escape the inner try-except
+                        self.logger.error(
+                            f"Critical error in pipeline processing: {critical_error}"
                         )
-
-                        # Queue successful result for batch caching
-                        if self.cache and result.get("success", False):
-                            self.cache.queue_result(
-                                pipeline.identifier(), gif_path.stem, params, result
+                        import traceback
+                        critical_traceback = traceback.format_exc()
+                        
+                        try:
+                            # Create minimal result for critical errors
+                            failed_result = {
+                                # Primary identifiers and metadata
+                                "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
+                                "gif_name": gif_path.stem,
+                                "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
+                                "content_type": content_type,
+                                "pipeline_id": pipeline.identifier(),
+                                "connection_signature": "CRITICAL_ERROR",
+                                "success": False,
+                                
+                                # File size and compression metrics (all None for runtime failure)
+                                "file_size_kb": None,
+                                "original_size_kb": gif_path.stat().st_size / 1024 if gif_path.exists() else None,
+                                "compression_ratio": None,
+                                
+                                # Original GIF properties (from metadata if available)
+                                "orig_width": gif_metadata.orig_width if gif_metadata else None,
+                                "orig_height": gif_metadata.orig_height if gif_metadata else None,
+                                "orig_frames": gif_metadata.orig_frames if gif_metadata else None,
+                                "orig_fps": gif_metadata.orig_fps if gif_metadata else None,
+                                "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else None,
+                                "entropy": gif_metadata.entropy if gif_metadata else None,
+                                
+                                # Quality metrics (all None for runtime failure)
+                                "ssim_mean": None, "ssim_std": None, "ssim_min": None, "ssim_max": None,
+                                "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
+                                "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
+                                "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
+                                "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
+                                "efficiency": None,
+                                
+                                # Performance metrics
+                                "render_time_ms": None,
+                                "total_processing_time_ms": None,
+                                "pipeline_steps": len(pipeline.steps) if pipeline else 0,
+                                "tools_used": [step.tool_cls.NAME for step in pipeline.steps] if pipeline else [],
+                                
+                                # Applied parameters
+                                "applied_colors": None,
+                                "applied_lossy": None,
+                                "applied_frame_ratio": None,
+                                "actual_pipeline_steps": 0,
+                                
+                                # Frame analysis
+                                "frame_count": None,
+                                "compressed_frame_count": None,
+                                "disposal_artifacts_pre": None,
+                                "disposal_artifacts_post": None,
+                                "disposal_artifacts_delta": None,
+                                
+                                # Source and versioning 
+                                "source_platform": "unknown",
+                                "source_metadata": None,
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                "giflab_version": "unknown",
+                                "code_commit": "unknown", 
+                                "dataset_version": "unknown",
+                                "engine_version": "unknown",
+                                
+                                # Error information
+                                "error": f"Critical error: {str(critical_error)}",
+                                "error_traceback": critical_traceback,
+                                "error_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            }
+                            
+                            # Add to buffer
+                            self._add_result_to_buffer(
+                                failed_result,
+                                results_buffer,
+                                csv_writer,
+                                csv_file,
+                                buffer_size,
                             )
-
-                        # Save progress immediately with minimal data
-                        completed_job_ids.add(job_id)
-
-                        # Store minimal resume data periodically to avoid memory buildup
-                        if len(completed_job_ids) % self.PROGRESS_SAVE_INTERVAL == 0:
-                            self._save_resume_data_minimal(
-                                resume_file, completed_job_ids
-                            )
-
-                        self._add_result_to_buffer(
-                            result, results_buffer, csv_writer, csv_file, buffer_size
-                        )
-
-                    except Exception as e:
-                        self.logger.warning(f"Pipeline failed: {job_id} - {e}")
-                        failed_jobs += 1
-
-                        # Record comprehensive failure information
-                        failed_result = {
-                            # Primary identifiers and metadata
-                            "gif_sha": gif_metadata.gif_sha if gif_metadata else "unknown",
-                            "gif_name": gif_path.stem,
-                            "orig_filename": gif_metadata.orig_filename if gif_metadata else gif_path.name,
-                            "content_type": content_type,
-                            "pipeline_id": pipeline.identifier(),
-                            "connection_signature": "ERROR",  # Pipeline failed during execution
-                            "success": False,
-                            
-                            # File size metrics (partial failure - original size available)
-                            "file_size_kb": None,
-                            "original_size_kb": gif_path.stat().st_size / 1024,
-                            "compression_ratio": None,
-                            
-                            # Original GIF properties (from metadata if available)
-                            "orig_width": gif_metadata.orig_width if gif_metadata else None,
-                            "orig_height": gif_metadata.orig_height if gif_metadata else None,
-                            "orig_frames": gif_metadata.orig_frames if gif_metadata else None,
-                            "orig_fps": gif_metadata.orig_fps if gif_metadata else None,
-                            "orig_n_colors": gif_metadata.orig_n_colors if gif_metadata else None,
-                            "entropy": gif_metadata.entropy if gif_metadata else None,
-                            
-                            # Quality metrics (all None for runtime failure)
-                            "ssim_mean": None,
-                            "ssim_std": None,
-                            "ssim_min": None,
-                            "ssim_max": None,
-                            "ms_ssim_mean": None,
-                            "psnr_mean": None,
-                            "temporal_consistency": None,
-                            "mse_mean": None,
-                            "rmse_mean": None,
-                            "fsim_mean": None,
-                            "gmsd_mean": None,
-                            "chist_mean": None,
-                            "edge_similarity_mean": None,
-                            "texture_similarity_mean": None,
-                            "sharpness_similarity_mean": None,
-                            "composite_quality": None,
-                            "enhanced_composite_quality": None,
-                            "efficiency": None,
-                            
-                            # Performance metrics
-                            "render_time_ms": None,
-                            "total_processing_time_ms": None,
-                            
-                            # Pipeline details (runtime failure has access to pipeline info)
-                            "pipeline_steps": len(pipeline.steps) if hasattr(pipeline, "steps") else 0,
-                            "tools_used": pipeline.tools_used() if hasattr(pipeline, "tools_used") else [],
-                            "applied_colors": None,  # Failed during execution
-                            "applied_lossy": None,   # Failed during execution  
-                            "applied_frame_ratio": None,  # Failed during execution
-                            "actual_pipeline_steps": None,
-                            
-                            # Frame metrics
-                            "frame_count": None,
-                            "compressed_frame_count": None,
-                            "disposal_artifacts_pre": None,
-                            "disposal_artifacts_post": None,
-                            "disposal_artifacts_delta": None,
-                            
-                            # Source and versioning information
-                            "source_platform": source_platform,
-                            "source_metadata": str(source_metadata) if source_metadata else None,
-                            "timestamp": datetime.now().isoformat(),
-                            "giflab_version": GIFLAB_VERSION,
-                            "code_commit": _get_git_commit_hash(),
-                            "dataset_version": "v1.0",
-                            "engine_version": None,  # Failed during execution
-                            
-                            # Error information (runtime exception details)
-                            "error": clean_error_message(str(e)),  # Clean error message for CSV
-                            "error_traceback": traceback.format_exc().replace("\n", " | "),  # Preserve full traceback
-                            "error_timestamp": datetime.now().isoformat(),
-                        }
-
-                        # Queue failure for debugging analysis (in addition to CSV/logs)
-                        if self.cache:
-                            self.cache.queue_failure(
-                                pipeline.identifier(),
-                                gif_path.stem,
-                                params,
-                                {
-                                    "error": str(e),
-                                    "error_traceback": traceback.format_exc(),
-                                    "pipeline_steps": [
-                                        step.name() for step in pipeline.steps
-                                    ]
-                                    if hasattr(pipeline, "steps")
-                                    else [],
-                                    "tools_used": pipeline.tools_used()
-                                    if hasattr(pipeline, "tools_used")
-                                    else [],
-                                },
-                            )
+                        except Exception as final_error:
+                            self.logger.error(f"Failed to handle critical error: {final_error}")
 
                         completed_job_ids.add(job_id)
-                        self._add_result_to_buffer(
-                            failed_result,
-                            results_buffer,
-                            csv_writer,
-                            csv_file,
-                            buffer_size,
-                        )
+                        progress.update(1)
+                        continue
 
+                    # Add successful result to buffer
+                    self._add_result_to_buffer(
+                        result, results_buffer, csv_writer, csv_file, buffer_size
+                    )
+
+                    # Update progress tracking
+                    completed_job_ids.add(job_id)
                     progress.update(1)
 
-                    # Flush buffer and cache periodically for performance
-                    total_processed = len(completed_job_ids)
-                    if total_processed % self.BUFFER_FLUSH_INTERVAL == 0:
-                        self._flush_results_buffer(results_buffer, csv_writer, csv_file)
-                        if self.cache:
-                            self.cache.flush_batch(
-                                force=True
-                            )  # Flush accumulated batches
+        # Final buffer flush
+        if results_buffer:
+            with open(csv_path, "a", newline="", encoding="utf-8") as csv_file:
+                csv_writer = csv.DictWriter(csv_file, fieldnames=csv_headers)
+                csv_writer.writerows(results_buffer)
 
-        progress.close()
+        # Cache efficiency reporting
+        if cache_hits + cache_misses > 0:
+            cache_efficiency = cache_hits / (cache_hits + cache_misses)
+            self.logger.info(f"Cache efficiency: {cache_efficiency:.1%} ({cache_hits} hits, {cache_misses} misses)")
 
-        # Final flush of all pending cache data
-        if self.cache:
-            self.cache.flush_batch(force=True)
-
-        # Log cache performance statistics with enhanced visibility
-        if self.cache:
-            total_cache_operations = cache_hits + cache_misses
-            if total_cache_operations > 0:
-                cache_hit_rate = (cache_hits / total_cache_operations) * 100
-                self.logger.info("💾 Cache Performance Summary:")
-                self.logger.info(f"   📈 Cache hits: {cache_hits:,}")
-                self.logger.info(f"   📉 Cache misses: {cache_misses:,}")
-                self.logger.info(f"   🎯 Hit rate: {cache_hit_rate:.1f}%")
-
-                # Estimate time saved
-                estimated_time_per_test = 2.5  # seconds (conservative estimate)
-                time_saved_minutes = (cache_hits * estimated_time_per_test) / 60
-                if time_saved_minutes > 1:
-                    self.logger.info(
-                        f"   ⏱️ Estimated time saved: {time_saved_minutes:.1f} minutes"
-                    )
-                    if time_saved_minutes > 60:
-                        time_saved_hours = time_saved_minutes / 60
-                        self.logger.info(
-                            f"   ⏱️ Time saved (hours): {time_saved_hours:.1f}h"
-                        )
-            else:
-                self.logger.info(
-                    "💾 Cache statistics: No cache operations performed (all results were new)"
-                )
-
-        # Final flush of any remaining results in buffer
-        self._flush_results_buffer(results_buffer, csv_writer, csv_file, force=True)
-        csv_file.close()
-
-        # Final save of all completed job IDs for resume functionality
-        self._save_resume_data_minimal(resume_file, completed_job_ids)
-
-        # Read results from streaming CSV to create DataFrame
-        # This prevents memory exhaustion for large result sets
-        total_results = len(completed_job_ids)
+        # Load results into DataFrame
+        final_df = pd.read_csv(csv_path)
+        
+        # Report final completion statistics
+        total_successful = len(final_df[final_df["success"] == True])
+        total_failed = len(final_df[final_df["success"] == False])
+        
         self.logger.info(
-            f"Testing completed: {total_results} jobs, {failed_jobs} failures"
+            f"Pipeline testing complete: {total_successful} successful, {total_failed} failed ({total_successful + total_failed} total jobs)"
         )
 
-        # Load results from streaming CSV file
-        try:
-            # IMPORTANT: Semantic correctness for ML/analysis
-            # - applied_* parameters only contain values when that processing step actually executed
-            # - None/NaN when step was no-op or pipeline failed
-            # - Never use 0 as default - would create false patterns in ML models
-            # Use nullable integer types to properly handle None values
-            dtype_spec = {
-                # Semantically correct columns - only contain values when actually applied
-                "applied_colors": "Int64",  # Nullable - None when color step was no-op or failed
-                "applied_lossy": "Int64",  # Nullable - None when lossy step was no-op or failed
-                "applied_frame_ratio": "float64",  # Nullable - NaN when frame step was no-op or failed
-                "actual_pipeline_steps": "Int64",  # Count of actual processing steps
-                "error": "string",  # String type for error messages
-                "success": "boolean",  # Boolean type for success flag
-            }
-            results_df = pd.read_csv(
-                streaming_csv_path, dtype=dtype_spec, low_memory=False  # type: ignore[arg-type]
-            )
-            self.logger.info(f"📊 Loaded {len(results_df)} results from streaming CSV")
-            return results_df
-        except Exception as e:
-            self.logger.warning(f"Failed to load streaming results: {e}")
-            # Fallback to empty DataFrame
-            return pd.DataFrame()
+        return final_df
 
     def _add_result_to_buffer(
         self, result: dict, buffer: list, csv_writer: Any, csv_file: Any, buffer_size: int
@@ -1369,6 +1225,13 @@ class ExperimentalRunner:
         from ..directory_source_detection import detect_source_from_directory
         from .. import __version__ as GIFLAB_VERSION
         
+        # DEBUG: Add path resolution logging
+        self.logger.info(f"🔍 DEBUG: Pipeline execution starting for {gif_path}")
+        self.logger.info(f"🔍 DEBUG: gif_path type: {type(gif_path)}")
+        self.logger.info(f"🔍 DEBUG: gif_path.exists(): {gif_path.exists()}")
+        self.logger.info(f"🔍 DEBUG: gif_path resolved: {gif_path.resolve()}")
+        self.logger.info(f"🔍 DEBUG: Current working directory: {Path.cwd()}")
+        
         # Import git commit hash function from pipeline module
         import subprocess
         def _get_git_commit_hash() -> str:
@@ -1392,6 +1255,9 @@ class ExperimentalRunner:
         
         # Extract GIF metadata for main pipeline compatibility fields
         try:
+            # DEBUG: Log before metadata extraction
+            self.logger.info(f"🔍 DEBUG: About to extract metadata from: {gif_path}")
+            
             # Detect source platform from directory structure
             try:
                 source_platform, source_metadata = detect_source_from_directory(gif_path)
@@ -1403,8 +1269,11 @@ class ExperimentalRunner:
                 source_platform=source_platform, 
                 source_metadata=source_metadata
             )
+            
+            self.logger.info(f"🔍 DEBUG: Metadata extraction successful")
         except Exception as e:
             self.logger.warning(f"Failed to extract GIF metadata: {e}")
+            self.logger.info(f"🔍 DEBUG: Metadata extraction failed with error: {e}")
             # Fallback metadata if extraction fails
             gif_metadata = None
             source_platform = "unknown"
@@ -1427,6 +1296,11 @@ class ExperimentalRunner:
                 step_output = (
                     tmpdir_path / f"step_{step.variable}_{current_input.stem}.gif"
                 )
+
+                # DEBUG: Log before each step
+                self.logger.info(f"🔍 DEBUG: Step {i}: {step.tool_cls.__name__}")
+                self.logger.info(f"🔍 DEBUG: current_input: {current_input}")
+                self.logger.info(f"🔍 DEBUG: current_input.exists(): {current_input.exists()}")
 
                 # Create wrapper instance and apply
                 wrapper = step.tool_cls()
@@ -1482,10 +1356,16 @@ class ExperimentalRunner:
                     )
 
                 # Always run the current step first
-                step_result = wrapper.apply(
-                    current_input, step_output, params=step_params
-                )
-                pipeline_metadata.update(step_result)
+                try:
+                    self.logger.info(f"🔍 DEBUG: About to call wrapper.apply() with current_input: {current_input}")
+                    step_result = wrapper.apply(
+                        current_input, step_output, params=step_params
+                    )
+                    pipeline_metadata.update(step_result)
+                    self.logger.info(f"🔍 DEBUG: Step {i} completed successfully")
+                except Exception as step_error:
+                    self.logger.error(f"🔍 DEBUG: Step {i} failed with error: {step_error}")
+                    raise
 
                 # Export PNG sequence AFTER step is applied if next step supports PNG input
                 # (gifski or animately advanced lossy). Verify tool availability to prevent race conditions
@@ -2670,9 +2550,9 @@ class ExperimentalRunner:
 
     def _analyze_and_experiment(
         self, results_df: pd.DataFrame, threshold: float
-    ) -> ExperimentResult:
+    ) -> AnalysisResult:
         """Analyze results using comprehensive quality metrics and identify underperforming pipelines."""
-        experiment_result = ExperimentResult()
+        experiment_result = AnalysisResult()
 
         # Filter out failed jobs for analysis
         successful_results: pd.DataFrame
@@ -2957,7 +2837,7 @@ class ExperimentalRunner:
         return experiment_result
 
     def _save_results(
-        self, experiment_result: ExperimentResult, results_df: pd.DataFrame
+        self, experiment_result: AnalysisResult, results_df: pd.DataFrame
     ) -> None:
         """Save elimination analysis results."""
         failed_results, successful_results = self._validate_and_separate_results(
@@ -3216,7 +3096,7 @@ class ExperimentalRunner:
 
     def _save_elimination_summary(
         self,
-        experiment_result: ExperimentResult,
+        experiment_result: AnalysisResult,
         results_df: pd.DataFrame,
         failed_results: pd.DataFrame,
         successful_results: pd.DataFrame,
@@ -3262,7 +3142,7 @@ class ExperimentalRunner:
 
     def _log_results_summary(
         self,
-        experiment_result: ExperimentResult,
+        experiment_result: AnalysisResult,
         failed_results: pd.DataFrame,
         results_df: pd.DataFrame,
     ) -> None:
@@ -3434,7 +3314,7 @@ class ExperimentalRunner:
         # General recommendations
         report_lines.append("🔄 GENERAL RECOMMENDATIONS")
         report_lines.append(
-            "   1. Run 'giflab view-failures results/experiments/latest/' for detailed error analysis"
+            "   1. Run 'giflab view-failures results/runs/latest/' for detailed error analysis"
         )
         report_lines.append(
             "   2. Consider excluding problematic tools from production pipelines"
@@ -3451,7 +3331,7 @@ class ExperimentalRunner:
         report_lines.append("")
 
         report_lines.append(
-            "📖 For detailed failure logs, see: results/experiments/latest/failed_pipelines.json"
+            "📖 For detailed failure logs, see: results/runs/latest/failed_pipelines.json"
         )
 
         return "\n".join(report_lines)
@@ -3487,7 +3367,7 @@ class ExperimentalRunner:
 
         return findings
 
-    def _save_pareto_analysis_results(self, experiment_result: ExperimentResult) -> None:
+    def _save_pareto_analysis_results(self, experiment_result: AnalysisResult) -> None:
         """Save Pareto frontier analysis results to files."""
         try:
             pareto_analysis = experiment_result.pareto_analysis
@@ -3573,7 +3453,7 @@ class ExperimentalRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save Pareto analysis results: {e}")
 
-    def _generate_pareto_report(self, experiment_result: ExperimentResult) -> None:
+    def _generate_pareto_report(self, experiment_result: AnalysisResult) -> None:
         """Generate a human-readable Pareto analysis report."""
         try:
             pareto_analysis = experiment_result.pareto_analysis

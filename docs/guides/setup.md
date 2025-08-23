@@ -66,7 +66,7 @@ GifLab uses a **dual-pipeline architecture** to balance stability and innovation
 - **Purpose**: Large-scale processing, production workflows
 - **Philosophy**: Use battle-tested engines for consistent results
 
-#### 🧪 **Experimental Pipeline** (`experiment` command)
+#### 🧪 **Compression Pipeline** (`run` command)
 - **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
 - **Purpose**: Testing, comparison, finding optimal engines for your content
 - **Philosophy**: Experiment with all available engines to identify the best performers, then promote winners to production
@@ -211,7 +211,7 @@ poetry run python -m pytest tests/test_engine_smoke.py -v
 # Test with sample processing
 mkdir -p data/raw
 # Add a sample GIF to data/raw/
-poetry run python -m giflab experiment --matrix
+poetry run python -m giflab run --matrix
 ```
 
 Expected output:
@@ -316,7 +316,7 @@ cp /path/to/your/gifs/*.gif data/raw/
 2. **Experimental testing** (All 5 engines):
 ```bash
 # Test all engines with small dataset
-poetry run python -m giflab experiment --matrix
+poetry run python -m giflab run --matrix
 
 # Analyze results
 poetry run jupyter notebook notebooks/01_explore_dataset.ipynb

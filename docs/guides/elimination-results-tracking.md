@@ -7,7 +7,7 @@ The pipeline elimination system now saves timestamped results to preserve the hi
 When you run `giflab eliminate-pipelines`, results are saved in a timestamped structure:
 
 ```
-results/experiments/latest/
+results/runs/latest/
 ├── run_20241204_143052/          # Timestamped run directory
 │   ├── elimination_test_results.csv              # Standard CSV name
 │   ├── elimination_test_results_20241204_143052.csv  # Timestamped CSV
@@ -31,7 +31,7 @@ results/experiments/latest/
 
 ### 2. Latest Results Symlink
 - `latest` symlink always points to the most recent run
-- Scripts can reference `results/experiments/latest/latest/` for current results
+- Scripts can reference `results/runs/latest/latest/` for current results
 - Works on Linux/macOS (Windows may not support symlinks)
 
 ### 3. Master History File
@@ -72,7 +72,7 @@ poetry run python -m giflab eliminate-pipelines --clear-cache --estimate-time
 **What this clears:**
 - All successful pipeline test results
 - All failed pipeline test results  
-- Stored in: `results/experiments/latest/pipeline_results_cache.db`
+- Stored in: `results/runs/latest/pipeline_results_cache.db`
 
 #### Other Cache Commands
 ```bash
@@ -102,7 +102,7 @@ poetry run python -m giflab eliminate-pipelines --no-cache
 ### Access Latest Results
 ```bash
 # Always use the latest run
-cd results/experiments/latest/latest
+cd results/runs/latest/latest
 cat elimination_summary.json
 ```
 
@@ -111,7 +111,7 @@ cat elimination_summary.json
 import pandas as pd
 
 # Load master history (all runs)
-df = pd.read_csv('results/experiments/latest/elimination_history_master.csv')
+df = pd.read_csv('results/runs/latest/elimination_history_master.csv')
 
 # Group by run to compare
 runs = df.groupby('run_id')
@@ -146,14 +146,14 @@ print(elimination_stats[['run_id', 'timestamp', 'failure_rate', 'avg_quality']])
 ### Browse Specific Runs
 ```bash
 # List all runs
-ls results/experiments/latest/run_*
+ls results/runs/latest/run_*
 
 # Compare two specific runs
-diff results/experiments/latest/run_20241204_143052/elimination_summary.json \
-     results/experiments/latest/run_20241204_151230/elimination_summary.json
+diff results/runs/latest/run_20241204_143052/elimination_summary.json \
+     results/runs/latest/run_20241204_151230/elimination_summary.json
 
 # Find runs with specific characteristics
-grep -l "many_colors" results/experiments/latest/run_*/elimination_summary.json
+grep -l "many_colors" results/runs/latest/run_*/elimination_summary.json
 ```
 
 ## Cache Management Examples
@@ -164,7 +164,7 @@ import sqlite3
 import pandas as pd
 
 # Connect to cache database
-conn = sqlite3.connect('results/experiments/latest/pipeline_results_cache.db')
+conn = sqlite3.connect('results/runs/latest/pipeline_results_cache.db')
 
 # Check cache statistics
 cache_stats = pd.read_sql_query("""
@@ -198,7 +198,7 @@ print(frequent_pipelines)
 # Note: Cache auto-invalidates on code changes, but you can manually clean old entries
 
 # Check cache size
-ls -lh results/experiments/latest/pipeline_results_cache.db
+ls -lh results/runs/latest/pipeline_results_cache.db
 
 # Clear cache completely
 giflab eliminate-pipelines --clear-cache --estimate-time
@@ -227,7 +227,7 @@ find elimination_results -name "run_*" -type d -mtime +30 -exec rm -rf {} \;
 ### Backup Important Runs
 - Tag important runs by renaming directories:
 ```bash
-mv results/experiments/latest/run_20241204_143052 results/experiments/latest/run_20241204_143052_baseline
+mv results/runs/latest/run_20241204_143052 results/runs/latest/run_20241204_143052_baseline
 ```
 
 ### Cache Optimization
@@ -259,7 +259,7 @@ If cache seems corrupted or giving unexpected results:
 
 ### Disk Space
 Large elimination runs can consume significant disk space:
-- Monitor `results/experiments/latest/` directory size
+- Monitor `results/runs/latest/` directory size
 - Consider compressing old runs: `tar -czf run_archive.tar.gz run_20241204_*`
 - Cache database is typically small (< 50MB) but monitor growth
 
@@ -325,7 +325,7 @@ import sqlite3
 import pandas as pd
 
 # Connect to the database
-conn = sqlite3.connect('results/experiments/latest/pipeline_results_cache.db')
+conn = sqlite3.connect('results/runs/latest/pipeline_results_cache.db')
 
 # Find most common failure types
 failures_by_type = pd.read_sql_query("""

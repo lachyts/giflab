@@ -1,6 +1,6 @@
-# Performance Tuning: Targeted Experiment Presets
+# Performance Tuning: Targeted Presets
 
-This document provides comprehensive guidelines for optimizing performance when using the targeted experiment presets system.
+This document provides comprehensive guidelines for optimizing performance when using the targeted presets system.
 
 ## Performance Overview
 
@@ -118,13 +118,13 @@ print(f'Generated {len(pipelines)} pipelines (limited from potential {5*17})')
 **Start Small, Scale Up**:
 ```bash
 # Phase 1: Quick validation (2 pipelines)
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 
 # Phase 2: Single dimension focus (5-17 pipelines)
-poetry run python -m giflab experiment --preset frame-focus
+poetry run python -m giflab run --preset frame-focus
 
 # Phase 3: Multi-dimension if needed (64+ pipelines)
-poetry run python -m giflab experiment --preset tool-comparison-baseline
+poetry run python -m giflab run --preset tool-comparison-baseline
 ```
 
 ### 3. Memory Optimization
@@ -134,11 +134,11 @@ poetry run python -m giflab experiment --preset tool-comparison-baseline
 **Result Caching**:
 ```bash
 # Enable caching for repeated experiments
-poetry run python -m giflab experiment --preset frame-focus --use-cache
+poetry run python -m giflab run --preset frame-focus --use-cache
 
 # Cache benefits compound over multiple runs
-poetry run python -m giflab experiment --preset color-optimization --use-cache
-poetry run python -m giflab experiment --preset lossy-quality-sweep --use-cache
+poetry run python -m giflab run --preset color-optimization --use-cache
+poetry run python -m giflab run --preset lossy-quality-sweep --use-cache
 ```
 
 **Tool Resolution Caching**:
@@ -156,7 +156,7 @@ pipelines2 = generator.generate_targeted_pipelines(preset2)  # Faster
 **Reduce Test Data Size**:
 ```bash
 # Use smaller, focused GIF set for testing
-poetry run python -m giflab experiment --preset frame-focus --use-targeted-gifs
+poetry run python -m giflab run --preset frame-focus --use-targeted-gifs
 
 # Benefits:
 # - Faster I/O operations
@@ -198,7 +198,7 @@ memory_intensive = ExperimentPreset(
 **Enable GPU When Available**:
 ```bash
 # GPU acceleration for supported operations
-poetry run python -m giflab experiment --preset frame-focus --use-gpu
+poetry run python -m giflab run --preset frame-focus --use-gpu
 
 # Check GPU availability first
 poetry run python -c "
@@ -215,10 +215,10 @@ if torch.cuda.is_available():
 ```python
 # Execute multiple presets in parallel
 import concurrent.futures
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 
 def run_preset_experiment(preset_id, output_dir):
-    runner = ExperimentalRunner(output_dir=output_dir, use_cache=True)
+    runner = GifLabRunner(output_dir=output_dir, use_cache=True)
     return runner.run_targeted_experiment(preset_id, use_targeted_gifs=True)
 
 presets = ["frame-focus", "color-optimization", "lossy-quality-sweep"]
@@ -242,16 +242,16 @@ print(f"Completed {len(results)} experiments in parallel")
 **Balance Quality vs Speed**:
 ```bash
 # Strict quality (slower, higher precision)
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.02
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.02
 
 # Balanced quality (good balance)
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.05
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.05
 
 # Permissive quality (faster, lower precision)  
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.1
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.1
 
 # Development/testing (fastest)
-poetry run python -m giflab experiment --preset quick-test --quality-threshold 0.2
+poetry run python -m giflab run --preset quick-test --quality-threshold 0.2
 ```
 
 ### 5. Tool Selection Optimization
@@ -390,7 +390,7 @@ print(f"Efficiency gain: {efficiency_gain:.1%}")
 **Time Comparison**:
 ```python
 import time
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 
 # Profile traditional approach
 start_time = time.time()
@@ -424,7 +424,7 @@ def benchmark_preset(preset_id: str, iterations: int = 3) -> dict:
     
     for i in range(iterations):
         start_time = time.time()
-        runner = ExperimentalRunner(output_dir=Path(f"benchmark_{preset_id}_{i}"))
+        runner = GifLabRunner(output_dir=Path(f"benchmark_{preset_id}_{i}"))
         pipelines = runner.generate_targeted_pipelines(preset_id)
         generation_time = time.time() - start_time
         
@@ -457,7 +457,7 @@ for result in sorted(results, key=lambda x: x["pipeline_count"]):
 ```python
 import psutil
 import os
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 
 def profile_memory_usage(preset_id: str) -> dict:
     """Profile memory usage during preset execution."""
@@ -467,7 +467,7 @@ def profile_memory_usage(preset_id: str) -> dict:
     initial_memory = process.memory_info().rss / 1024 / 1024  # MB
     
     # Execute preset
-    runner = ExperimentalRunner(use_cache=False)
+    runner = GifLabRunner(use_cache=False)
     pipelines = runner.generate_targeted_pipelines(preset_id)
     
     # Peak memory
@@ -498,13 +498,13 @@ for preset in presets:
 **Iterative Development Pattern**:
 ```bash
 # Phase 1: Quick validation
-poetry run python -m giflab experiment --preset quick-test --use-cache --use-targeted-gifs
+poetry run python -m giflab run --preset quick-test --use-cache --use-targeted-gifs
 
 # Phase 2: Focused testing  
-poetry run python -m giflab experiment --preset frame-focus --use-cache --use-targeted-gifs
+poetry run python -m giflab run --preset frame-focus --use-cache --use-targeted-gifs
 
 # Phase 3: Production run
-poetry run python -m giflab experiment --preset frame-focus --use-cache
+poetry run python -m giflab run --preset frame-focus --use-cache
 ```
 
 **Configuration Testing**:
@@ -547,7 +547,7 @@ def execute_preset_batch(presets: list, base_output_dir: str):
     """Execute preset batch with optimized resource usage."""
     for preset_id in presets:
         output_dir = f"{base_output_dir}/{preset_id}"
-        runner = ExperimentalRunner(
+        runner = GifLabRunner(
             output_dir=Path(output_dir),
             use_cache=True,  # Reuse cached results
             use_gpu=True     # GPU acceleration

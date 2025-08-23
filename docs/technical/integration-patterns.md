@@ -1,6 +1,6 @@
-# Integration Patterns: Targeted Experiment Presets
+# Integration Patterns: Targeted Presets
 
-This document provides comprehensive integration patterns for incorporating the targeted experiment presets system into various workflows, tools, and development environments.
+This document provides comprehensive integration patterns for incorporating the targeted presets system into various workflows, tools, and development environments.
 
 ## Overview
 
@@ -35,7 +35,7 @@ for experiment_name in "${!EXPERIMENTS[@]}"; do
     echo "Starting experiment: $experiment_name"
     output_dir="${BASE_OUTPUT_DIR}/${experiment_name}"
     
-    if poetry run python -m giflab experiment \
+    if poetry run python -m giflab run \
         ${EXPERIMENTS[$experiment_name]} \
         --output-dir "$output_dir" \
         --use-cache \
@@ -73,7 +73,7 @@ foreach ($experiment in $Experiments.GetEnumerator()) {
     Write-Host "Running experiment: $experimentName" -ForegroundColor Green
     
     try {
-        & poetry run python -m giflab experiment $experimentArgs.Split(' ') `
+        & poetry run python -m giflab run $experimentArgs.Split(' ') `
             --output-dir $outputDir `
             --quality-threshold $QualityThreshold `
             --use-cache
@@ -106,7 +106,7 @@ for frame_alg in "${FRAME_ALGORITHMS[@]}"; do
             
             echo "Testing: $frame_alg with $color_count colors at $quality quality"
             
-            poetry run python -m giflab experiment \
+            poetry run python -m giflab run \
                 --variable-slot "frame=$frame_alg" \
                 --lock-slot color=ffmpeg-color \
                 --lock-slot lossy=none-lossy \
@@ -149,7 +149,7 @@ if [ "$GIFLAB_USE_CACHE" = "true" ]; then
 fi
 
 echo "Running experiment with: $ARGS"
-poetry run python -m giflab experiment $ARGS
+poetry run python -m giflab run $ARGS
 ```
 
 ## Python API Integration Patterns
@@ -160,7 +160,7 @@ poetry run python -m giflab experiment $ARGS
 
 **Simple Preset Execution**:
 ```python
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 from pathlib import Path
 import logging
 
@@ -171,7 +171,7 @@ def run_preset_study(preset_id: str, output_dir: str, **kwargs) -> dict:
     """Execute preset study with error handling and result summary."""
     try:
         # Initialize runner
-        runner = ExperimentalRunner(
+        runner = GifLabRunner(
             output_dir=Path(output_dir),
             use_cache=kwargs.get('use_cache', True)
         )
@@ -222,7 +222,7 @@ for preset in presets:
 ```python
 from giflab.experimental.targeted_presets import ExperimentPreset, SlotConfiguration, PRESET_REGISTRY
 from giflab.experimental.targeted_generator import TargetedPipelineGenerator
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 import json
 from pathlib import Path
 from typing import List, Dict, Any
@@ -296,7 +296,7 @@ class ExperimentWorkflow:
                 continue
             
             # Execute experiment
-            runner = ExperimentalRunner(
+            runner = GifLabRunner(
                 output_dir=self.base_output_dir / preset_id,
                 use_cache=batch_config.get('use_cache', True)
             )
@@ -400,7 +400,7 @@ print(report)
 ```python
 from flask import Flask, jsonify, request
 from giflab.experimental.targeted_presets import PRESET_REGISTRY
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 from pathlib import Path
 import threading
 import uuid
@@ -462,7 +462,7 @@ def start_experiment():
     def run_experiment():
         """Execute experiment in background thread."""
         try:
-            runner = ExperimentalRunner(
+            runner = GifLabRunner(
                 output_dir=Path(f'web_experiments/{job_id}'),
                 use_cache=use_cache
             )
@@ -526,7 +526,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from giflab.experimental.targeted_presets import PRESET_REGISTRY
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 from pathlib import Path
 import asyncio
 import uuid
@@ -576,7 +576,7 @@ def execute_experiment(job_id: str, request: ExperimentRequest):
     try:
         job_status[job_id]['status'] = 'running'
         
-        runner = ExperimentalRunner(
+        runner = GifLabRunner(
             output_dir=Path(f'api_experiments/{job_id}'),
             use_cache=request.use_cache
         )
@@ -723,8 +723,8 @@ jobs:
     
     - name: Run quick validation experiments
       run: |
-        poetry run python -m giflab experiment --preset quick-test --output-dir ci_test_1
-        poetry run python -m giflab experiment --preset frame-focus --output-dir ci_test_2 --use-targeted-gifs
+        poetry run python -m giflab run --preset quick-test --output-dir ci_test_1
+        poetry run python -m giflab run --preset frame-focus --output-dir ci_test_2 --use-targeted-gifs
     
     - name: Archive experiment results
       uses: actions/upload-artifact@v3
@@ -755,7 +755,7 @@ jobs:
       run: |
         poetry run python -c "
         import time
-        from giflab.experimental.runner import ExperimentalRunner
+        from giflab.experimental.runner import GifLabRunner
         from giflab.dynamic_pipeline import generate_all_pipelines
         from pathlib import Path
         
@@ -765,7 +765,7 @@ jobs:
         # Traditional approach
         start = time.time()
         all_pipelines = generate_all_pipelines()
-        runner = ExperimentalRunner(use_cache=False)
+        runner = GifLabRunner(use_cache=False)
         sampled = runner.select_pipelines_intelligently(all_pipelines, 'quick')
         traditional_time = time.time() - start
         
@@ -863,7 +863,7 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p jenkins_results/quick_tests
-                            poetry run python -m giflab experiment \
+                            poetry run python -m giflab run \
                                 --preset quick-test \
                                 --output-dir jenkins_results/quick_tests \
                                 --use-cache \
@@ -876,7 +876,7 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p jenkins_results/frame_analysis
-                            poetry run python -m giflab experiment \
+                            poetry run python -m giflab run \
                                 --preset frame-focus \
                                 --output-dir jenkins_results/frame_analysis \
                                 --use-cache \
@@ -889,7 +889,7 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p jenkins_results/color_analysis
-                            poetry run python -m giflab experiment \
+                            poetry run python -m giflab run \
                                 --preset color-optimization \
                                 --output-dir jenkins_results/color_analysis \
                                 --use-cache \
@@ -1038,7 +1038,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --list-presets)
             echo "Available presets:"
-            python -m giflab experiment --list-presets
+            python -m giflab run --list-presets
             exit 0
             ;;
         *)
@@ -1053,7 +1053,7 @@ echo "Output directory: $OUTPUT_DIR"
 echo "Quality threshold: $QUALITY_THRESHOLD"
 
 # Execute experiment
-python -m giflab experiment \
+python -m giflab run \
     --preset "$PRESET" \
     --output-dir "$OUTPUT_DIR" \
     --quality-threshold "$QUALITY_THRESHOLD" \
@@ -1229,7 +1229,7 @@ import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.experimental.runner import GifLabRunner
 from giflab.experimental.targeted_presets import PRESET_REGISTRY
 
 class ExperimentDatabase:
@@ -1382,7 +1382,7 @@ def run_tracked_experiment(preset_id: str, output_dir: str, quality_threshold: f
     experiment_id = db.start_experiment(preset_id, quality_threshold, output_dir)
     
     try:
-        runner = ExperimentalRunner(
+        runner = GifLabRunner(
             output_dir=Path(output_dir),
             use_cache=True
         )

@@ -14,16 +14,16 @@ The simplest way to run a targeted experiment is to use one of the built-in pres
 
 ```bash
 # List all available presets
-poetry run python -m giflab experiment --list-presets
+poetry run python -m giflab run --list-presets
 
 # Run a frame algorithm comparison (tests all frame reduction methods)
-poetry run python -m giflab experiment --preset frame-focus
+poetry run python -m giflab run --preset frame-focus
 
 # Run a color optimization study (tests all color reduction methods)
-poetry run python -m giflab experiment --preset color-optimization
+poetry run python -m giflab run --preset color-optimization
 
 # Quick test for development (minimal pipelines)
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 ```
 
 ### Custom Slot Configuration
@@ -32,7 +32,7 @@ For more control, you can specify custom slot configurations:
 
 ```bash
 # Test all frame algorithms with specific color and lossy settings
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot frame=* \
   --lock-slot color=ffmpeg-color \
   --lock-slot lossy=animately-advanced-lossy \
@@ -40,7 +40,7 @@ poetry run python -m giflab experiment \
   --slot-params lossy=level:40
 
 # Test specific color algorithms only
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot color=ffmpeg-color,gifsicle-color \
   --lock-slot frame=animately-frame \
   --lock-slot lossy=none-lossy
@@ -69,7 +69,7 @@ Each slot can be configured as either:
 - **Use Case**: Determine which frame algorithm works best for your content
 
 ```bash
-poetry run python -m giflab experiment --preset frame-focus
+poetry run python -m giflab run --preset frame-focus
 ```
 
 #### `color-optimization`
@@ -79,7 +79,7 @@ poetry run python -m giflab experiment --preset frame-focus
 - **Use Case**: Find optimal color quantization approach
 
 ```bash
-poetry run python -m giflab experiment --preset color-optimization
+poetry run python -m giflab run --preset color-optimization
 ```
 
 #### `lossy-quality-sweep`
@@ -89,7 +89,7 @@ poetry run python -m giflab experiment --preset color-optimization
 - **Use Case**: Determine quality/size tradeoffs for lossy compression
 
 ```bash
-poetry run python -m giflab experiment --preset lossy-quality-sweep
+poetry run python -m giflab run --preset lossy-quality-sweep
 ```
 
 #### `tool-comparison-baseline`
@@ -99,7 +99,7 @@ poetry run python -m giflab experiment --preset lossy-quality-sweep
 - **Use Case**: Compare animately vs ffmpeg vs gifsicle vs imagemagick
 
 ```bash
-poetry run python -m giflab experiment --preset tool-comparison-baseline
+poetry run python -m giflab run --preset tool-comparison-baseline
 ```
 
 ### Specialized Presets
@@ -111,7 +111,7 @@ poetry run python -m giflab experiment --preset tool-comparison-baseline
 - **Use Case**: Fine-tune dithering for specific content types
 
 ```bash
-poetry run python -m giflab experiment --preset dithering-focus
+poetry run python -m giflab run --preset dithering-focus
 ```
 
 #### `png-optimization`
@@ -121,7 +121,7 @@ poetry run python -m giflab experiment --preset dithering-focus
 - **Use Case**: High-quality GIF creation from PNG sequences
 
 ```bash
-poetry run python -m giflab experiment --preset png-optimization
+poetry run python -m giflab run --preset png-optimization
 ```
 
 ### Development Preset
@@ -133,7 +133,7 @@ poetry run python -m giflab experiment --preset png-optimization
 - **Use Case**: Quick validation during development
 
 ```bash
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 ```
 
 ## Custom Slot Configuration
@@ -195,13 +195,13 @@ Targeted presets can be combined with other experiment options:
 
 ```bash
 # Use preset with custom quality threshold
-poetry run python -m giflab experiment --preset frame-focus --quality-threshold 0.1
+poetry run python -m giflab run --preset frame-focus --quality-threshold 0.1
 
 # Use preset with specific output directory
-poetry run python -m giflab experiment --preset color-optimization --output-dir color_study_results
+poetry run python -m giflab run --preset color-optimization --output-dir color_study_results
 
 # Use preset with GPU acceleration
-poetry run python -m giflab experiment --preset tool-comparison-baseline --use-gpu
+poetry run python -m giflab run --preset tool-comparison-baseline --use-gpu
 ```
 
 ### Programmatic Usage
@@ -209,11 +209,11 @@ poetry run python -m giflab experiment --preset tool-comparison-baseline --use-g
 You can also use targeted presets programmatically:
 
 ```python
-from giflab.experimental.runner import ExperimentalRunner
+from giflab.core.runner import GifLabRunner
 from pathlib import Path
 
 # Set up experiment
-runner = ExperimentalRunner(
+runner = GifLabRunner(
     output_dir=Path("results"),
     use_cache=True
 )
@@ -268,7 +268,7 @@ custom_preset = ExperimentPreset(
 PRESET_REGISTRY.register("my-custom-study", custom_preset)
 
 # Use the custom preset
-runner = ExperimentalRunner()
+runner = GifLabRunner()
 pipelines = runner.generate_targeted_pipelines("my-custom-study")
 ```
 
@@ -297,7 +297,7 @@ The targeted preset system provides significant efficiency gains:
 #### "Unknown preset: preset-name"
 Make sure the preset name is correct. List available presets:
 ```bash
-poetry run python -m giflab experiment --list-presets
+poetry run python -m giflab run --list-presets
 ```
 
 #### "Invalid slot name: slot-name"
@@ -349,16 +349,16 @@ If you're currently using the traditional `generate_all_pipelines() + sampling` 
 ### Before (Traditional)
 ```bash
 # Old approach: generate all, then sample
-poetry run python -m giflab experiment --sampling quick --max-combinations 50
+poetry run python -m giflab run --sampling quick --max-pipelines 50
 ```
 
 ### After (Targeted)
 ```bash
 # New approach: generate only what's needed
-poetry run python -m giflab experiment --preset quick-test
+poetry run python -m giflab run --preset quick-test
 
 # Or custom configuration
-poetry run python -m giflab experiment \
+poetry run python -m giflab run \
   --variable-slot frame=* \
   --lock-slot color=ffmpeg-color \
   --lock-slot lossy=animately-advanced-lossy

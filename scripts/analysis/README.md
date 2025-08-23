@@ -56,7 +56,7 @@ python scripts/analysis/test_enhanced_metrics.py
 ## 📁 Data Sources
 
 All scripts are configured to work with the unified results directory:
-- **Main data**: `results/experiments/frame-comparison/latest/enhanced_streaming_results.csv`
+- **Main data**: `results/runs/frame-comparison/latest/enhanced_streaming_results.csv`
 - **Sample GIFs**: `results/samples/synthetic/`
 
 ## 🔍 Key Analyses Available

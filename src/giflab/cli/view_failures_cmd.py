@@ -52,13 +52,13 @@ def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool
     Examples:
 
         # View top 10 failures from latest run
-        giflab view-failures results/experiments/latest/
+        giflab view-failures results/runs/latest/
 
         # View all gifski failures with details
-        giflab view-failures results/experiments/latest/ --error-type gifski --limit 0 --detailed
+        giflab view-failures results/runs/latest/ --error-type gifski --limit 0 --detailed
 
         # Quick overview of command execution failures
-        giflab view-failures results/experiments/latest/ --error-type command --limit 5
+        giflab view-failures results/runs/latest/ --error-type command --limit 5
     """
     try:
         failed_pipelines_file = results_dir / "failed_pipelines.json"
