@@ -1,12 +1,12 @@
-# Unified Results Directory
+# Results Directory
 
-This directory contains all analysis results, samples, and cached data in a clean, organized structure following the pipeline consolidation.
+This directory contains all analysis results, samples, and cached data in a clean, organized structure.
 
 ## 📁 Directory Structure
 
 ```
 results/
-├── runs/                      # Active analysis runs (unified pipeline)
+├── runs/                      # Active analysis runs
 │   ├── 001-frame-focus-22-08-25/
 │   ├── 002-quick-test-22-08-25/
 │   ├── latest -> 004-custom-experiment-22-08-25/
@@ -33,16 +33,16 @@ runs/{NNN-description-DD-MM-YY}/
 ```
 
 ### Current Active Runs
-All new analysis runs use the unified `giflab run` command and are saved in `results/runs/`:
+Analysis runs are executed using the `giflab run` command and are saved in `results/runs/`:
 - **Presets**: `--preset frame-focus`, `--preset quick-test`, etc.
 - **Sampling**: `--sampling representative`, `--sampling quick`, etc.
 - **Output**: Comprehensive 54+ field CSV with all engines and metrics
 
-## 🔗 Compatibility
+## 🔗 System Features
 
 - **Latest symlink**: `results/runs/latest` points to most recent run
-- **Cache sharing**: Unified cache database preserves all historical results
-- **Tool compatibility**: All analysis tools work with new structure:
+- **Cache system**: Database preserves results for efficiency
+- **Tool integration**: Comprehensive analysis toolset:
   ```bash
   giflab view-failures results/runs/latest/
   giflab select-pipelines results/runs/latest/streaming_results.csv --top 3
@@ -50,30 +50,19 @@ All new analysis runs use the unified `giflab run` command and are saved in `res
 
 ## 🧹 Usage Guidelines
 
-1. **Active Analysis**: Use `giflab run` - saves automatically to `results/runs/`
-2. **Historical Data**: Access old experiment data in `results/archive/experiments/` 
+1. **Running Analysis**: Use `giflab run` - saves automatically to `results/runs/`
+2. **Historical Data**: Access previous runs in `results/archive/experiments/` 
 3. **Samples**: Test GIFs available in `results/samples/synthetic/`
-4. **Cache**: Shared cache benefits all runs and preserves historical results
-
-## 🚀 Migration Summary
-
-This unified system consolidates the pipeline architecture:
-- ✅ Single `giflab run` command replaces dual pipeline system
-- ✅ Unified output directory `results/runs/` (no more experiments vs runs confusion)
-- ✅ Preserved all historical data in `results/archive/experiments/` (171 runs)
-- ✅ Migrated cache database for seamless continuation
-- ✅ Updated all tool references and documentation
+4. **Cache**: Shared cache improves performance across runs
 
 ## 📊 Key Capabilities
-
-### Unified Pipeline Features
 - **All 5 engines**: gifsicle, Animately, ImageMagick, FFmpeg, gifski
 - **54+ metrics**: Enhanced CSV output combining all previous pipeline fields
 - **Targeted presets**: 14+ research presets for efficient analysis
 - **Intelligent sampling**: representative, quick, full, targeted strategies
 - **GPU acceleration**: Optional CUDA-accelerated quality metrics
 - **Resume functionality**: Progress tracking and resume capability
-- **Comprehensive caching**: Results cache preserves computation across runs
+- **Caching system**: Results cache preserves computation across runs
 
 **Access the latest data:**
 ```bash
@@ -84,4 +73,4 @@ cd results/runs/latest/
 ```
 
 ---
-*This unified system provides a single source of truth for all analysis results while preserving complete historical data and enabling seamless workflow continuation.*
+*The results directory provides a structured environment for GIF analysis and optimization, supporting efficient workflows through comprehensive tooling and caching.*

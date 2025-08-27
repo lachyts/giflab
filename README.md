@@ -21,7 +21,7 @@ GifLab analyzes GIF compression by generating a grid of variants with different:
 
 Each variant is measured for file size, comprehensive quality metrics, render time, and **efficiency score** (balanced 50/50 weighting of quality and compression).
 
-### Unified Compression Pipeline
+### Compression Pipeline
 
 GifLab provides a **comprehensive compression pipeline** with access to all major GIF processing engines:
 

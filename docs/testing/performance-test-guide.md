@@ -1,6 +1,6 @@
 # Performance Testing Guide for GifLab
 
-This guide explains how to run and interpret the performance tests for the vectorized synthetic GIF generation and multiprocessing improvements implemented in Stage 3 of the refactoring.
+This guide explains how to run and interpret the performance tests for the vectorized synthetic GIF generation and multiprocessing improvements.
 
 ## Test Structure
 

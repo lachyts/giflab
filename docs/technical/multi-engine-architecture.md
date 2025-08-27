@@ -6,33 +6,32 @@
 
 ## Overview
 
-GifLab implements a sophisticated multi-engine compression system supporting 5 external engines (gifsicle, Animately, ImageMagick, FFmpeg, gifski) through a dual-pipeline architecture that balances stability with innovation.
+GifLab implements a sophisticated multi-engine compression system supporting 5 external engines (gifsicle, Animately, ImageMagick, FFmpeg, gifski) through a flexible architecture that enables comprehensive testing and efficient workflows.
 
 ---
 
-## Dual-Pipeline Architecture
+## Multi-Engine Architecture
 
-**Architecture Decision:** GifLab implements a **dual-pipeline approach** to balance stability and innovation:
+**Architecture Decision:** GifLab provides a **single comprehensive pipeline** that supports flexible engine selection through sampling strategies and presets:
 
-### 🏭 Production Pipeline (`run` command)
-- **Engines**: gifsicle + Animately (2 engines)
-- **Philosophy**: Battle-tested, proven reliability for production workflows
-- **Use Case**: Large-scale processing, consistent results, stable performance
-- **Approach**: Minimal dependencies, well-tested, predictable behavior
-
-### 🧪 Experimental Pipeline (`experiment` command) 
-- **Engines**: All 5 engines (ImageMagick, FFmpeg, gifski, gifsicle, Animately)
-- **Philosophy**: Test all available engines to identify the best performers
-- **Use Case**: Engine comparison, optimization research, content-specific tuning
-- **Approach**: Comprehensive testing, innovation, performance measurement
+### 🔧 Flexible Pipeline (`run` command)
+- **Engines**: All 5 engines available (gifsicle, Animately, ImageMagick, FFmpeg, gifski)
+- **Sampling Strategies**: Control which engines and combinations to test
+  - `--sampling representative`: Balanced testing across engines
+  - `--sampling quick`: Fast testing with proven engines
+  - `--sampling full`: Comprehensive testing of all combinations
+- **Targeted Presets**: Focused testing for specific research questions
+  - `--preset frame-focus`: Compare frame reduction algorithms
+  - `--preset color-optimization`: Compare color quantization methods
+  - `--preset quick-test`: Minimal testing for development
 
 ### Workflow Integration
-1. Use experimental pipeline (`experiment --matrix`) to identify optimal engines for your content
-2. Analyze results to understand which engines perform best for your use case  
-3. Use production pipeline (`run`) for large-scale processing with proven engines
-4. Promote experimental engines to production based on performance data
+1. Use targeted presets (`run --preset frame-focus`) for focused research questions
+2. Use representative sampling (`run --sampling representative`) for general optimization
+3. Analyze results to understand which engines perform best for your content
+4. Use selected pipelines (`run --pipelines winners.yaml`) for production processing
 
-This architecture ensures production stability while enabling continuous improvement through systematic experimentation. The experimental pipeline serves as a testing ground for evaluating new engines before integrating them into production workflows.
+This architecture provides comprehensive testing capabilities while enabling efficient workflows through intelligent sampling and targeted presets.
 
 ---
 
