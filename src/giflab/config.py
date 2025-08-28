@@ -201,7 +201,7 @@ class PathConfig:
     def __post_init__(self) -> None:
         """Validate path configuration after initialization."""
         # Import here to avoid circular imports
-        from .validation import ValidationError, validate_config_paths
+        from .input_validation import ValidationError, validate_config_paths
 
         try:
             # Convert dataclass to dict for validation

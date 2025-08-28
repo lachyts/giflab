@@ -71,7 +71,7 @@ from .frame_keep import (
     validate_frame_keep_ratio,
 )
 from .meta import extract_gif_metadata
-from .validation import validate_path_security
+from .input_validation import validate_path_security
 
 
 class LossyEngine(Enum):

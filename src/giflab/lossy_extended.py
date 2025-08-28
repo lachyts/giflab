@@ -22,7 +22,7 @@ from .color_keep import validate_color_keep_count
 from .config import DEFAULT_ENGINE_CONFIG
 from .frame_keep import build_gifsicle_frame_args, validate_frame_keep_ratio
 from .meta import extract_gif_metadata
-from .validation import validate_path_security
+from .input_validation import validate_path_security
 
 
 def validate_lossy_level_for_engine(lossy_level: int, engine_name: str) -> None:

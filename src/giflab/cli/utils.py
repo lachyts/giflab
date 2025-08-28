@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from ..validation import ValidationError, validate_raw_dir, validate_worker_count
+from ..input_validation import ValidationError, validate_raw_dir, validate_worker_count
 
 
 def handle_generic_error(command_name: str, error: Exception) -> None:

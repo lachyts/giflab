@@ -19,7 +19,7 @@ CSV_PATH := $(CSV_DIR)/results_$(DATE).csv
 data: ## Run compression pipeline on RAW_DIR and generate EDA artefacts
 	@echo "🎞️  Running GifLab compression pipeline (raw=$(RAW_DIR))…"
 	@echo "🔍 Validating RAW_DIR..."
-	@poetry run python -c "from giflab.validation import validate_raw_dir; validate_raw_dir('$(RAW_DIR)')"
+	@poetry run python -c "from giflab.input_validation import validate_raw_dir; validate_raw_dir('$(RAW_DIR)')"
 	@mkdir -p $(CSV_DIR) $(EDA_DIR)
 	poetry run giflab run $(RAW_DIR) --csv $(CSV_PATH) --renders-dir data/renders --workers 0 --resume
 	@echo "📊 Results CSV: $(CSV_PATH)"

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from giflab.validation import (
+from giflab.input_validation import (
     ValidationError,
     sanitize_filename,
     validate_config_paths,
