@@ -1,6 +1,6 @@
 # 🎯 Next Tools Implementation Plan
 
-*Step-by-step guide for integrating additional compression tools into the **experimental framework** for **matrix-based testing** across compression variables.*  
+*Step-by-step guide for integrating additional compression tools into the **GifLab compression pipeline** for **matrix-based testing** across compression variables.*  
 Current focus: **ImageMagick**, **FFmpeg**, **gifski** + existing **Animately** and **Gifsicle**.
 
 ---
@@ -47,7 +47,7 @@ Enable **matrix-based experiments** testing different combinations of:
 
 ### Experimental Matrix Structure
 
-The experimental framework operates on a *dynamic* matrix, where each axis represents one of the core compression variables (Frame, Color, Lossy). Instead of being statically defined, this matrix is **dynamically generated** by the experiment runner.
+The compression pipeline operates on a *dynamic* matrix, where each axis represents one of the core compression variables (Frame, Color, Lossy). Instead of being statically defined, this matrix is **dynamically generated** by the pipeline runner.
 
 The runner populates the matrix by creating a pipeline for the Cartesian product of all registered tools for each slot. This ensures that every valid combination of tools and variables is tested systematically. For example, a simplified matrix might look like this conceptually:
 

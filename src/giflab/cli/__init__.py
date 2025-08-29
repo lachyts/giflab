@@ -11,6 +11,7 @@ from .organize_cmd import organize_directories
 from .run_cmd import run
 from .select_pipelines_cmd import select_pipelines
 from .tag_cmd import tag
+from .validate_cmd import validate
 from .view_failures_cmd import view_failures
 
 
@@ -26,6 +27,7 @@ main.add_command(run)
 main.add_command(tag)
 main.add_command(organize_directories)
 main.add_command(select_pipelines)
+main.add_command(validate)
 main.add_command(view_failures)
 main.add_command(debug_failures)
 
@@ -36,5 +38,6 @@ __all__ = [
     "run",
     "select_pipelines",
     "tag",
+    "validate",
     "view_failures",
 ]

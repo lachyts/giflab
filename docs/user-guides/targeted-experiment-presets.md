@@ -4,7 +4,7 @@ This guide explains how to use the targeted experiment presets system for effici
 
 ## Overview
 
-The targeted experiment presets system allows you to run focused compression experiments by generating only the specific pipeline combinations you need, rather than generating all possible combinations and then sampling from them. This results in 80-99% efficiency gains for focused research studies.
+The targeted experiment presets system allows you to run focused compression experiments by generating only the specific pipeline combinations you need for your research question.
 
 ## Quick Start
 
@@ -272,24 +272,6 @@ runner = GifLabRunner()
 pipelines = runner.generate_targeted_pipelines("my-custom-study")
 ```
 
-## Performance Benefits
-
-The targeted preset system provides significant efficiency gains:
-
-| Approach | Pipelines Generated | Efficiency Gain |
-|----------|-------------------|-----------------|
-| Traditional (generate_all + quick sampling) | 935 → 46 used | 95.1% waste |
-| Traditional (generate_all + representative) | 935 → 140 used | 85.0% waste |
-| **Targeted: frame-focus** | **5 generated** | **99.5% efficient** |
-| **Targeted: color-optimization** | **17 generated** | **98.2% efficient** |
-| **Targeted: tool-comparison** | **64 generated** | **93.2% efficient** |
-
-### Benefits:
-- **Faster startup**: No sampling phase required
-- **Lower memory usage**: Generate only what's needed
-- **Clearer intent**: Configuration directly expresses research goals
-- **Better resource utilization**: Focus computation on relevant comparisons
-
 ## Troubleshooting
 
 ### Common Issues
@@ -342,36 +324,12 @@ If experiments are running slowly:
 - Review example commands in this guide
 - Examine the built-in presets for configuration patterns
 
-## Migration from Traditional Sampling
-
-If you're currently using the traditional `generate_all_pipelines() + sampling` approach, here's how to migrate:
-
-### Before (Traditional)
-```bash
-# Old approach: generate all, then sample
-poetry run python -m giflab run --sampling quick --max-pipelines 50
-```
-
-### After (Targeted)
-```bash
-# New approach: generate only what's needed
-poetry run python -m giflab run --preset quick-test
-
-# Or custom configuration
-poetry run python -m giflab run \
-  --variable-slot frame=* \
-  --lock-slot color=ffmpeg-color \
-  --lock-slot lossy=animately-advanced-lossy
-```
-
-The targeted approach provides the same focused testing but with much better efficiency and clearer configuration.
-
 ## Next Steps
 
 1. **Start simple**: Try the built-in presets first
 2. **Understand your needs**: Identify which algorithm dimension you want to study
 3. **Use custom slots**: Create specific configurations for your research
-4. **Measure results**: Compare efficiency gains vs traditional approaches
+4. **Analyze results**: Use the pipeline results to guide your compression choices
 5. **Create custom presets**: Define reusable configurations for common studies
 
 For more advanced usage and API details, see the technical documentation and CLI reference guide.

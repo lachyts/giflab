@@ -67,7 +67,7 @@ All scripts are configured to work with the unified results directory:
 - More accurate quality predictions
 
 ### Efficiency Scoring
-- `efficiency = compression_ratio × enhanced_composite_quality`
+- `efficiency = compression_ratio × composite_quality`
 - Balances compression and quality retention
 - Clear performance tiers (Poor/Fair/Good/Excellent/Outstanding)
 

@@ -15,7 +15,7 @@ Analyse every GIF in `data/raw/` by generating a grid of compression variants an
 ### ML-Driven Vision
 **Long-term Goal**: Train machine learning models to automatically select the optimal compression tool combination based on GIF content characteristics.
 
-**Strategy**: Use experimental testing framework to build comprehensive datasets of tool performance across diverse content types, then train ML models for intelligent tool selection.
+**Strategy**: Use GifLab's compression pipeline to build comprehensive datasets of tool performance across diverse content types, then train ML models for intelligent tool selection.
 
 ### Requirements
 * Parallel execution, resumable after interruption.
@@ -23,7 +23,7 @@ Analyse every GIF in `data/raw/` by generating a grid of compression variants an
 * Works on macOS and Windows/WSL.
 * Keeps each GIF's original file-name **and** a content hash for deduplication.
 * **NEW**: Content classification and feature extraction for ML training
-* **NEW**: Experimental framework for testing additional tools and strategies
+* **NEW**: Comprehensive framework for testing additional tools and strategies
 
 ---
 

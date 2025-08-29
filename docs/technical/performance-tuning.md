@@ -4,10 +4,10 @@ This document provides comprehensive guidelines for optimizing performance when 
 
 ## Performance Overview
 
-The targeted presets system provides dramatic efficiency improvements over traditional approaches:
+The targeted presets system is optimized for focused testing:
 
-- **93-99% reduction** in pipeline generation overhead
-- **50-80% faster** experiment startup times
+- **Minimal pipeline generation** overhead
+- **Fast experiment startup** times
 - **70-90% lower** memory usage during generation phase
 - **Direct resource targeting** eliminating waste on irrelevant combinations
 
@@ -86,7 +86,7 @@ custom_preset = ExperimentPreset(
     frame_slot=SlotConfiguration(type="variable", scope=["*"]),      # ~5 tools
     color_slot=SlotConfiguration(type="variable", scope=["*"]),      # ~17 tools  
     lossy_slot=SlotConfiguration(type="variable", scope=["*"]),      # ~11 tools
-    max_combinations=100  # Limit: 5×17×11=935 → 100 (89% reduction)
+    max_combinations=100  # Limit: 5×17×11=hundreds → 100 (significant reduction)
 )
 ```
 
@@ -131,15 +131,22 @@ poetry run python -m giflab run --preset tool-comparison-baseline
 
 #### Enable Caching
 
+**⚠️ Note**: As of recent updates, **caching is disabled by default** (`use_cache=False`) to ensure predictable behavior and avoid stale cache issues during development.
+
 **Result Caching**:
 ```bash
-# Enable caching for repeated experiments
+# Enable caching for repeated experiments (RECOMMENDED for production)
 poetry run python -m giflab run --preset frame-focus --use-cache
 
 # Cache benefits compound over multiple runs
 poetry run python -m giflab run --preset color-optimization --use-cache
 poetry run python -m giflab run --preset lossy-quality-sweep --use-cache
 ```
+
+**When to Enable Caching**:
+- **Production runs**: Always use `--use-cache` for large experiments
+- **Development**: Leave caching off to ensure fresh results
+- **Repeated testing**: Enable caching when running the same presets multiple times
 
 **Tool Resolution Caching**:
 ```python
@@ -188,7 +195,7 @@ memory_intensive = ExperimentPreset(
     color_slot=SlotConfiguration(type="variable", scope=["*"]),      # ~17 tools
     lossy_slot=SlotConfiguration(type="variable", scope=["*"])       # ~11 tools
 )
-# Result: ~935 pipelines, high memory usage
+# Result: hundreds of pipelines, high memory usage
 ```
 
 ### 4. Execution Speed Optimization
@@ -367,45 +374,34 @@ parameter_sweep_params = {
 
 #### Pipeline Count Tracking
 
-**Efficiency Analysis**:
+**Pipeline Analysis**:
 ```python
 from giflab.experimental.targeted_generator import TargetedPipelineGenerator
-from giflab.dynamic_pipeline import generate_all_pipelines
 
-# Compare traditional vs targeted approach
-traditional_count = len(generate_all_pipelines())
 preset = PRESET_REGISTRY.get("frame-focus")
 generator = TargetedPipelineGenerator()
 targeted_pipelines = generator.generate_targeted_pipelines(preset)
 targeted_count = len(targeted_pipelines)
 
-efficiency_gain = 1 - (targeted_count / traditional_count)
-print(f"Traditional: {traditional_count} pipelines")
-print(f"Targeted: {targeted_count} pipelines") 
-print(f"Efficiency gain: {efficiency_gain:.1%}")
+print(f"Generated {targeted_count} targeted pipelines for {preset.name}")
 ```
 
 #### Execution Time Profiling
 
-**Time Comparison**:
+**Generation Time Measurement**:
 ```python
 import time
-from giflab.experimental.runner import GifLabRunner
+from giflab.core.runner import GifLabRunner
 
-# Profile traditional approach
-start_time = time.time()
-all_pipelines = generate_all_pipelines()
-sampled_pipelines = runner.select_pipelines_intelligently(all_pipelines, "quick")
-traditional_time = time.time() - start_time
+runner = GifLabRunner()
 
-# Profile targeted approach
+# Profile targeted pipeline generation
 start_time = time.time()
 targeted_pipelines = runner.generate_targeted_pipelines("frame-focus")
-targeted_time = time.time() - start_time
+generation_time = time.time() - start_time
 
-print(f"Traditional generation time: {traditional_time:.3f}s")
-print(f"Targeted generation time: {targeted_time:.3f}s")
-print(f"Speed improvement: {traditional_time/targeted_time:.1f}x faster")
+print(f"Pipeline generation time: {generation_time:.3f}s")
+print(f"Average time per pipeline: {generation_time/len(targeted_pipelines):.4f}s")
 ```
 
 ### 2. Performance Benchmarking
@@ -467,7 +463,7 @@ def profile_memory_usage(preset_id: str) -> dict:
     initial_memory = process.memory_info().rss / 1024 / 1024  # MB
     
     # Execute preset
-    runner = GifLabRunner(use_cache=False)
+    runner = GifLabRunner(use_cache=False)  # Explicitly disable for isolated testing
     pipelines = runner.generate_targeted_pipelines(preset_id)
     
     # Peak memory
@@ -529,7 +525,7 @@ def test_configuration_efficiency(preset: ExperimentPreset) -> bool:
     if pipeline_count > 200:
         print("Warning: High pipeline count may impact performance")
     if efficiency_gain < 0.8:
-        print("Warning: Low efficiency gain vs traditional approach")
+        print("Warning: Low efficiency optimization achieved")
     
     return pipeline_count <= 500 and efficiency_gain >= 0.5
 ```
@@ -549,7 +545,7 @@ def execute_preset_batch(presets: list, base_output_dir: str):
         output_dir = f"{base_output_dir}/{preset_id}"
         runner = GifLabRunner(
             output_dir=Path(output_dir),
-            use_cache=True,  # Reuse cached results
+            use_cache=True,  # Enable caching for production runs
             use_gpu=True     # GPU acceleration
         )
         

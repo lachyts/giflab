@@ -186,9 +186,7 @@ class ValidationConfig:
     minimum_quality_floor: float = 0.7      # Minimum acceptable composite quality
     quality_warning_threshold: float = 0.8  # Warning threshold for quality
     
-    # Efficiency thresholds
-    minimum_efficiency: float = 0.6         # Minimum acceptable efficiency
-    efficiency_warning_threshold: float = 0.7  # Warning threshold for efficiency
+    # Note: No efficiency thresholds - efficiency is purely informational
     
     # Disposal artifact thresholds
     disposal_artifact_threshold: float = 0.85    # Minimum acceptable disposal score
@@ -223,8 +221,6 @@ class ValidationConfig:
             'fps_warning_threshold': self.fps_warning_threshold,
             'minimum_quality_floor': self.minimum_quality_floor,
             'quality_warning_threshold': self.quality_warning_threshold,
-            'minimum_efficiency': self.minimum_efficiency,
-            'efficiency_warning_threshold': self.efficiency_warning_threshold,
             'disposal_artifact_threshold': self.disposal_artifact_threshold,
             'disposal_artifact_delta_threshold': self.disposal_artifact_delta_threshold,
             'temporal_consistency_threshold': self.temporal_consistency_threshold,

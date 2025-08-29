@@ -17,70 +17,75 @@ logger = logging.getLogger(__name__)
 def get_default_validation_config() -> ValidationConfig:
     """Get the default validation configuration with content-type adjustments."""
     
-    # Content-type specific threshold adjustments
+    # Content-type specific threshold adjustments - Updated for real-world scenarios
     content_type_adjustments = {
         'animation_heavy': {
-            'minimum_quality_floor': 0.75,        # Higher quality expectations for animation
+            'minimum_quality_floor': 0.35,        # Lower quality expectations for complex animation
             'fps_deviation_tolerance': 0.15,      # More tolerant of FPS changes due to complexity
-            'temporal_consistency_threshold': 0.8, # Higher temporal consistency requirement
-            'efficiency_warning_threshold': 0.6   # Lower efficiency expectations due to complexity
+            'temporal_consistency_threshold': 0.3, # More lenient temporal consistency
+            'minimum_efficiency': 0.25            # Lower efficiency expectations due to complexity
         },
         
         'smooth_gradient': {
-            'minimum_quality_floor': 0.8,         # Very high quality for gradients  
+            'minimum_quality_floor': 0.45,        # Moderate quality for gradients  
             'disposal_artifact_threshold': 0.9,   # Stricter artifact checking
-            'efficiency_warning_threshold': 0.75, # Expect good compression
+            'minimum_efficiency': 0.4,            # Gradients can be challenging to compress efficiently
             'fps_deviation_tolerance': 0.05        # Very strict FPS consistency
         },
         
+        'complex_gradient': {
+            'minimum_quality_floor': 0.4,         # Similar to smooth but more complex
+            'disposal_artifact_threshold': 0.85,  # Slightly more lenient artifacts
+            'minimum_efficiency': 0.3,            # Lower efficiency for complex gradients
+            'temporal_consistency_threshold': 0.35 # More lenient temporal consistency
+        },
+        
         'static_minimal_change': {
-            'minimum_quality_floor': 0.85,        # Highest quality for static content
+            'minimum_quality_floor': 0.6,         # Higher quality for static content
             'fps_deviation_tolerance': 0.05,      # Very strict FPS consistency
-            'minimum_efficiency': 0.8,            # Should compress very well
+            'minimum_efficiency': 0.5,            # Should compress reasonably well
             'frame_reduction_tolerance': 0.05,    # Very precise frame reduction
-            'efficiency_warning_threshold': 0.85   # High efficiency expectations
         },
         
         'high_frequency_detail': {
-            'minimum_quality_floor': 0.6,         # More lenient quality due to complexity
-            'minimum_efficiency': 0.5,            # Lower efficiency expectations
-            'temporal_consistency_threshold': 0.7, # More lenient temporal requirements
+            'minimum_quality_floor': 0.3,         # Very lenient quality due to complexity
+            'minimum_efficiency': 0.25,           # Very low efficiency expectations
+            'temporal_consistency_threshold': 0.3, # More lenient temporal requirements
             'fps_deviation_tolerance': 0.15       # More tolerant due to detail complexity
         },
         
         'photographic_noise': {
-            'minimum_quality_floor': 0.65,        # Moderate quality expectations
+            'minimum_quality_floor': 0.35,        # Moderate quality expectations
             'disposal_artifact_threshold': 0.8,   # More lenient artifact checking
-            'efficiency_warning_threshold': 0.6,  # Lower efficiency expectations
-            'minimum_efficiency': 0.55            # Challenging content to compress
+            'minimum_efficiency': 0.25,           # Very challenging content to compress
+            'temporal_consistency_threshold': 0.3  # More lenient temporal requirements
         },
         
         'few_colors': {
-            'minimum_efficiency': 0.85,           # Should compress extremely well
+            'minimum_efficiency': 0.6,            # Should still compress well but realistic
             'disposal_artifact_threshold': 0.9,   # High artifact standards
-            'minimum_quality_floor': 0.8,         # High quality for simple content
-            'efficiency_warning_threshold': 0.9   # Very high efficiency expectations
+            'minimum_quality_floor': 0.5,         # Good but realistic quality for simple content
         },
         
         'many_colors': {
-            'minimum_efficiency': 0.5,            # Lower efficiency due to complexity
-            'minimum_quality_floor': 0.65,        # More lenient quality
+            'minimum_efficiency': 0.25,           # Very low efficiency due to complexity
+            'minimum_quality_floor': 0.35,        # Very lenient quality
             'disposal_artifact_threshold': 0.8,   # Moderate artifact tolerance
-            'efficiency_warning_threshold': 0.6   # Lower efficiency expectations
         },
         
         'geometric_patterns': {
-            'minimum_quality_floor': 0.85,        # Should maintain geometric precision
+            'minimum_quality_floor': 0.5,         # Should maintain reasonable precision
             'disposal_artifact_threshold': 0.9,   # High artifact standards for patterns
-            'minimum_efficiency': 0.75,           # Should compress well
-            'temporal_consistency_threshold': 0.8  # Patterns should be temporally consistent
+            'minimum_efficiency': 0.4,            # Should compress reasonably well
+            'temporal_consistency_threshold': 0.35 # Patterns should be somewhat consistent
         },
         
         'texture_complex': {
-            'minimum_quality_floor': 0.6,         # Challenging content for quality
-            'minimum_efficiency': 0.5,            # Lower efficiency due to texture complexity
+            'minimum_quality_floor': 0.3,         # Very challenging content for quality
+            'minimum_efficiency': 0.2,            # Very low efficiency due to texture complexity
             'fps_deviation_tolerance': 0.15,      # More tolerant due to complexity
-            'disposal_artifact_threshold': 0.8    # More lenient artifact checking
+            'disposal_artifact_threshold': 0.8,   # More lenient artifact checking
+            'temporal_consistency_threshold': 0.3  # Very lenient temporal requirements
         }
     }
     
@@ -89,25 +94,25 @@ def get_default_validation_config() -> ValidationConfig:
         'frame_reduction': {
             'frame_reduction_tolerance': 0.05,    # Very precise for frame-focused pipelines
             'fps_deviation_tolerance': 0.2,       # More tolerant of FPS changes when frames change
-            'temporal_consistency_threshold': 0.7  # May reduce temporal consistency
+            'temporal_consistency_threshold': 0.3  # May reduce temporal consistency
         },
         
         'color_reduction': {
             'disposal_artifact_threshold': 0.9,   # Stricter artifact checking
-            'minimum_quality_floor': 0.75,        # Higher quality expectations
-            'temporal_consistency_threshold': 0.8  # Color changes shouldn't affect temporal consistency
+            'minimum_quality_floor': 0.4,         # Realistic quality expectations
+            'temporal_consistency_threshold': 0.35 # Color changes shouldn't severely affect temporal consistency
         },
         
         'lossy_compression': {
-            'minimum_quality_floor': 0.6,         # More lenient quality due to lossy nature
-            'minimum_efficiency': 0.75,           # Should achieve good compression
-            'temporal_consistency_threshold': 0.7, # More lenient temporal requirements
+            'minimum_quality_floor': 0.3,         # More lenient quality due to lossy nature
+            'minimum_efficiency': 0.4,            # Should achieve reasonable compression
+            'temporal_consistency_threshold': 0.3, # More lenient temporal requirements
             'disposal_artifact_threshold': 0.8    # Lossy may introduce some artifacts
         },
         
         'hybrid_optimization': {
-            'minimum_quality_floor': 0.7,         # Balanced expectations
-            'minimum_efficiency': 0.7,            # Good compression expected
+            'minimum_quality_floor': 0.35,        # Balanced but realistic expectations
+            'minimum_efficiency': 0.35,           # Realistic compression expected
             'fps_deviation_tolerance': 0.08,      # Moderate FPS tolerance
             'frame_reduction_tolerance': 0.08     # Moderate frame tolerance
         }

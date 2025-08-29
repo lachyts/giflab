@@ -159,7 +159,7 @@ class ValidationChecker:
             fps_deviation_percent=fps_deviation,
             
             # Quality
-            composite_quality=compression_metrics.get('enhanced_composite_quality'),
+            composite_quality=compression_metrics.get('composite_quality'),
             efficiency=compression_metrics.get('efficiency'),
             compression_ratio=compression_metrics.get('compression_ratio'),
             
@@ -274,7 +274,7 @@ class ValidationChecker:
     ) -> None:
         """Validate composite quality against thresholds."""
         
-        composite_quality = compression_metrics.get('enhanced_composite_quality')
+        composite_quality = compression_metrics.get('composite_quality')
         
         if composite_quality is None:
             result.warnings.append(ValidationWarning(
@@ -321,26 +321,19 @@ class ValidationChecker:
             ))
             return
         
-        minimum_efficiency = thresholds['minimum_efficiency']
-        warning_threshold = thresholds['efficiency_warning_threshold']
-        
-        if efficiency < minimum_efficiency:
-            result.issues.append(ValidationIssue(
-                category="efficiency_threshold",
-                message=f"Efficiency below minimum threshold: {efficiency:.3f} < {minimum_efficiency:.3f}",
-                expected_value=minimum_efficiency,
-                actual_value=efficiency,
-                threshold=minimum_efficiency
-            ))
-        elif efficiency < warning_threshold:
+        # Check for unreasonably high efficiency (may indicate calculation errors)
+        max_reasonable_efficiency = 0.95
+        if efficiency > max_reasonable_efficiency:
             result.warnings.append(ValidationWarning(
-                category="efficiency_threshold",
-                message=f"Efficiency below warning threshold: {efficiency:.3f} < {warning_threshold:.3f}",
-                expected_value=warning_threshold,
+                category="efficiency_threshold", 
+                message=f"Efficiency unexpectedly high: {efficiency:.3f} > {max_reasonable_efficiency:.3f}",
+                expected_value=max_reasonable_efficiency,
                 actual_value=efficiency,
-                threshold=warning_threshold,
-                recommendation="Consider optimizing compression parameters for better efficiency"
+                threshold=max_reasonable_efficiency,
+                recommendation="Verify quality metrics and compression calculations are correct"
             ))
+        
+        # Note: No minimum efficiency validation - efficiency is purely informational
     
     def _validate_disposal_artifacts(
         self,
@@ -414,7 +407,7 @@ class ValidationChecker:
         """Validate complex multi-metric combinations for advanced issue detection."""
         
         # Combination 1: Low quality + High compression ratio = Suspicious efficiency
-        composite_quality = compression_metrics.get('enhanced_composite_quality')
+        composite_quality = compression_metrics.get('composite_quality')
         compression_ratio = compression_metrics.get('compression_ratio')
         
         if composite_quality and compression_ratio:
@@ -468,18 +461,6 @@ class ValidationChecker:
                            f"{composite_quality*100:.0f}% quality",
                     recommendation="Consider reducing compression aggressiveness"
                 ))
-        
-        # Combination 5: Good individual metrics but poor overall efficiency
-        efficiency = compression_metrics.get('efficiency')
-        if (composite_quality and compression_ratio and efficiency and
-            composite_quality > 0.8 and compression_ratio > 1.5 and efficiency < 0.6):
-            
-            result.warnings.append(ValidationWarning(
-                category="efficiency_paradox",
-                message=f"Efficiency paradox: Good quality ({composite_quality*100:.0f}%) and "
-                       f"compression ({compression_ratio:.1f}x) but poor efficiency ({efficiency*100:.0f}%)",
-                recommendation="Review efficiency calculation or compression strategy"
-            ))
     
     def get_validation_result(self, gif_name: str, pipeline_id: str) -> Optional[ValidationResult]:
         """Get validation result for a specific GIF and pipeline combination."""

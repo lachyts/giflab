@@ -4,7 +4,7 @@ This document provides a comprehensive technical overview of the targeted experi
 
 ## System Overview
 
-The targeted experiment presets system replaces the inefficient `generate_all_pipelines()` + sampling approach with direct targeted pipeline generation, achieving 80-99% efficiency improvements for focused research studies.
+The targeted experiment presets system provides direct targeted pipeline generation for focused research studies.
 
 ### Core Architecture
 
@@ -209,7 +209,7 @@ class GifLabRunner:
 ```
 
 **Integration Points**:
-- **Pipeline Generation**: `generate_targeted_pipelines()` replaces `generate_all_pipelines()` + sampling
+- **Pipeline Generation**: `generate_targeted_pipelines()` creates focused pipeline sets
 - **Experiment Execution**: `run_targeted_experiment()` provides complete workflow
 - **Preset Discovery**: `list_available_presets()` enables preset exploration
 
@@ -343,11 +343,9 @@ No Preset Options
 
 ### 1. Efficiency Optimizations
 
-**Pipeline Count Reduction**:
+**Targeted Pipeline Generation**:
 ```
-Traditional:    generate_all_pipelines() → 935 pipelines → sampling → 46-233 used
-Targeted:       generate_targeted_pipelines() → 5-64 pipelines → all used
-Efficiency:     93-99% reduction in generated pipelines
+generate_targeted_pipelines() → 5-64 pipelines → all used
 ```
 
 **Memory Optimization**:
@@ -476,7 +474,7 @@ def test_pipeline_generation():
 ```python
 def test_end_to_end_execution():
     """Test complete experiment workflow."""
-    runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)
+    runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)  # Explicit cache control
     result = runner.run_targeted_experiment("frame-focus", quality_threshold=0.1)
     assert result.total_jobs_run > 0
 ```

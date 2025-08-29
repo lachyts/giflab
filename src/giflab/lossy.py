@@ -960,17 +960,24 @@ def _extract_frame_timing(input_path: Path, total_frames: int) -> list[int]:
 
         logger.debug("Extracting frame timing information from GIF")
         with Image.open(input_path) as img:
+            # Extract original FPS for debugging
+            original_fps = 1000.0 / img.info.get("duration", 100) if img.info.get("duration") else 10.0
+            logger.info(f"Original GIF FPS: {original_fps:.2f}")
+            
             for i in range(total_frames):
                 try:
                     img.seek(i)
                     duration = img.info.get("duration", 100)  # Default 100ms
                     frame_delays.append(max(MIN_FRAME_DELAY_MS, duration))
+                    if i < 3:  # Log first few frames for debugging
+                        logger.debug(f"Frame {i}: duration={duration}ms")
                 except (EOFError, Exception):
                     frame_delays.append(100)  # Default fallback
 
         avg_delay = sum(frame_delays) / len(frame_delays) if frame_delays else 100
-        logger.debug(
-            f"Extracted timing for {len(frame_delays)} frames (avg: {avg_delay:.1f}ms)"
+        calculated_fps = 1000.0 / avg_delay if avg_delay > 0 else 0.0
+        logger.info(
+            f"Extracted timing for {len(frame_delays)} frames (avg: {avg_delay:.1f}ms, calculated FPS: {calculated_fps:.2f})"
         )
 
     except Exception as e:
@@ -1036,6 +1043,17 @@ def _generate_json_config(
             validate_color_keep_count(color_keep_count)
             json_config["colors"] = max(2, min(256, color_keep_count))
 
+        # Debug the frame delays in the JSON config
+        sample_delays = [frame["delay"] for frame in frame_files[:5]]  # First 5 frames
+        avg_json_delay = sum(frame["delay"] for frame in frame_files) / len(frame_files) if frame_files else 0
+        json_fps = 1000.0 / avg_json_delay if avg_json_delay > 0 else 0.0
+        
+        logger.info(
+            f"Generated JSON config with {len(frame_files)} frames, "
+            f"lossy={json_config['lossy']}, "
+            f"colors={json_config.get('colors', 'default')}"
+        )
+        logger.info(f"JSON config delays - sample: {sample_delays}, avg: {avg_json_delay:.1f}ms, FPS: {json_fps:.2f}")
         logger.debug(
             f"Generated JSON config with {len(frame_files)} frames, "
             f"lossy={json_config['lossy']}, "
@@ -1116,6 +1134,41 @@ def _execute_animately_advanced(
         logger.info(
             f"Compression completed in {render_ms}ms, output size: {output_size} bytes"
         )
+        
+        # Validate that Animately preserved the timing correctly
+        try:
+            from .meta import extract_gif_metadata
+            output_metadata = extract_gif_metadata(output_path)
+            output_fps = output_metadata.orig_fps
+            
+            # Calculate expected FPS from the JSON config we provided
+            with open(json_config_path, 'r') as f:
+                config_data = json.load(f)
+            
+            if 'frames' in config_data and config_data['frames']:
+                frame_delays = [frame.get('delay', 100) for frame in config_data['frames']]
+                expected_avg_delay = sum(frame_delays) / len(frame_delays)
+                expected_fps = 1000.0 / expected_avg_delay if expected_avg_delay > 0 else 10.0
+                
+                fps_deviation = abs(output_fps - expected_fps) / expected_fps if expected_fps > 0 else 0
+                
+                logger.info(f"FPS validation: expected {expected_fps:.2f}, got {output_fps:.2f}, deviation {fps_deviation*100:.1f}%")
+                
+                if fps_deviation > 0.5:  # More than 50% FPS deviation
+                    logger.error(
+                        f"❌ Animately advanced-lossy timing corruption detected! "
+                        f"Expected FPS: {expected_fps:.2f}, Got: {output_fps:.2f} "
+                        f"(deviation: {fps_deviation*100:.1f}%)"
+                    )
+                    logger.error("Known Animately bug: advanced-lossy mode does not preserve JSON delay values")
+                    
+                    # Add timing corruption to stderr for tracking in results
+                    timing_error = f"FPS corruption: expected {expected_fps:.2f}fps, got {output_fps:.2f}fps"
+                    stderr_output = f"{timing_error}. {result.stderr}" if result.stderr else timing_error
+                    return render_ms, stderr_output
+            
+        except Exception as e:
+            logger.warning(f"Could not validate output timing: {e}")
 
         return render_ms, result.stderr if result.stderr else None
 

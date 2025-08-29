@@ -4,9 +4,9 @@ Get started with targeted presets in under 10 minutes. This guide shows you the 
 
 ## What Are Targeted Presets?
 
-Instead of generating all possible GIF compression combinations (935 total) and then sampling from them, targeted presets create only the specific combinations you need for focused research studies. This provides 80-99% efficiency gains.
+Targeted presets create only the specific pipeline combinations you need for focused research studies.
 
-**Example**: To compare frame reduction algorithms, generate only 5 pipelines (one per algorithm) instead of 935 combinations.
+**Example**: To compare frame reduction algorithms, use the `frame-focus` preset which generates 5 targeted pipelines (one per algorithm).
 
 ## 5-Minute Quick Start
 
@@ -182,15 +182,6 @@ poetry run python -m giflab run \
   --use-cache \
   --use-gpu
 ```
-
-## Efficiency Comparison
-
-| Approach | Pipelines Generated | Efficiency |
-|----------|-------------------|------------|
-| Traditional (generate all + sample) | 935 → 46 used | 95% waste |
-| **Targeted: frame-focus** | **5 generated** | **99.5% efficient** |
-| **Targeted: color-optimization** | **17 generated** | **98.2% efficient** |
-| **Targeted: quick-test** | **2 generated** | **99.8% efficient** |
 
 ## Troubleshooting
 

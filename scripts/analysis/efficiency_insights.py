@@ -17,10 +17,8 @@ def load_and_prepare_data():
     df = pd.read_csv(results_path)
     df = df[df["success"] is True].copy()
 
-    # Add quality difference
-    df["quality_improvement"] = (
-        df["enhanced_composite_quality"] - df["composite_quality"]
-    )
+    # Add quality variance for analysis
+    df["quality_variance"] = df["composite_quality"].rolling(window=5, center=True).std().fillna(0)
 
     # Extract pipeline components
     pipeline_parts = df["pipeline_id"].str.split("__", expand=True)
@@ -44,59 +42,45 @@ def show_efficiency_in_practice(df):
     samples = df.sample(5, random_state=42).sort_values("efficiency", ascending=False)
 
     for _idx, row in samples.iterrows():
-        efficiency_calc = row["compression_ratio"] * row["enhanced_composite_quality"]
+        efficiency_calc = row["compression_ratio"] * row["composite_quality"]
         print(f"\n📊 {row['content_type'].upper()} content:")
         print(
             f"   Pipeline: {row['frame_tool']} + {row['color_tool']} + {row['lossy_tool']}"
         )
         print(f"   Compression: {row['compression_ratio']:.1f}x")
-        print(f"   Quality: {row['enhanced_composite_quality']:.3f}")
+        print(f"   Quality: {row['composite_quality']:.3f}")
         print(
-            f"   Efficiency: {row['compression_ratio']:.1f} × {row['enhanced_composite_quality']:.3f} = {efficiency_calc:.2f}"
+            f"   Efficiency: {row['compression_ratio']:.1f} × {row['composite_quality']:.3f} = {efficiency_calc:.2f}"
         )
         print(
             f"   Result: {row['file_size_kb']:.1f}KB (was {row['original_size_kb']:.1f}KB)"
         )
 
 
-def compare_old_vs_new_quality_assessment(df):
-    """Show specific cases where enhanced metrics reveal different insights."""
-    print("\n\n🔍 OLD vs NEW QUALITY ASSESSMENT")
+def show_quality_insights(df):
+    """Show specific insights about composite quality assessment."""
+    print("\n\n🔍 COMPOSITE QUALITY INSIGHTS")
     print("=" * 50)
 
-    # Find interesting cases
-    big_improvements = df[df["quality_improvement"] > 0.3].nlargest(
-        3, "quality_improvement"
-    )
-    big_decreases = df[df["quality_improvement"] < -0.1].nsmallest(
-        3, "quality_improvement"
-    )
+    # Find interesting quality patterns
+    high_quality = df[df["composite_quality"] > 0.8].nlargest(3, "composite_quality")
+    high_variance = df[df["quality_variance"] > 0.05].nlargest(3, "quality_variance")
 
-    print("Cases where ENHANCED metrics found BETTER quality:")
-    for _idx, row in big_improvements.iterrows():
+    print("Highest quality results (composite quality > 0.8):")
+    for _idx, row in high_quality.iterrows():
         print(f"\n✅ {row['content_type'].title()} - {row['frame_tool']} pipeline")
-        print(
-            f"   Legacy assessment: {row['composite_quality']:.3f} (based on 4 metrics)"
-        )
-        print(
-            f"   Enhanced assessment: {row['enhanced_composite_quality']:.3f} (based on 11 metrics)"
-        )
-        print(f"   Improvement: +{row['quality_improvement']:.3f}")
-        print(
-            "   Why: Enhanced system detected quality in dimensions legacy system missed"
-        )
-        print(f"   Impact: Efficiency score rose to {row['efficiency']:.2f}")
+        print(f"   Composite quality: {row['composite_quality']:.3f}")
+        print(f"   Compression ratio: {row['compression_ratio']:.1f}x")
+        print(f"   Efficiency score: {row['efficiency']:.2f}")
+        print(f"   File size: {row['file_size_kb']:.1f}KB")
 
-    print("\n\nCases where ENHANCED metrics found LOWER quality:")
-    for _idx, row in big_decreases.iterrows():
+    print("\n\nHighest quality variance (inconsistent performance):")
+    for _idx, row in high_variance.iterrows():
         print(f"\n⚠️  {row['content_type'].title()} - {row['frame_tool']} pipeline")
-        print(f"   Legacy assessment: {row['composite_quality']:.3f}")
-        print(f"   Enhanced assessment: {row['enhanced_composite_quality']:.3f}")
-        print(f"   Decrease: {row['quality_improvement']:.3f}")
-        print(
-            "   Why: Enhanced system detected quality issues in additional dimensions"
-        )
-        print(f"   Impact: More accurate efficiency score: {row['efficiency']:.2f}")
+        print(f"   Composite quality: {row['composite_quality']:.3f}")
+        print(f"   Quality variance: {row['quality_variance']:.3f}")
+        print(f"   Efficiency score: {row['efficiency']:.2f}")
+        print("   Note: High variance suggests inconsistent performance across content")
 
 
 def find_best_pipelines_by_use_case(df):
@@ -106,7 +90,7 @@ def find_best_pipelines_by_use_case(df):
 
     use_cases = {
         "Maximum Compression": df.nlargest(3, "compression_ratio"),
-        "Best Quality Retention": df.nlargest(3, "enhanced_composite_quality"),
+        "Best Quality Retention": df.nlargest(3, "composite_quality"),
         "Optimal Efficiency": df.nlargest(3, "efficiency"),
         "Small File Sizes": df.nsmallest(3, "file_size_kb"),
         "Balanced Performance": df.loc[df["balanced_score"].nlargest(3).index]
@@ -121,7 +105,7 @@ def find_best_pipelines_by_use_case(df):
                 f"   {idx}. {row['frame_tool']}+{row['color_tool']}+{row['lossy_tool']}"
             )
             print(
-                f"      Quality: {row['enhanced_composite_quality']:.3f} | Compression: {row['compression_ratio']:.1f}x"
+                f"      Quality: {row['composite_quality']:.3f} | Compression: {row['compression_ratio']:.1f}x"
             )
             print(
                 f"      Efficiency: {row['efficiency']:.2f} | Size: {row['file_size_kb']:.1f}KB"
@@ -141,14 +125,14 @@ def content_type_recommendations(df):
 
         best_efficiency = content_data.loc[content_data["efficiency"].idxmax()]
         best_quality = content_data.loc[
-            content_data["enhanced_composite_quality"].idxmax()
+            content_data["composite_quality"].idxmax()
         ]
 
         content_insights[content_type] = {
             "efficiency_champion": best_efficiency,
             "quality_champion": best_quality,
             "avg_efficiency": content_data["efficiency"].mean(),
-            "avg_quality": content_data["enhanced_composite_quality"].mean(),
+            "avg_quality": content_data["composite_quality"].mean(),
         }
 
     # Sort by average efficiency
@@ -171,7 +155,7 @@ def content_type_recommendations(df):
         )
         if eff_champ["pipeline_id"] != qual_champ["pipeline_id"]:
             print(
-                f"   🏆 Quality winner: {qual_champ['frame_tool']}+{qual_champ['lossy_tool']} (quality: {qual_champ['enhanced_composite_quality']:.3f})"
+                f"   🏆 Quality winner: {qual_champ['frame_tool']}+{qual_champ['lossy_tool']} (quality: {qual_champ['composite_quality']:.3f})"
             )
         else:
             print("   ✨ Same pipeline wins both efficiency and quality!")
@@ -199,7 +183,7 @@ def efficiency_distribution_insights(df):
         df.groupby("efficiency_tier")
         .agg(
             {
-                "enhanced_composite_quality": ["mean", "std"],
+                "composite_quality": ["mean", "std"],
                 "compression_ratio": ["mean", "std"],
                 "file_size_kb": ["mean", "std"],
                 "pipeline_id": "count",
@@ -221,7 +205,7 @@ def efficiency_distribution_insights(df):
         )
         top_outstanding = outstanding.iloc[0]
         print(
-            f"   Example: Achieved {top_outstanding['compression_ratio']:.1f}x compression with {top_outstanding['enhanced_composite_quality']:.3f} quality"
+            f"   Example: Achieved {top_outstanding['compression_ratio']:.1f}x compression with {top_outstanding['composite_quality']:.3f} quality"
         )
 
     excellent = df[(df["efficiency"] >= 5) & (df["efficiency"] < 10)]
@@ -244,27 +228,27 @@ def efficiency_distribution_insights(df):
 def main():
     """Run focused efficiency analysis."""
     print("🚀 EFFICIENCY SCORING ANALYSIS")
-    print("Analysis of enhanced composite quality + efficiency metrics")
+    print("Analysis of composite quality + efficiency metrics")
     print("=" * 60)
 
     df = load_and_prepare_data()
 
     # Add balanced score for use case analysis
     df["balanced_score"] = (
-        df["enhanced_composite_quality"] * 0.4
+        df["composite_quality"] * 0.4
         + (df["compression_ratio"] / df["compression_ratio"].max()) * 0.3
         + (df["efficiency"] / df["efficiency"].max()) * 0.3
     )
 
     show_efficiency_in_practice(df)
-    compare_old_vs_new_quality_assessment(df)
+    show_quality_insights(df)
     find_best_pipelines_by_use_case(df)
     content_type_recommendations(df)
     efficiency_distribution_insights(df)
 
     print("\n\n🎉 SUMMARY")
     print("=" * 20)
-    print("✅ Enhanced metrics provide more nuanced quality assessment")
+    print("✅ Composite quality metrics provide comprehensive quality assessment")
     print("✅ Efficiency scoring effectively balances compression vs quality")
     print("✅ Clear recommendations emerge for different use cases")
     print("✅ Content type significantly impacts optimal pipeline choice")

@@ -33,7 +33,7 @@ def analyze_metric_differences(df):
 
     # Calculate differences
     df["quality_improvement"] = (
-        df["enhanced_composite_quality"] - df["composite_quality"]
+        df["composite_quality"] - df["composite_quality"]
     )
 
     print("\nDataset Overview:")
@@ -48,7 +48,7 @@ def analyze_metric_differences(df):
     print(f"• Median: {legacy_stats['50%']:.3f}")
 
     print("\nEnhanced Composite Quality Stats:")
-    enhanced_stats = df["enhanced_composite_quality"].describe()
+    enhanced_stats = df["composite_quality"].describe()
     print(f"• Range: {enhanced_stats['min']:.3f} to {enhanced_stats['max']:.3f}")
     print(f"• Mean: {enhanced_stats['mean']:.3f} ± {enhanced_stats['std']:.3f}")
     print(f"• Median: {enhanced_stats['50%']:.3f}")
@@ -107,7 +107,7 @@ def analyze_efficiency_scores(df):
     top_efficient = df.nlargest(10, "efficiency")[
         [
             "pipeline_id",
-            "enhanced_composite_quality",
+            "composite_quality",
             "compression_ratio",
             "efficiency",
             "file_size_kb",
@@ -116,7 +116,7 @@ def analyze_efficiency_scores(df):
     for _idx, row in top_efficient.iterrows():
         print(f"• {row['pipeline_id'][:60]}")
         print(
-            f"  Quality: {row['enhanced_composite_quality']:.3f}, Compression: {row['compression_ratio']:.1f}x, Efficiency: {row['efficiency']:.2f}, Size: {row['file_size_kb']:.1f}KB"
+            f"  Quality: {row['composite_quality']:.3f}, Compression: {row['compression_ratio']:.1f}x, Efficiency: {row['efficiency']:.2f}, Size: {row['file_size_kb']:.1f}KB"
         )
 
 
@@ -154,7 +154,7 @@ def analyze_by_pipeline_type(df):
         df.groupby("frame_algorithm")
         .agg(
             {
-                "enhanced_composite_quality": ["mean", "std"],
+                "composite_quality": ["mean", "std"],
                 "efficiency": ["mean", "std"],
                 "compression_ratio": ["mean", "std"],
                 "pipeline_id": "count",
@@ -179,7 +179,7 @@ def analyze_by_pipeline_type(df):
         df.groupby("color_algorithm")
         .agg(
             {
-                "enhanced_composite_quality": ["mean", "std"],
+                "composite_quality": ["mean", "std"],
                 "efficiency": ["mean", "std"],
                 "compression_ratio": ["mean", "std"],
                 "pipeline_id": "count",
@@ -207,7 +207,7 @@ def find_sweet_spot_pipelines(df):
     print("=" * 60)
 
     # Define quality and compression thresholds
-    high_quality_threshold = df["enhanced_composite_quality"].quantile(0.75)  # Top 25%
+    high_quality_threshold = df["composite_quality"].quantile(0.75)  # Top 25%
     high_compression_threshold = df["compression_ratio"].quantile(0.75)  # Top 25%
     small_size_threshold = df["file_size_kb"].quantile(0.25)  # Bottom 25%
 
@@ -218,7 +218,7 @@ def find_sweet_spot_pipelines(df):
 
     # Find sweet spot pipelines
     sweet_spot = df[
-        (df["enhanced_composite_quality"] >= high_quality_threshold)
+        (df["composite_quality"] >= high_quality_threshold)
         & (df["compression_ratio"] >= high_compression_threshold)
         & (df["file_size_kb"] <= small_size_threshold)
     ]
@@ -234,7 +234,7 @@ def find_sweet_spot_pipelines(df):
         for _idx, row in sweet_spot_sorted.iterrows():
             print(f"• {row['pipeline_id'][:60]}")
             print(
-                f"  Quality: {row['enhanced_composite_quality']:.3f}, Compression: {row['compression_ratio']:.1f}x"
+                f"  Quality: {row['composite_quality']:.3f}, Compression: {row['compression_ratio']:.1f}x"
             )
             print(
                 f"  Efficiency: {row['efficiency']:.2f}, Size: {row['file_size_kb']:.1f}KB"
@@ -245,7 +245,7 @@ def find_sweet_spot_pipelines(df):
     top_efficiency = df.nlargest(20, "efficiency")
     efficiency_summary = top_efficiency.agg(
         {
-            "enhanced_composite_quality": ["mean", "min", "max"],
+            "composite_quality": ["mean", "min", "max"],
             "compression_ratio": ["mean", "min", "max"],
             "file_size_kb": ["mean", "min", "max"],
             "efficiency": ["mean", "min", "max"],
@@ -264,7 +264,7 @@ def compare_content_types(df):
         df.groupby("content_type")
         .agg(
             {
-                "enhanced_composite_quality": ["mean", "std", "min", "max"],
+                "composite_quality": ["mean", "std", "min", "max"],
                 "efficiency": ["mean", "std", "min", "max"],
                 "compression_ratio": ["mean", "std"],
                 "file_size_kb": ["mean", "std"],
@@ -300,7 +300,7 @@ def compare_content_types(df):
         best = content_data.loc[content_data["efficiency"].idxmax()]
         print(f"\n{content_type.upper()}:")
         print(f"• Pipeline: {best['pipeline_id']}")
-        print(f"• Quality: {best['enhanced_composite_quality']:.3f}")
+        print(f"• Quality: {best['composite_quality']:.3f}")
         print(f"• Efficiency: {best['efficiency']:.2f}")
         print(f"• Compression: {best['compression_ratio']:.1f}x")
         print(f"• File size: {best['file_size_kb']:.1f}KB")
@@ -319,7 +319,7 @@ def detailed_case_studies(df):
     )
     print(f"Pipeline: {max_improvement['pipeline_id']}")
     print(f"• Legacy quality: {max_improvement['composite_quality']:.3f}")
-    print(f"• Enhanced quality: {max_improvement['enhanced_composite_quality']:.3f}")
+    print(f"• Enhanced quality: {max_improvement['composite_quality']:.3f}")
     print("• Why improved: Enhanced system captures additional quality dimensions")
     print(f"• Efficiency: {max_improvement['efficiency']:.2f}")
     print(f"• Compression: {max_improvement['compression_ratio']:.1f}x")
@@ -328,7 +328,7 @@ def detailed_case_studies(df):
     max_efficiency = df.loc[df["efficiency"].idxmax()]
     print(f"\nCASE 2: Highest Efficiency Score ({max_efficiency['efficiency']:.2f})")
     print(f"Pipeline: {max_efficiency['pipeline_id']}")
-    print(f"• Enhanced quality: {max_efficiency['enhanced_composite_quality']:.3f}")
+    print(f"• Enhanced quality: {max_efficiency['composite_quality']:.3f}")
     print(f"• Compression ratio: {max_efficiency['compression_ratio']:.1f}x")
     print(f"• File size: {max_efficiency['file_size_kb']:.1f}KB")
     print(
@@ -338,7 +338,7 @@ def detailed_case_studies(df):
     # Case 3: Best balanced performer
     # Find pipeline with high scores in all dimensions
     df["balanced_score"] = (
-        df["enhanced_composite_quality"] * 0.4
+        df["composite_quality"] * 0.4
         + (df["compression_ratio"] / df["compression_ratio"].max()) * 0.3
         + (df["efficiency"] / df["efficiency"].max()) * 0.3
     )
@@ -348,7 +348,7 @@ def detailed_case_studies(df):
         f"\nCASE 3: Most Balanced Performer (score: {best_balanced['balanced_score']:.3f})"
     )
     print(f"Pipeline: {best_balanced['pipeline_id']}")
-    print(f"• Enhanced quality: {best_balanced['enhanced_composite_quality']:.3f}")
+    print(f"• Enhanced quality: {best_balanced['composite_quality']:.3f}")
     print(f"• Efficiency: {best_balanced['efficiency']:.2f}")
     print(f"• Compression: {best_balanced['compression_ratio']:.1f}x")
     print(f"• File size: {best_balanced['file_size_kb']:.1f}KB")
@@ -367,7 +367,7 @@ def main():
 
     # Add quality improvement column
     df["quality_improvement"] = (
-        df["enhanced_composite_quality"] - df["composite_quality"]
+        df["composite_quality"] - df["composite_quality"]
     )
 
     # Run all analyses

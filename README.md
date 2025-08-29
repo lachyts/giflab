@@ -39,9 +39,9 @@ GifLab provides a **comprehensive compression pipeline** with access to all majo
 
 ## 🎯 **Targeted Presets**
 
-**Transform your compression workflow with 93-99% efficiency gains!**
+**Focused, efficient compression testing!**
 
-Instead of generating all 935 possible pipeline combinations and sampling from them, targeted presets create only the specific combinations you need for focused research studies.
+Targeted presets create only the specific pipeline combinations you need for focused research studies.
 
 ### Quick Start with Presets
 
@@ -49,23 +49,15 @@ Instead of generating all 935 possible pipeline combinations and sampling from t
 # List all available presets
 poetry run python -m giflab run --list-presets
 
-# Compare all frame reduction algorithms (5 pipelines vs 935)
+# Compare all frame reduction algorithms (5 targeted pipelines)
 poetry run python -m giflab run --preset frame-focus
 
-# Compare color quantization methods (17 pipelines vs 935)  
+# Compare color quantization methods (17 targeted pipelines)  
 poetry run python -m giflab run --preset color-optimization
 
 # Quick testing preset (2 pipelines)
 poetry run python -m giflab run --preset quick-test
 ```
-
-### Efficiency Comparison
-
-| Approach | Pipelines Generated | Efficiency |
-|----------|-------------------|------------|
-| Traditional (generate all + sample) | 935 → 46 used | 95% waste |
-| **🎯 Targeted: frame-focus** | **5 generated** | **99.5% efficient** |
-| **🎯 Targeted: color-optimization** | **17 generated** | **98.2% efficient** |
 
 ### Available Research Presets
 
@@ -97,14 +89,6 @@ Workflow summary:
 
 The **Explore → Analyze → Scale** workflow ensures data-driven compression optimization.
 
-> ⚠️ **Job-count warning**: With dynamic matrix mode enabled (default from S6
-> onward) GifLab will test *every* combination of frame-ratio × palette size ×
-> lossy level × engine optimisation flag × tool chain.  The default settings
-> easily create several thousand pipeline runs for the 10 sample GIFs, which can
-> take minutes on a modern laptop.  If you only want a subset, trim the
-> `ExperimentalConfig` lists (e.g. `LOSSY_LEVELS`, `COLOR_KEEP_COUNTS`) or run
-> with fewer sample GIFs.
-
 ## 🤖 ML-Driven Optimization Strategy
 
 **GifLab's Vision**: Use machine learning to automatically select the optimal compression tool combination based on GIF characteristics.
@@ -119,7 +103,7 @@ Different GIF compression tools excel at different types of content:
 - **Hybrid approaches**: Can combine strengths of multiple tools
 
 ### The Solution
-GifLab's experimental framework tests multiple algorithmic combinations to:
+GifLab's compression pipeline tests multiple algorithmic combinations to:
 
 1. **Build a dataset** of GIF characteristics (colors, frames, complexity, content type) paired with optimal tool combinations
 2. **Train ML models** to predict the best compression strategy for new GIFs
@@ -147,7 +131,7 @@ poetry run python -m giflab select-pipelines results/runs/latest/enhanced_stream
 poetry run python -m giflab run data/raw --pipelines winners.yaml
 ```
 
-📖 **For detailed documentation, see:** [Experimental Testing Guide](docs/guides/experimental-testing.md)
+📖 **For detailed documentation, see:** [Compression Testing Guide](docs/guides/experimental-testing.md)
 
 ## 🗂️ Directory-Based Source Detection
 
@@ -412,7 +396,7 @@ poetry run python -m giflab run data/raw --pipelines custom_pipelines.yaml
 # Test all 5 engines with comprehensive sampling
 poetry run python -m giflab run --sampling representative
 
-# Quick experimental test for development
+# Quick test for development
 poetry run python -m giflab run --sampling quick
 
 # Full comprehensive testing (slower but thorough)
@@ -447,7 +431,7 @@ poetry run python -m giflab select-pipelines results/runs/latest/enhanced_stream
 
 **For Research & Development:**
 ```bash
-# Full experimental testing with comprehensive analysis
+# Full comprehensive testing with advanced analysis
 poetry run python -m giflab run --sampling full --use-gpu
 ```
 
@@ -646,7 +630,7 @@ View detailed failure information:
 poetry run python -m giflab view-failures --summary
 ```
 
-**📚 For more details:** See [Experimental Testing Guide](docs/guides/experimental-testing.md)
+**📚 For more details:** See [Compression Testing Guide](docs/guides/experimental-testing.md)
 
 ## License
 

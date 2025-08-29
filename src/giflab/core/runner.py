@@ -33,6 +33,7 @@ from ..dynamic_pipeline import Pipeline, generate_all_pipelines
 from ..elimination_cache import PipelineResultsCache, get_git_commit
 from ..elimination_errors import ErrorTypes
 from ..error_handling import clean_error_message
+from ..optimization_validation import ValidationChecker
 from ..synthetic_gifs import (
     SyntheticFrameGenerator,
     SyntheticGifGenerator,
@@ -78,7 +79,7 @@ class GifLabRunner:
         self,
         output_dir: Path = Path("results/runs"),
         use_gpu: bool = False,
-        use_cache: bool = True,
+        use_cache: bool = False,
     ):
         # Always resolve paths to absolute paths to prevent nesting when working directory changes
         if output_dir.is_absolute():
@@ -102,24 +103,8 @@ class GifLabRunner:
         # Track current preset for parameter override (None = use default test_params)
         self._current_preset: ExperimentPreset | None = None
 
-        # Create descriptive output directory with sequential numbering for this run
-        experiment_name = self._generate_experiment_name()
-        self.output_dir = self.base_output_dir / experiment_name
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Also create a "latest" symlink for easy access to most recent results
-        latest_link = self.base_output_dir / "latest"
-        try:
-            if latest_link.exists() or latest_link.is_symlink():
-                latest_link.unlink()
-            # Create relative symlink to work better across systems
-            latest_link.symlink_to(experiment_name)
-            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
-            self.logger.info(f"🔗 Latest results symlink: {latest_link}")
-        except (OSError, NotImplementedError) as e:
-            # Symlinks not supported on this system (e.g., Windows without admin rights)
-            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
-            self.logger.warning(f"Could not create 'latest' symlink: {e}")
+        # Don't create output directory yet - wait until experiment actually starts
+        self.output_dir: Path | None = None
 
         # Initialize cache system
         if self.use_cache:
@@ -143,14 +128,17 @@ class GifLabRunner:
         if self.use_gpu:
             self._test_gpu_availability()
 
-        # Log elimination run metadata
-        self._log_run_metadata()
+        # Initialize synthetic GIF generator (will be set with proper output_dir later)
+        self.gif_generator = None
+        self.synthetic_specs = None
 
-        # Initialize synthetic GIF generator
-        self.gif_generator = SyntheticGifGenerator(self.output_dir)
-
-        # Get synthetic GIF specifications from generator (no duplication)
-        self.synthetic_specs = self.gif_generator.synthetic_specs
+        # Initialize validation system for pipeline validation
+        try:
+            self.validation_checker = ValidationChecker()
+            self.logger.info("🔍 ValidationChecker initialized for pipeline validation")
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize ValidationChecker: {e}")
+            self.validation_checker = None
 
     def create_frame(
         self, content_type: str, size: tuple[int, int], frame: int, total_frames: int
@@ -164,11 +152,11 @@ class GifLabRunner:
             content_type, size, frame, total_frames
         )
 
-    def _generate_experiment_name(self) -> str:
+    def _generate_experiment_name(self, preset_id: str | None = None) -> str:
         """Generate a descriptive experiment name with sequential numbering and Australian date format.
         
         Format: {run_number:03d}-{experiment_description}-{aus_date}
-        Example: 001-gifsicle-color-validation-14aug2025-1108
+        Example: 001-gifsicle-only-14aug2025-1108
         """
         # Get next sequential run number
         run_number = self._get_next_run_number()
@@ -176,10 +164,46 @@ class GifLabRunner:
         # Generate simple, clean timestamp (Australian format)
         timestamp = datetime.now().strftime("%d-%m-%y")
         
-        # Generate experiment description (will be set later when we know the experiment type)
-        experiment_desc = "custom-experiment"
+        # Use preset ID if available, otherwise default description
+        if preset_id:
+            experiment_desc = preset_id
+        else:
+            experiment_desc = "custom-experiment"
         
         return f"{run_number:03d}-{experiment_desc}-{timestamp}"
+
+    def _initialize_experiment_directory(self, preset_id: str | None = None) -> None:
+        """Initialize the experiment output directory when an experiment actually starts."""
+        if self.output_dir is not None:
+            return  # Already initialized
+            
+        # Create descriptive output directory with sequential numbering for this run
+        experiment_name = self._generate_experiment_name(preset_id)
+        self.output_dir = self.base_output_dir / experiment_name
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Also create a "latest" symlink for easy access to most recent results
+        latest_link = self.base_output_dir / "latest"
+        try:
+            if latest_link.exists() or latest_link.is_symlink():
+                latest_link.unlink()
+            # Create relative symlink to work better across systems
+            latest_link.symlink_to(experiment_name)
+            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
+            self.logger.info(f"🔗 Latest results symlink: {latest_link}")
+        except (OSError, NotImplementedError) as e:
+            # Symlinks not supported on this system (e.g., Windows without admin rights)
+            self.logger.info(f"📁 Results will be saved to: {self.output_dir}")
+            self.logger.warning(f"Could not create 'latest' symlink: {e}")
+
+        # Log elimination run metadata
+        self._log_run_metadata()
+
+        # Initialize synthetic GIF generator
+        self.gif_generator = SyntheticGifGenerator(self.output_dir)
+
+        # Get synthetic GIF specifications from generator (no duplication)
+        self.synthetic_specs = self.gif_generator.synthetic_specs
     
     def _get_next_run_number(self) -> int:
         """Get the next sequential run number by examining existing directories."""
@@ -275,6 +299,7 @@ class GifLabRunner:
         preset_id: str,
         quality_threshold: float = 0.05,
         use_targeted_gifs: bool = False,
+        custom_gif_dir: Path | None = None,
     ) -> AnalysisResult:
         """Run a targeted experiment using a specific preset configuration.
 
@@ -284,7 +309,8 @@ class GifLabRunner:
         Args:
             preset_id: ID of the experiment preset to use
             quality_threshold: SSIM threshold for elimination
-            use_targeted_gifs: Whether to use targeted GIF subset
+            use_targeted_gifs: Whether to use targeted GIF subset (ignored if custom_gif_dir provided)
+            custom_gif_dir: Optional directory containing user's GIFs to test instead of synthetic ones
 
         Returns:
             AnalysisResult with targeted testing results
@@ -298,6 +324,9 @@ class GifLabRunner:
         if not preset:
             raise ValueError(f"Unknown preset ID: {preset_id}")
 
+        # Initialize experiment directory with preset name
+        self._initialize_experiment_directory(preset_id)
+
         # Activate preset mode for parameter override
         self._current_preset = preset
 
@@ -305,12 +334,31 @@ class GifLabRunner:
             # Generate targeted pipelines
             targeted_pipelines = self.generate_targeted_pipelines(preset_id)
 
-            # Run analysis with targeted pipelines
-            return self.run_analysis(
-                test_pipelines=targeted_pipelines,
-                quality_threshold=quality_threshold,
-                use_targeted_gifs=use_targeted_gifs,
-            )
+            # Choose GIF source based on parameters
+            if custom_gif_dir:
+                # Use custom GIFs from user-provided directory
+                gif_paths = list(custom_gif_dir.glob("*.gif"))
+                if not gif_paths:
+                    raise ValueError(f"No GIF files found in {custom_gif_dir}")
+                self.logger.info(f"Using {len(gif_paths)} custom GIFs from {custom_gif_dir}")
+                
+                # Run comprehensive testing directly with custom GIFs
+                results_df = self._run_comprehensive_testing(gif_paths, targeted_pipelines)
+                
+                # Analyze results and eliminate underperformers
+                experiment_result = self._analyze_and_experiment(results_df, quality_threshold)
+                
+                # Save results
+                self._save_results(experiment_result, results_df)
+                
+                return experiment_result
+            else:
+                # Use original synthetic GIF approach
+                return self.run_analysis(
+                    test_pipelines=targeted_pipelines,
+                    quality_threshold=quality_threshold,
+                    use_targeted_gifs=use_targeted_gifs,
+                )
         finally:
             # Always reset preset mode
             self._current_preset = None
@@ -400,6 +448,9 @@ class GifLabRunner:
 
     def generate_synthetic_gifs(self) -> list[Path]:
         """Generate all synthetic test GIFs in temporary subdirectory to avoid cluttering experiment root."""
+        # Ensure experiment directory is initialized first
+        self._initialize_experiment_directory()
+        
         self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
 
         from importlib import import_module
@@ -482,6 +533,9 @@ class GifLabRunner:
         """
         if test_pipelines is None:
             test_pipelines = generate_all_pipelines()
+
+        # Initialize experiment directory if not already done
+        self._initialize_experiment_directory()
 
         self.logger.info(
             f"Running elimination analysis on {len(test_pipelines)} pipelines"
@@ -598,7 +652,7 @@ class GifLabRunner:
         # Define all CSV headers comprehensively to match unified pipeline output
         csv_headers = [
             # Primary identifiers and metadata (aligned with main pipeline)
-            "gif_sha",                      # Git hash for gif identification (from main pipeline) 
+            "gif_sha",                      # Git hash for gif identification (from main pipeline)
             "gif_name",
             "orig_filename",                # Original filename preservation (from main pipeline)
             "content_type",
@@ -613,7 +667,7 @@ class GifLabRunner:
             
             # Original GIF properties (from main pipeline)
             "orig_width",                   # Original width (from main pipeline)
-            "orig_height",                  # Original height (from main pipeline) 
+            "orig_height",                  # Original height (from main pipeline)
             "orig_frames",                  # Original frame count (from main pipeline)
             "orig_fps",                     # Original FPS (from main pipeline)
             "orig_n_colors",                # Original color count (from main pipeline)
@@ -621,7 +675,7 @@ class GifLabRunner:
             
             # Comprehensive quality metrics (experimental pipeline strength)
             "ssim_mean",
-            "ssim_std", 
+            "ssim_std",
             "ssim_min",
             "ssim_max",
             "ms_ssim_mean",
@@ -636,7 +690,6 @@ class GifLabRunner:
             "texture_similarity_mean",
             "sharpness_similarity_mean",
             "composite_quality",
-            "enhanced_composite_quality",
             "efficiency",
             
             # Performance and processing metrics
@@ -658,16 +711,25 @@ class GifLabRunner:
 
             # Source and versioning (from main pipeline)
             "source_platform",
-            "source_metadata", 
+            "source_metadata",
             "timestamp",
             "giflab_version",
             "code_commit",
             "dataset_version",
             "engine_version",
             
+            # Validation results (from pipeline validation)
+            "validation_status",
+            "validation_passed",
+            "validation_issues_count",
+            "validation_frame_reduction_status",
+            "validation_fps_consistency_status",
+            "validation_quality_thresholds_status",
+            "validation_messages",
+            
             # Error tracking
             "error",
-            "error_traceback", 
+            "error_traceback",
             "error_timestamp",
         ]
 
@@ -799,7 +861,7 @@ class GifLabRunner:
                                 "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
                                 "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
                                 "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
-                                "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
+                                "sharpness_similarity_mean": None, "composite_quality": None,
                                 "efficiency": None,
                                 
                                 # Performance metrics
@@ -810,7 +872,7 @@ class GifLabRunner:
                                 
                                 # Applied parameters
                                 "applied_colors": None,
-                                "applied_lossy": None, 
+                                "applied_lossy": None,
                                 "applied_frame_ratio": None,
                                 "actual_pipeline_steps": 0,
                                 
@@ -821,14 +883,23 @@ class GifLabRunner:
                                 "disposal_artifacts_post": None,
                                 "disposal_artifacts_delta": None,
                                 
-                                # Source and versioning 
+                                # Source and versioning
                                 "source_platform": "unknown",
                                 "source_metadata": None,
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                 "giflab_version": "unknown",
-                                "code_commit": "unknown", 
+                                "code_commit": "unknown",
                                 "dataset_version": "unknown",
                                 "engine_version": "unknown",
+                                
+                                # Validation results (failed during validation)
+                                "validation_status": "VALIDATION_FAILED",
+                                "validation_passed": False,
+                                "validation_issues_count": 1,
+                                "validation_frame_reduction_status": None,
+                                "validation_fps_consistency_status": None,
+                                "validation_quality_thresholds_status": None,
+                                "validation_messages": error_msg,
                                 
                                 # Error information
                                 "error": error_msg,
@@ -867,7 +938,6 @@ class GifLabRunner:
                             )
                             
                             # Get the most detailed traceback available
-                            import traceback
                             full_traceback = traceback.format_exc()
                             
                             if self.cache:
@@ -887,7 +957,7 @@ class GifLabRunner:
                                         "error_type": "execution",
                                     },
                                 )
-                            # Create failed result entry with comprehensive error information  
+                            # Create failed result entry with comprehensive error information
                             try:
                                 failed_result = {
                                     # Primary identifiers and metadata
@@ -917,7 +987,7 @@ class GifLabRunner:
                                     "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
                                     "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
                                     "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
-                                    "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
+                                    "sharpness_similarity_mean": None, "composite_quality": None,
                                     "efficiency": None,
                                     
                                     # Performance metrics
@@ -926,7 +996,7 @@ class GifLabRunner:
                                     "pipeline_steps": len(pipeline.steps),
                                     "tools_used": [step.tool_cls.NAME for step in pipeline.steps],
                                     
-                                    # Applied parameters  
+                                    # Applied parameters
                                     "applied_colors": params["colors"] if self._pipeline_uses_color_reduction(pipeline) else None,
                                     "applied_lossy": params["lossy"] if self._pipeline_uses_lossy_compression(pipeline) else None,
                                     "applied_frame_ratio": params.get("frame_ratio", 1.0) if self._pipeline_uses_frame_reduction(pipeline) else None,
@@ -939,14 +1009,23 @@ class GifLabRunner:
                                     "disposal_artifacts_post": None,
                                     "disposal_artifacts_delta": None,
                                     
-                                    # Source and versioning 
+                                    # Source and versioning
                                     "source_platform": "unknown",
                                     "source_metadata": None,
                                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                     "giflab_version": "unknown",
-                                    "code_commit": "unknown", 
+                                    "code_commit": "unknown",
                                     "dataset_version": "unknown",
                                     "engine_version": "unknown",
+                                    
+                                    # Validation results (failed during execution)
+                                    "validation_status": "EXECUTION_FAILED",
+                                    "validation_passed": False,
+                                    "validation_issues_count": 1,
+                                    "validation_frame_reduction_status": None,
+                                    "validation_fps_consistency_status": None,
+                                    "validation_quality_thresholds_status": None,
+                                    "validation_messages": f"Pipeline execution failed: {str(e)}",
                                     
                                     # Error information
                                     "error": str(e),
@@ -992,7 +1071,6 @@ class GifLabRunner:
                         self.logger.error(
                             f"Critical error in pipeline processing: {critical_error}"
                         )
-                        import traceback
                         critical_traceback = traceback.format_exc()
                         
                         try:
@@ -1025,7 +1103,7 @@ class GifLabRunner:
                                 "ms_ssim_mean": None, "psnr_mean": None, "temporal_consistency": None,
                                 "mse_mean": None, "rmse_mean": None, "fsim_mean": None, "gmsd_mean": None,
                                 "chist_mean": None, "edge_similarity_mean": None, "texture_similarity_mean": None,
-                                "sharpness_similarity_mean": None, "composite_quality": None, "enhanced_composite_quality": None,
+                                "sharpness_similarity_mean": None, "composite_quality": None,
                                 "efficiency": None,
                                 
                                 # Performance metrics
@@ -1047,14 +1125,23 @@ class GifLabRunner:
                                 "disposal_artifacts_post": None,
                                 "disposal_artifacts_delta": None,
                                 
-                                # Source and versioning 
+                                # Source and versioning
                                 "source_platform": "unknown",
                                 "source_metadata": None,
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                 "giflab_version": "unknown",
-                                "code_commit": "unknown", 
+                                "code_commit": "unknown",
                                 "dataset_version": "unknown",
                                 "engine_version": "unknown",
+                                
+                                # Validation results (critical error)
+                                "validation_status": "CRITICAL_ERROR",
+                                "validation_passed": False,
+                                "validation_issues_count": 1,
+                                "validation_frame_reduction_status": None,
+                                "validation_fps_consistency_status": None,
+                                "validation_quality_thresholds_status": None,
+                                "validation_messages": f"Critical error: {str(critical_error)}",
                                 
                                 # Error information
                                 "error": f"Critical error: {str(critical_error)}",
@@ -1101,8 +1188,8 @@ class GifLabRunner:
         final_df = pd.read_csv(csv_path)
         
         # Report final completion statistics
-        total_successful = len(final_df[final_df["success"] == True])
-        total_failed = len(final_df[final_df["success"] == False])
+        total_successful = len(final_df[final_df["success"] is True])
+        total_failed = len(final_df[final_df["success"] is False])
         
         self.logger.info(
             f"Pipeline testing complete: {total_successful} successful, {total_failed} failed ({total_successful + total_failed} total jobs)"
@@ -1145,44 +1232,52 @@ class GifLabRunner:
             try:
                 # Write all buffered results to CSV
                 for result in buffer:
-                    # Ensure all required fields are present with safe defaults
+                    # Ensure all required fields are present with safe defaults - MUST match csv_headers order
                     safe_result = {
+                        # Primary identifiers and metadata (must match csv_headers order exactly)
+                        "gif_sha": result.get("gif_sha", ""),
                         "gif_name": result.get("gif_name", ""),
+                        "orig_filename": result.get("orig_filename", ""),
                         "content_type": result.get("content_type", ""),
                         "pipeline_id": result.get("pipeline_id", ""),
                         "connection_signature": result.get("connection_signature", ""),
                         "success": result.get("success", False),
+                        
+                        # File size and compression metrics
                         "file_size_kb": result.get("file_size_kb", 0),
                         "original_size_kb": result.get("original_size_kb", 0),
-                        "compression_ratio": result.get("compression_ratio", 1.0),
-                        "ssim_mean": result.get("ssim_mean", 0.0),
-                        "ssim_std": result.get("ssim_std", 0.0),
-                        "ssim_min": result.get("ssim_min", 0.0),
-                        "ssim_max": result.get("ssim_max", 0.0),
-                        "ms_ssim_mean": result.get("ms_ssim_mean", 0.0),
-                        "psnr_mean": result.get("psnr_mean", 0.0),
-                        "temporal_consistency": result.get("temporal_consistency", 0.0),
-                        "mse_mean": result.get("mse_mean", 0.0),
-                        "rmse_mean": result.get("rmse_mean", 0.0),
-                        "fsim_mean": result.get("fsim_mean", 0.0),
-                        "gmsd_mean": result.get("gmsd_mean", 0.0),
-                        "chist_mean": result.get("chist_mean", 0.0),
-                        "edge_similarity_mean": result.get("edge_similarity_mean", 0.0),
-                        "texture_similarity_mean": result.get(
-                            "texture_similarity_mean", 0.0
-                        ),
-                        "sharpness_similarity_mean": result.get(
-                            "sharpness_similarity_mean", 0.0
-                        ),
-                        "composite_quality": result.get("composite_quality", 0.0),
-                        "enhanced_composite_quality": result.get(
-                            "enhanced_composite_quality", 0.0
-                        ),
-                        "efficiency": result.get("efficiency", 0.0),
+                        "compression_ratio": round(result.get("compression_ratio", 1.0), 4),
+                        
+                        # Original GIF properties
+                        "orig_width": result.get("orig_width", 0),
+                        "orig_height": result.get("orig_height", 0),
+                        "orig_frames": result.get("orig_frames", 0),
+                        "orig_fps": round(result.get("orig_fps", 0.0), 2),
+                        "orig_n_colors": result.get("orig_n_colors", 0),
+                        "entropy": round(result.get("entropy", 0.0), 3),
+                        
+                        # Comprehensive quality metrics (rounded to prevent scientific notation)
+                        "ssim_mean": round(result.get("ssim_mean", 0.0), 4),
+                        "ssim_std": round(result.get("ssim_std", 0.0), 4),
+                        "ssim_min": round(result.get("ssim_min", 0.0), 4),
+                        "ssim_max": round(result.get("ssim_max", 0.0), 4),
+                        "ms_ssim_mean": round(result.get("ms_ssim_mean", 0.0), 4),
+                        "psnr_mean": round(result.get("psnr_mean", 0.0), 4),
+                        "temporal_consistency": round(result.get("temporal_consistency", 0.0), 4),
+                        "mse_mean": round(result.get("mse_mean", 0.0), 4),
+                        "rmse_mean": round(result.get("rmse_mean", 0.0), 4),
+                        "fsim_mean": round(result.get("fsim_mean", 0.0), 4),
+                        "gmsd_mean": round(result.get("gmsd_mean", 0.0), 4),
+                        "chist_mean": round(result.get("chist_mean", 0.0), 4),
+                        "edge_similarity_mean": round(result.get("edge_similarity_mean", 0.0), 4),
+                        "texture_similarity_mean": round(result.get("texture_similarity_mean", 0.0), 4),
+                        "sharpness_similarity_mean": round(result.get("sharpness_similarity_mean", 0.0), 4),
+                        "composite_quality": round(result.get("composite_quality", 0.0), 4),
+                        "efficiency": round(result.get("efficiency", 0.0), 4),
+                        
+                        # Performance and processing metrics
                         "render_time_ms": result.get("render_time_ms", 0),
-                        "total_processing_time_ms": result.get(
-                            "total_processing_time_ms", 0
-                        ),
+                        "total_processing_time_ms": result.get("total_processing_time_ms", 0),
                         "pipeline_steps": str(result.get("pipeline_steps", [])),
                         "tools_used": str(result.get("tools_used", [])),
                         "applied_colors": result.get("applied_colors", None),
@@ -1191,9 +1286,29 @@ class GifLabRunner:
                         "actual_pipeline_steps": result.get("actual_pipeline_steps", 0),
                         "frame_count": result.get("frame_count", 0),
                         "compressed_frame_count": result.get("compressed_frame_count", 0),
-                        "disposal_artifacts_pre": result.get("disposal_artifacts_pre", 1.0),
-                        "disposal_artifacts_post": result.get("disposal_artifacts_post", 1.0),
-                        "disposal_artifacts_delta": result.get("disposal_artifacts_delta", 0.0),
+                        "disposal_artifacts_pre": round(result.get("disposal_artifacts_pre", 1.0), 4),
+                        "disposal_artifacts_post": round(result.get("disposal_artifacts_post", 1.0), 4),
+                        "disposal_artifacts_delta": round(result.get("disposal_artifacts_delta", 0.0), 4),
+                        
+                        # System and tracking fields
+                        "source_platform": result.get("source_platform", ""),
+                        "source_metadata": result.get("source_metadata", ""),
+                        "timestamp": result.get("timestamp", ""),
+                        "giflab_version": result.get("giflab_version", ""),
+                        "code_commit": result.get("code_commit", ""),
+                        "dataset_version": result.get("dataset_version", ""),
+                        "engine_version": result.get("engine_version", ""),
+                        
+                        # Validation fields
+                        "validation_status": result.get("validation_status", ""),
+                        "validation_passed": result.get("validation_passed", ""),
+                        "validation_issues_count": result.get("validation_issues_count", 0),
+                        "validation_frame_reduction_status": result.get("validation_frame_reduction_status", ""),
+                        "validation_fps_consistency_status": result.get("validation_fps_consistency_status", ""),
+                        "validation_quality_thresholds_status": result.get("validation_quality_thresholds_status", ""),
+                        "validation_messages": result.get("validation_messages", ""),
+                        
+                        # Error fields
                         "error": result.get("error", ""),
                         "error_traceback": result.get("error_traceback", ""),
                         "error_timestamp": result.get("error_timestamp", ""),
@@ -1220,10 +1335,10 @@ class GifLabRunner:
         import time
         from datetime import datetime
 
-        from ..metrics import calculate_comprehensive_metrics
-        from ..meta import extract_gif_metadata
-        from ..directory_source_detection import detect_source_from_directory
         from .. import __version__ as GIFLAB_VERSION
+        from ..directory_source_detection import detect_source_from_directory
+        from ..meta import extract_gif_metadata
+        from ..metrics import calculate_comprehensive_metrics
         
         # DEBUG: Add path resolution logging
         self.logger.info(f"🔍 DEBUG: Pipeline execution starting for {gif_path}")
@@ -1265,12 +1380,12 @@ class GifLabRunner:
                 source_platform, source_metadata = "unknown", None
                 
             gif_metadata = extract_gif_metadata(
-                gif_path, 
-                source_platform=source_platform, 
+                gif_path,
+                source_platform=source_platform,
                 source_metadata=source_metadata
             )
             
-            self.logger.info(f"🔍 DEBUG: Metadata extraction successful")
+            self.logger.info("🔍 DEBUG: Metadata extraction successful")
         except Exception as e:
             self.logger.warning(f"Failed to extract GIF metadata: {e}")
             self.logger.info(f"🔍 DEBUG: Metadata extraction failed with error: {e}")
@@ -1454,8 +1569,43 @@ class GifLabRunner:
                         gif_path, output_path, frame_reduction_context=is_frame_reduction
                     )
                 except Exception as e2:
-                    self.logger.warning(f"Quality metrics calculation failed: {e2}")
-                    quality_metrics = self._get_fallback_metrics(gif_path, output_path, frame_reduction_context=is_frame_reduction)
+                    self.logger.error(f"Quality metrics calculation failed: {e2}")
+                    # Don't use fallback values - let the error be explicit
+                    raise ValueError(f"Failed to calculate quality metrics: {e2}") from e2
+
+            # Execute validation checks on compression results
+            validation_result = None
+            if self.validation_checker:
+                try:
+                    # Execute validation with the ValidationChecker's expected parameters
+                    validation_result = self.validation_checker.validate_compression_result(
+                        original_metadata=gif_metadata,  # Pass GifMetadata object directly
+                        compression_metrics=quality_metrics,  # Pass quality metrics dictionary
+                        pipeline_id=pipeline.identifier(),
+                        gif_name=gif_path.stem,
+                        content_type="unknown",  # Using unknown as specified in the document
+                        pipeline_type=None  # Optional parameter for pipeline type classification
+                    )
+                    
+                    # Log validation results to terminal
+                    if validation_result:
+                        status = validation_result.status.value
+                        status_emoji = {"PASS": "✅", "WARNING": "⚠️", "ERROR": "❌", "ARTIFACT": "🔍", "UNKNOWN": "❓"}.get(status, "❓")
+                        
+                        self.logger.info(f"{status_emoji} Validation {status}: {gif_path.stem} + {pipeline.identifier()}")
+                        
+                        if status != "PASS":
+                            # Log detailed validation issues
+                            if validation_result.issues:
+                                for issue in validation_result.issues:
+                                    self.logger.info(f"   └── {issue.category}: {issue.message}")
+                            if validation_result.warnings:
+                                for warning in validation_result.warnings:
+                                    self.logger.info(f"   ⚠️  {warning.category}: {warning.message}")
+                        
+                except Exception as validation_error:
+                    self.logger.warning(f"Validation failed for {gif_path.stem}: {validation_error}")
+                    validation_result = None
 
             # Compile complete result with all metrics
             # Filter out any empty entries and build final signature
@@ -1513,9 +1663,8 @@ class GifLabRunner:
                     "sharpness_similarity", 0.0
                 ),
                 # Composite quality scores (traditional and enhanced)
-                "composite_quality": quality_metrics.get("composite_quality", 0.0),
-                "enhanced_composite_quality": quality_metrics.get(
-                    "enhanced_composite_quality", 0.0
+                "composite_quality": quality_metrics.get(
+                    "composite_quality", 0.0
                 ),
                 "efficiency": quality_metrics.get("efficiency", 0.0),
                 # Performance metrics
@@ -1551,8 +1700,17 @@ class GifLabRunner:
                 "timestamp": datetime.now().isoformat(),
                 "giflab_version": GIFLAB_VERSION,
                 "code_commit": _get_git_commit_hash(),
-                "dataset_version": "v1.0",  # Default dataset version 
+                "dataset_version": "v1.0",  # Default dataset version
                 "engine_version": self._get_engine_version(pipeline),
+                
+                # Validation results (from pipeline validation)
+                "validation_status": validation_result.status.value if validation_result else None,
+                "validation_passed": validation_result.status.value == "PASS" if validation_result else None,
+                "validation_issues_count": len(validation_result.issues) + len(validation_result.warnings) if validation_result else 0,
+                "validation_frame_reduction_status": None,  # Individual validation statuses not directly exposed
+                "validation_fps_consistency_status": None,  # Individual validation statuses not directly exposed
+                "validation_quality_thresholds_status": None,  # Individual validation statuses not directly exposed
+                "validation_messages": "; ".join([issue.message for issue in (validation_result.issues + validation_result.warnings)]) if validation_result and (validation_result.issues or validation_result.warnings) else None,
             }
 
             # Save visual outputs for inspection (before temp directory cleanup)
@@ -1617,7 +1775,7 @@ class GifLabRunner:
             if 'gifsicle' in tool_name.lower():
                 return self._get_gifsicle_version()
             elif 'ffmpeg' in tool_name.lower():
-                return self._get_ffmpeg_version()  
+                return self._get_ffmpeg_version()
             elif 'imagemagick' in tool_name.lower():
                 return self._get_imagemagick_version()
             elif 'animately' in tool_name.lower():
@@ -1635,8 +1793,7 @@ class GifLabRunner:
             import subprocess
             result = subprocess.run(
                 ["gifsicle", "--version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=5
             )
@@ -1655,8 +1812,7 @@ class GifLabRunner:
             import subprocess
             result = subprocess.run(
                 ["ffmpeg", "-version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=5
             )
@@ -1677,8 +1833,7 @@ class GifLabRunner:
             import subprocess
             result = subprocess.run(
                 ["magick", "-version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=5
             )
@@ -1711,8 +1866,7 @@ class GifLabRunner:
             import subprocess
             result = subprocess.run(
                 ["gifski", "--version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=5
             )
@@ -1732,10 +1886,9 @@ class GifLabRunner:
     ) -> None:
         """Save visual GIF outputs in organized directory structure for inspection."""
         try:
-            # Create visual outputs directory structure: {experiment}/visual_outputs/{gif_name}/
-            visual_dir = self.output_dir / "visual_outputs"
+            # Create directory structure: {experiment}/{gif_name}/
             gif_name = original_gif_path.stem
-            gif_visual_dir = visual_dir / gif_name
+            gif_visual_dir = self.output_dir / gif_name
             gif_visual_dir.mkdir(parents=True, exist_ok=True)
 
             # Copy original GIF (only once per GIF)
@@ -1751,84 +1904,6 @@ class GifLabRunner:
             # Copy compressed GIF
             copy(compressed_gif_path, compressed_dest)
             self.logger.debug(f"Saved compressed: {compressed_filename}.gif")
-
-            # Save per-GIF metrics as JSON
-            metrics_file = gif_visual_dir / "metrics.json"
-            
-            # Load existing metrics or create new
-            import json
-            if metrics_file.exists():
-                with open(metrics_file) as f:
-                    all_metrics = json.load(f)
-            else:
-                all_metrics = {
-                    "original_info": {
-                        "filename": original_gif_path.name,
-                        "size_kb": round(original_gif_path.stat().st_size / 1024, 2),
-                        "content_type": result.get("content_type", "unknown"),
-                        "frame_count": result.get("frame_count", 0)
-                    },
-                    "compressions": {}
-                }
-
-            # Add this compression's metrics (save ALL comprehensive metrics for complete quality analysis)
-            compression_metrics = {
-                # Pipeline identification
-                "pipeline": result.get("pipeline_id", "unknown"),
-                "tools_used": result.get("tools_used", []),
-                
-                # File and performance metrics
-                "file_size_kb": result.get("file_size_kb", 0),
-                "compression_ratio": result.get("compression_ratio", 1.0),
-                "render_time_ms": result.get("render_time_ms", 0),
-                
-                # Applied parameters
-                "applied_colors": result.get("applied_colors"),
-                "applied_lossy": result.get("applied_lossy"),
-                "applied_frame_ratio": result.get("applied_frame_ratio"),
-                
-                # Core structural similarity metrics
-                "ssim_mean": result.get("ssim_mean", 0.0),
-                "ms_ssim_mean": result.get("ms_ssim_mean", 0.0),
-                
-                # Signal quality metrics
-                "psnr_mean": result.get("psnr_mean", 0.0),
-                "mse_mean": result.get("mse_mean", 0.0),
-                "rmse_mean": result.get("rmse_mean", 0.0),
-                
-                # Advanced structural metrics
-                "fsim_mean": result.get("fsim_mean", 0.0),
-                "gmsd_mean": result.get("gmsd_mean", 0.0),
-                "edge_similarity_mean": result.get("edge_similarity_mean", 0.0),
-                
-                # Perceptual quality metrics
-                "chist_mean": result.get("chist_mean", 0.0),
-                "texture_similarity_mean": result.get("texture_similarity_mean", 0.0),
-                "sharpness_similarity_mean": result.get("sharpness_similarity_mean", 0.0),
-                
-                # Temporal consistency
-                "temporal_consistency": result.get("temporal_consistency", 0.0),
-                
-                # Composite quality scores (both legacy and enhanced)
-                "composite_quality": result.get("composite_quality", 0.0),
-                "enhanced_composite_quality": result.get("enhanced_composite_quality", 0.0),
-                "efficiency": result.get("efficiency", 0.0),
-                
-                # Frame count information
-                "frame_count": result.get("frame_count", 0),
-                "compressed_frame_count": result.get("compressed_frame_count", 0),
-                
-                # Disposal artifacts detection
-                "disposal_artifacts_pre": result.get("disposal_artifacts_pre", 1.0),
-                "disposal_artifacts_post": result.get("disposal_artifacts_post", 1.0),
-                "disposal_artifacts_delta": result.get("disposal_artifacts_delta", 0.0)
-            }
-            
-            all_metrics["compressions"][compressed_filename] = compression_metrics
-
-            # Save updated metrics
-            with open(metrics_file, 'w') as f:
-                json.dump(all_metrics, f, indent=2)
 
         except Exception as e:
             self.logger.warning(f"Failed to save visual outputs for {original_gif_path.name}: {e}")
@@ -2042,7 +2117,7 @@ class GifLabRunner:
         # Calculate composite quality using enhanced metrics system
         from ..enhanced_metrics import process_metrics_with_enhanced_quality
 
-        # Process with enhanced quality system (adds enhanced_composite_quality and efficiency)
+        # Process with quality system (adds composite_quality and efficiency)
         result = process_metrics_with_enhanced_quality(result, config)
 
         # Ensure compression ratio is available for efficiency calculation
@@ -2272,14 +2347,20 @@ class GifLabRunner:
                 np.abs(next_comp.astype(np.float32) - curr_comp.astype(np.float32))
             )
 
+            # Calculate how much the temporal pattern changed
             temporal_diff = abs(orig_diff - comp_diff)
             differences.append(temporal_diff)
 
         # Normalize and invert (higher = more consistent)
         avg_diff = np.mean(differences)
-        consistency = 1.0 / (1.0 + avg_diff / 255.0)
-
-        return float(consistency)
+        
+        # Fixed normalization: use proper scaling for temporal consistency
+        # For lossy-only processing with minimal changes, this should be close to 1.0
+        # Scale by 255 (max pixel difference) and use exponential decay for better scaling
+        normalized_diff = avg_diff / 255.0
+        consistency = np.exp(-normalized_diff * 5.0)  # Exponential decay gives better scaling
+        
+        return float(max(0.0, min(1.0, consistency)))
 
     def _map_lossy_percentage_to_engine(
         self, lossy_percentage: int, wrapper_class_name: str
@@ -2510,25 +2591,6 @@ class GifLabRunner:
         except Exception as e:
             self.logger.warning(f"Failed to save checkpoint: {e}")
 
-    def _get_fallback_metrics(self, original_path: Path, compressed_path: Path, frame_reduction_context: bool = False) -> dict:
-        """Get basic fallback metrics if comprehensive calculation fails."""
-        try:
-            _ = original_path.stat().st_size  # Check file exists
-            compressed_size = compressed_path.stat().st_size
-
-            return {
-                "kilobytes": compressed_size / 1024,
-                "ssim": 0.5,  # Conservative fallback
-                "composite_quality": 0.5,
-                "render_ms": 0,
-            }
-        except Exception:
-            return {
-                "kilobytes": 0,
-                "ssim": 0.0,
-                "composite_quality": 0.0,
-                "render_ms": 0,
-            }
 
     def _calculate_compression_ratio(
         self, original_path: Path, compressed_path: Path
@@ -2685,9 +2747,7 @@ class GifLabRunner:
 
             # Use enhanced composite quality metric if available, fallback to legacy composite quality
             quality_column = None
-            if "enhanced_composite_quality" in pipeline_results.columns:
-                quality_column = "enhanced_composite_quality"
-            elif "composite_quality" in pipeline_results.columns:
+            if "composite_quality" in pipeline_results.columns:
                 quality_column = "composite_quality"
 
             if quality_column:

@@ -51,7 +51,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~5 pipelines (one per frame algorithm)
-- **Efficiency**: 99.5% vs traditional generate_all_pipelines approach
 - **Algorithms Tested**: animately-frame, ffmpeg-frame, gifsicle-frame, imagemagick-frame, none-frame
 
 **Use Cases**:
@@ -101,7 +100,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~17 pipelines (one per color algorithm)
-- **Efficiency**: 98.2% vs traditional approach
 - **Algorithms Tested**: 
   - Animately: 1 variant (animately-color)
   - FFmpeg: 9 variants (including floyd-steinberg, sierra2, bayer0-4 dithering)
@@ -157,7 +155,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~11 pipelines (one per lossy algorithm)
-- **Efficiency**: 98.8% vs traditional approach
 - **Algorithms Tested**:
   - Animately: 2 variants (animately-lossy, animately-advanced-lossy)
   - Gifsicle: 5 variants (gifsicle-lossy with different methods)
@@ -216,7 +213,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~64 pipelines (4 engines × 3 frame ratios × 3 color counts × ~1.3 lossy combinations)
-- **Efficiency**: 93.2% vs traditional approach
 - **Complete Toolchains**: animately, ffmpeg, gifsicle, imagemagick
 
 **Use Cases**:
@@ -273,7 +269,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~6 pipelines (6 dithering algorithms)
-- **Efficiency**: 99.4% vs traditional approach
 - **Dithering Methods**:
   - Floyd-Steinberg (FFmpeg + ImageMagick variants)
   - Sierra2 (FFmpeg)
@@ -328,7 +323,6 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~4 pipelines (2 color × 2 lossy algorithms)
-- **Efficiency**: 99.6% vs traditional approach
 - **Optimized Tools**: gifski-lossy, animately-advanced-lossy (PNG sequence specialists)
 
 **Use Cases**:
@@ -381,7 +375,7 @@ lossy_slot:
 
 **Pipeline Generation**:
 - **Count**: ~2 pipelines (2 frame algorithms)
-- **Efficiency**: 99.8% vs traditional approach  
+  
 - **Fast Execution**: Minimal combinations for rapid testing
 
 **Use Cases**:
@@ -499,7 +493,7 @@ Where each variable count is determined by:
 Efficiency = 1 - (Targeted_Pipeline_Count / Traditional_Pipeline_Count)
 ```
 
-Where Traditional_Pipeline_Count = 935 (5 frame × 17 color × 11 lossy)
+Where Traditional_Pipeline_Count = hundreds (5 frame × 17 color × 11 lossy)
 
 ---
 

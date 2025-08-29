@@ -372,6 +372,52 @@ TARGETED_PRESETS = {
         tags=["validation", "gifsicle", "lossy-wrapper", "isolation"],
         author="GifLab Research Team",
     ),
+    "gifsicle-only": ExperimentPreset(
+        name="GIFsicle Only Pipeline",
+        description="Single GIFsicle pipeline test for rapid development and debugging",
+        frame_slot=SlotConfiguration(
+            type="variable",
+            scope=["gifsicle-frame"],
+            parameters={"ratios": [0.8]},
+        ),
+        color_slot=SlotConfiguration(
+            type="locked",
+            implementation="gifsicle-color",
+            parameters={"colors": 32},
+        ),
+        lossy_slot=SlotConfiguration(
+            type="locked",
+            implementation="gifsicle-lossy",
+            parameters={"level": 40},
+        ),
+        custom_sampling="full",
+        max_combinations=1,
+        tags=["development", "testing", "gifsicle-only", "single-pipeline"],
+        author="GifLab Research Team",
+    ),
+    "gifsicle-lossy-only": ExperimentPreset(
+        name="GIFsicle Lossy Only",
+        description="Test only GIFsicle lossy compression without frame or color processing",
+        frame_slot=SlotConfiguration(
+            type="locked",
+            implementation="none-frame",
+            parameters={"ratio": 1.0},
+        ),
+        color_slot=SlotConfiguration(
+            type="locked",
+            implementation="none-color",
+            parameters={},
+        ),
+        lossy_slot=SlotConfiguration(
+            type="variable",
+            scope=["gifsicle-lossy"],
+            parameters={"levels": [40]},
+        ),
+        custom_sampling="full",
+        max_combinations=1,
+        tags=["development", "testing", "gifsicle-lossy-only", "minimal-processing"],
+        author="GifLab Research Team",
+    ),
 }
 
 

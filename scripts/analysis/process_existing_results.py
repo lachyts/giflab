@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from giflab.config import DEFAULT_METRICS_CONFIG
 from giflab.enhanced_metrics import (
     calculate_efficiency_metric,
-    calculate_enhanced_composite_quality,
+    calculate_composite_quality,
     process_metrics_with_enhanced_quality,
 )
 
@@ -48,7 +48,7 @@ def process_existing_results(csv_path: Path, output_path: Path = None):
         # Skip failed results
         if not result.get("success", True):
             # Add null values for new metrics
-            result["enhanced_composite_quality"] = None
+            result["composite_quality"] = None
             result["efficiency"] = None
             enhanced_rows.append(result)
             continue
@@ -62,7 +62,7 @@ def process_existing_results(csv_path: Path, output_path: Path = None):
         except Exception as e:
             print(f"Warning: Failed to process row {idx}: {e}")
             # Add null values for new metrics if processing fails
-            result["enhanced_composite_quality"] = None
+            result["composite_quality"] = None
             result["efficiency"] = None
             enhanced_rows.append(result)
 
@@ -73,12 +73,12 @@ def process_existing_results(csv_path: Path, output_path: Path = None):
     enhanced_df.to_csv(output_path, index=False)
 
     print(f"Enhanced results saved to: {output_path}")
-    print("Added columns: enhanced_composite_quality, efficiency")
+    print("Added columns: composite_quality, efficiency")
 
     # Show some statistics
-    if "enhanced_composite_quality" in enhanced_df.columns:
+    if "composite_quality" in enhanced_df.columns:
         print("\nEnhanced composite quality statistics:")
-        print(enhanced_df["enhanced_composite_quality"].describe())
+        print(enhanced_df["composite_quality"].describe())
 
     if "efficiency" in enhanced_df.columns:
         print("\nEfficiency statistics:")

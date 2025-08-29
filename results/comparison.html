@@ -963,7 +963,7 @@
                 };
                 
                 // Check critical fields
-                const criticalFields = ['file_size_kb', 'compression_ratio', 'enhanced_composite_quality'];
+                const criticalFields = ['file_size_kb', 'compression_ratio', 'composite_quality'];
                 const availableFields = criticalFields.filter(field => 
                     data[field] != null && data[field] !== 'N/A'
                 );
@@ -976,8 +976,8 @@
                 }
                 
                 // Validate data ranges for quality metrics
-                if (data.enhanced_composite_quality != null) {
-                    const quality = parseFloat(data.enhanced_composite_quality);
+                if (data.composite_quality != null) {
+                    const quality = parseFloat(data.composite_quality);
                     if (quality < 0 || quality > 1) {
                         validation.warnings.push(`Quality score out of range: ${quality.toFixed(3)}`);
                     }
@@ -1071,7 +1071,7 @@
                         display_name: this.generateDisplayName(data),
                         file_size_kb: data.file_size_kb || 0,
                         compression_ratio: data.compression_ratio || 1,
-                        enhanced_composite_quality: data.enhanced_composite_quality || data.composite_quality || 0,
+                        composite_quality: data.composite_quality || data.composite_quality || 0,
                         
                         // Individual quality metrics (use mean values with fallbacks)
                         ssim: allMetrics.ssim.mean || 'N/A',
@@ -1173,7 +1173,7 @@
                 }
                 
                 // Fallback calculation using enhanced composite quality if available
-                const qualityScore = compressionData.enhanced_composite_quality || compressionData.composite_quality || 0;
+                const qualityScore = compressionData.composite_quality || compressionData.composite_quality || 0;
                 const compressionScore = Math.min(compressionData.compression_ratio / 10, 1);
                 return (qualityScore * 0.6 + compressionScore * 0.4);
             }
@@ -1185,7 +1185,7 @@
                 
                 // Calculate averages across all pipelines for this GIF
                 const efficiencies = gif.pipelines.map(p => p.efficiency || 0);
-                const qualities = gif.pipelines.map(p => p.enhanced_composite_quality || 0);
+                const qualities = gif.pipelines.map(p => p.composite_quality || 0);
                 const compressions = gif.pipelines.map(p => p.compression_ratio || 1);
                 
                 // Check for disposal artifacts (if ANY pipeline has artifacts, flag it)
@@ -1369,7 +1369,7 @@
                         size: `${pipeline.file_size_kb.toFixed(1)} KB`,
                         frames: `${pipeline.frame_count} frames`,
                         compression: `${pipeline.compression_ratio.toFixed(1)}x smaller`,
-                        quality: `Quality: ${pipeline.enhanced_composite_quality.toFixed(3)}`,
+                        quality: `Quality: ${pipeline.composite_quality.toFixed(3)}`,
                         efficiency: `Efficiency: ${(pipeline.efficiency * 100).toFixed(0)}%`,
                         time: `${pipeline.render_time_ms}ms`
                     };
@@ -1536,7 +1536,7 @@
                         <td>${pipeline.file_size_kb.toFixed(1)} KB</td>
                         <td>${pipeline.frame_count}</td>
                         <td>${pipeline.compression_ratio.toFixed(1)}x</td>
-                        ${this.createMetricCell(pipeline.enhanced_composite_quality, 'Overall quality score combining all metrics')}
+                        ${this.createMetricCell(pipeline.composite_quality, 'Overall quality score combining all metrics')}
                         ${this.createMetricCell(pipeline.ssim, 'Structural Similarity Index (0-1, higher better)')}
                         ${this.createMetricCell(pipeline.ms_ssim, 'Multi-Scale SSIM (0-1, higher better)')}
                         ${this.createMetricCell(pipeline.psnr, 'Peak Signal-to-Noise Ratio (0-1, higher better)')}

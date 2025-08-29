@@ -185,6 +185,7 @@ def run(
                     preset_id=preset,
                     quality_threshold=threshold,
                     use_targeted_gifs=True,
+                    custom_gif_dir=validated_raw_dir,
                 )
                 analysis_type = f"targeted preset ({preset})"
                 

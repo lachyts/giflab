@@ -123,6 +123,9 @@ class TestExpandedSyntheticSpecs:
         """Test that all new content types are included in specs."""
         eliminator = GifLabRunner(tmp_path)
         
+        # Initialize experiment directory to populate synthetic_specs
+        eliminator._initialize_experiment_directory()
+        
         content_types = {spec.content_type for spec in eliminator.synthetic_specs}
         
         # New content types should be present
@@ -137,6 +140,9 @@ class TestExpandedSyntheticSpecs:
     def test_size_variations_present(self, tmp_path):
         """Test that size variations are properly included."""
         eliminator = GifLabRunner(tmp_path)
+        
+        # Initialize experiment directory to populate synthetic_specs
+        eliminator._initialize_experiment_directory()
         
         spec_names = {spec.name for spec in eliminator.synthetic_specs}
         
@@ -153,6 +159,9 @@ class TestExpandedSyntheticSpecs:
         """Test that frame count variations are included."""
         eliminator = GifLabRunner(tmp_path)
         
+        # Initialize experiment directory to populate synthetic_specs
+        eliminator._initialize_experiment_directory()
+        
         spec_names = {spec.name for spec in eliminator.synthetic_specs}
         
         # Frame variation specs should be present
@@ -165,12 +174,18 @@ class TestExpandedSyntheticSpecs:
         """Test that we have the expected number of specs."""
         eliminator = GifLabRunner(tmp_path)
         
+        # Initialize experiment directory to populate synthetic_specs
+        eliminator._initialize_experiment_directory()
+        
         # Should have expanded from 10 to 25 total specs
         assert len(eliminator.synthetic_specs) == 25
     
     def test_all_specs_generate_successfully(self, tmp_path):
         """Test that all expanded specs can generate GIFs without errors."""
         eliminator = GifLabRunner(tmp_path)
+        
+        # Initialize experiment directory to populate synthetic_specs
+        eliminator._initialize_experiment_directory()
         
         # Test each spec individually
         for spec in eliminator.synthetic_specs:

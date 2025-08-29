@@ -655,7 +655,7 @@ if is_frame_reduction:
     # Use more lenient threshold based on research findings
     min_quality_threshold = 0.05  # 5% threshold for frame reduction
 else:
-    min_quality_threshold = self.catastrophic_thresholds["min_enhanced_composite_quality"]  # 10% normal
+    min_quality_threshold = self.catastrophic_thresholds["min_composite_quality"]  # 10% normal
 
 # Temporal consistency threshold adjustment  
 if frame_reduction_context:
@@ -756,7 +756,7 @@ metrics = calculate_comprehensive_metrics(
 # Recommended threshold adjustments by operation type
 CONTEXT_AWARE_THRESHOLDS = {
     "frame_reduction": {
-        "enhanced_composite_quality": 0.05,  # vs 0.1 normal
+        "composite_quality": 0.05,  # vs 0.1 normal
         "temporal_consistency": 0.05,        # vs 0.1 normal
         "disposal_artifacts": {
             "density_threshold": 1.2,         # vs 1.1 normal (more lenient)
@@ -765,11 +765,11 @@ CONTEXT_AWARE_THRESHOLDS = {
         }
     },
     "color_reduction": {
-        "enhanced_composite_quality": 0.08,  # Slightly more lenient
+        "composite_quality": 0.08,  # Slightly more lenient
         "color_preservation": 0.6            # vs 0.75 normal
     },
     "lossy_compression": {
-        "enhanced_composite_quality": 0.07,  # Expect some quality loss
+        "composite_quality": 0.07,  # Expect some quality loss
         "edge_preservation": 0.5             # vs 0.7 normal
     }
 }

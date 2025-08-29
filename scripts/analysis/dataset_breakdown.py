@@ -90,15 +90,10 @@ def quality_metrics_breakdown(df):
 
     # Traditional vs Enhanced comparison
     print("📊 Legacy vs Enhanced Quality Comparison:")
-    legacy_stats = df["composite_quality"].describe()
-    enhanced_stats = df["enhanced_composite_quality"].describe()
+    # legacy_stats = df["composite_quality"].describe()  # Removed legacy composite_quality
+    enhanced_stats = df["composite_quality"].describe()
 
-    print("   Legacy System (4 metrics):")
-    print(f"   • Range: {legacy_stats['min']:.3f} to {legacy_stats['max']:.3f}")
-    print(f"   • Mean: {legacy_stats['mean']:.3f} ± {legacy_stats['std']:.3f}")
-    print(f"   • Median: {legacy_stats['50%']:.3f}")
-
-    print("\n   Enhanced System (11 metrics):")
+    print("   Enhanced System (11 metrics):")
     print(f"   • Range: {enhanced_stats['min']:.3f} to {enhanced_stats['max']:.3f}")
     print(f"   • Mean: {enhanced_stats['mean']:.3f} ± {enhanced_stats['std']:.3f}")
     print(f"   • Median: {enhanced_stats['50%']:.3f}")
@@ -169,7 +164,7 @@ def content_type_deep_dive(df):
         df.groupby("content_type")
         .agg(
             {
-                "enhanced_composite_quality": ["mean", "std", "min", "max"],
+                "composite_quality": ["mean", "std", "min", "max"],
                 "efficiency": ["mean", "std", "min", "max"],
                 "compression_ratio": ["mean", "std", "max"],
                 "file_size_kb": ["mean", "std"],
@@ -194,7 +189,7 @@ def content_type_deep_dive(df):
             f"    Efficiency: {row['mean_efficiency']:5.2f} ± {row['std_efficiency']:4.2f} (max: {row['max_efficiency']:5.2f})"
         )
         print(
-            f"    Quality:    {row['mean_enhanced_composite_quality']:5.3f} ± {row['std_enhanced_composite_quality']:5.3f}"
+            f"    Quality:    {row['mean_composite_quality']:5.3f} ± {row['std_composite_quality']:5.3f}"
         )
         print(
             f"    Compression:{row['mean_compression_ratio']:5.1f}x ± {row['std_compression_ratio']:4.1f} (max: {row['max_compression_ratio']:5.1f}x)"
@@ -211,11 +206,11 @@ def champion_pipelines(df):
 
     categories = {
         "Highest Efficiency": df.loc[df["efficiency"].idxmax()],
-        "Best Quality": df.loc[df["enhanced_composite_quality"].idxmax()],
+        "Best Quality": df.loc[df["composite_quality"].idxmax()],
         "Maximum Compression": df.loc[df["compression_ratio"].idxmax()],
         "Smallest File Size": df.loc[df["file_size_kb"].idxmin()],
         "Best Balance": df.loc[
-            (df["enhanced_composite_quality"] * df["compression_ratio"]).idxmax()
+            (df["composite_quality"] * df["compression_ratio"]).idxmax()
         ],
     }
 
@@ -228,7 +223,7 @@ def champion_pipelines(df):
 
         print(f"   Pipeline: {frame_tool} + {color_tool} + {lossy_tool}")
         print(f"   Content: {champion['content_type']}")
-        print(f"   Enhanced Quality: {champion['enhanced_composite_quality']:.3f}")
+        print(f"   Enhanced Quality: {champion['composite_quality']:.3f}")
         print(f"   Compression: {champion['compression_ratio']:.1f}x")
         print(f"   Efficiency: {champion['efficiency']:.2f}")
         print(
@@ -248,7 +243,7 @@ def performance_insights(df):
         .agg(
             {
                 "efficiency": "mean",
-                "enhanced_composite_quality": "mean",
+                "composite_quality": "mean",
                 "compression_ratio": "mean",
             }
         )
@@ -259,7 +254,7 @@ def performance_insights(df):
     print("🔧 Frame Reduction Tool Rankings:")
     for idx, (tool, performance) in enumerate(tool_performance.iterrows(), 1):
         print(
-            f"   {idx}. {tool.ljust(12)}: Efficiency {performance['efficiency']:5.2f} | Quality {performance['enhanced_composite_quality']:5.3f} | Compression {performance['compression_ratio']:4.1f}x"
+            f"   {idx}. {tool.ljust(12)}: Efficiency {performance['efficiency']:5.2f} | Quality {performance['composite_quality']:5.3f} | Compression {performance['compression_ratio']:4.1f}x"
         )
 
     # Content-specific recommendations
@@ -272,7 +267,7 @@ def performance_insights(df):
         content_champions[content_type] = {
             "pipeline": best["frame_tool"],
             "efficiency": best["efficiency"],
-            "quality": best["enhanced_composite_quality"],
+            "quality": best["composite_quality"],
         }
 
     # Group similar content types
@@ -321,13 +316,13 @@ def statistical_summary(df):
 
     print("\n📈 Performance Distributions:")
     print(
-        f"   • Quality correlation (legacy vs enhanced): {df['composite_quality'].corr(df['enhanced_composite_quality']):.3f}"
+        f"   • Quality correlation (legacy vs enhanced): {df['composite_quality'].corr(df['composite_quality']):.3f}"
     )
     print(
         f"   • Files achieving >10x compression: {(df['compression_ratio'] > 10).sum()} ({(df['compression_ratio'] > 10).mean()*100:.1f}%)"
     )
     print(
-        f"   • Files achieving >0.8 quality: {(df['enhanced_composite_quality'] > 0.8).sum()} ({(df['enhanced_composite_quality'] > 0.8).mean()*100:.1f}%)"
+        f"   • Files achieving >0.8 quality: {(df['composite_quality'] > 0.8).sum()} ({(df['composite_quality'] > 0.8).mean()*100:.1f}%)"
     )
     print(
         f"   • High-efficiency results (>5): {(df['efficiency'] > 5).sum()} ({(df['efficiency'] > 5).mean()*100:.1f}%)"
@@ -338,7 +333,7 @@ def statistical_summary(df):
         f"   • Median file size reduction: {(1 - df['file_size_kb'] / df['original_size_kb']).median()*100:.1f}%"
     )
     print(
-        f"   • Average quality retention: {df['enhanced_composite_quality'].mean()*100:.1f}%"
+        f"   • Average quality retention: {df['composite_quality'].mean()*100:.1f}%"
     )
     print(f"   • Best efficiency achieved: {df['efficiency'].max():.1f}")
 

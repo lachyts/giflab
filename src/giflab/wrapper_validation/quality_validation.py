@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..config import DEFAULT_METRICS_CONFIG
-from ..enhanced_metrics import calculate_enhanced_composite_quality
+from ..enhanced_metrics import calculate_composite_quality
 from ..metrics import calculate_comprehensive_metrics
 from .types import ValidationResult
 
@@ -37,8 +37,7 @@ class QualityThresholdValidator:
         # trying to catch severe corruption, not optimize compression quality
         self.catastrophic_thresholds = {
             # Composite quality thresholds (0-1 scale)
-            "min_composite_quality": 0.1,      # Below 10% indicates severe issues
-            "min_enhanced_composite_quality": 0.1,
+            "min_composite_quality": 0.1,
             
             # Individual metric thresholds (detect severe outliers)
             "min_ssim_mean": 0.2,              # SSIM below 20% is very bad
@@ -87,7 +86,7 @@ class QualityThresholdValidator:
             
             # Calculate composite quality scores
             if self.metrics_config.USE_ENHANCED_COMPOSITE_QUALITY:
-                composite_quality = calculate_enhanced_composite_quality(metrics, self.metrics_config)
+                composite_quality = calculate_composite_quality(metrics, self.metrics_config)
                 quality_type = "enhanced_composite"
                 
                 # Use context-aware threshold for frame reduction operations
@@ -96,7 +95,7 @@ class QualityThresholdValidator:
                     # Use more lenient threshold based on research findings
                     min_quality_threshold = 0.05  # 5% threshold for frame reduction
                 else:
-                    min_quality_threshold = self.catastrophic_thresholds["min_enhanced_composite_quality"]
+                    min_quality_threshold = self.catastrophic_thresholds["min_composite_quality"]
             else:
                 # Use legacy 4-metric composite quality
                 composite_quality = self._calculate_legacy_composite_quality(metrics)

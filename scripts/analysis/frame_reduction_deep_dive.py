@@ -114,7 +114,7 @@ def analyze_frame_reduction_behavior(df):
             {
                 "applied_frame_ratio": ["mean", "std", "min", "max", "count"],
                 "compression_ratio": ["mean", "std", "max"],
-                "enhanced_composite_quality": ["mean", "std"],
+                "composite_quality": ["mean", "std"],
                 "efficiency": ["mean", "max"],
                 "file_size_kb": "mean",
             }
@@ -143,7 +143,7 @@ def analyze_frame_reduction_behavior(df):
             f"   Compression achieved: {stats[('compression_ratio', 'mean')]:.1f}x avg (max: {stats[('compression_ratio', 'max')]:.1f}x)"
         )
         print(
-            f"   Quality retained: {stats[('enhanced_composite_quality', 'mean')]:.3f}"
+            f"   Quality retained: {stats[('composite_quality', 'mean')]:.3f}"
         )
         print(
             f"   Efficiency: {stats[('efficiency', 'mean')]:.2f} avg (max: {stats[('efficiency', 'max')]:.1f})"
@@ -169,7 +169,7 @@ def compare_animately_vs_none_frame(df):
         f"   • Average compression: {animately_data['compression_ratio'].mean():.1f}x"
     )
     print(
-        f"   • Average quality: {animately_data['enhanced_composite_quality'].mean():.3f}"
+        f"   • Average quality: {animately_data['composite_quality'].mean():.3f}"
     )
     print(f"   • Average efficiency: {animately_data['efficiency'].mean():.2f}")
     print(f"   • File size: {animately_data['file_size_kb'].mean():.1f}KB avg")
@@ -179,7 +179,7 @@ def compare_animately_vs_none_frame(df):
         f"   • Average frames kept: {none_data['applied_frame_ratio'].mean():.1%} (no reduction)"
     )
     print(f"   • Average compression: {none_data['compression_ratio'].mean():.1f}x")
-    print(f"   • Average quality: {none_data['enhanced_composite_quality'].mean():.3f}")
+    print(f"   • Average quality: {none_data['composite_quality'].mean():.3f}")
     print(f"   • Average efficiency: {none_data['efficiency'].mean():.2f}")
     print(f"   • File size: {none_data['file_size_kb'].mean():.1f}KB avg")
 
@@ -187,8 +187,8 @@ def compare_animately_vs_none_frame(df):
     print("\n🤔 WHY NONE-FRAME OUTPERFORMS ANIMATELY-FRAME:")
 
     quality_diff = (
-        none_data["enhanced_composite_quality"].mean()
-        - animately_data["enhanced_composite_quality"].mean()
+        none_data["composite_quality"].mean()
+        - animately_data["composite_quality"].mean()
     )
     compression_diff = (
         none_data["compression_ratio"].mean()
@@ -199,7 +199,7 @@ def compare_animately_vs_none_frame(df):
     )
 
     print(
-        f"   1. Quality Advantage: +{quality_diff:.3f} ({quality_diff/animately_data['enhanced_composite_quality'].mean()*100:.1f}% better)"
+        f"   1. Quality Advantage: +{quality_diff:.3f} ({quality_diff/animately_data['composite_quality'].mean()*100:.1f}% better)"
     )
     print(
         f"   2. Compression Advantage: +{compression_diff:.1f}x ({compression_diff/animately_data['compression_ratio'].mean()*100:.1f}% better)"
@@ -274,7 +274,7 @@ def analyze_compression_vs_frame_reduction(df):
 
     correlation = df["frame_reduction_aggressiveness"].corr(df["compression_ratio"])
     quality_correlation = df["frame_reduction_aggressiveness"].corr(
-        df["enhanced_composite_quality"]
+        df["composite_quality"]
     )
     efficiency_correlation = df["frame_reduction_aggressiveness"].corr(df["efficiency"])
 
@@ -301,7 +301,7 @@ def analyze_compression_vs_frame_reduction(df):
         .agg(
             {
                 "compression_ratio": ["mean", "std"],
-                "enhanced_composite_quality": ["mean", "std"],
+                "composite_quality": ["mean", "std"],
                 "efficiency": ["mean", "std"],
                 "pipeline_id": "count",
             }
@@ -314,7 +314,7 @@ def analyze_compression_vs_frame_reduction(df):
         stats = category_analysis.loc[category]
         count = int(stats[("pipeline_id", "count")])
         compression = stats[("compression_ratio", "mean")]
-        quality = stats[("enhanced_composite_quality", "mean")]
+        quality = stats[("composite_quality", "mean")]
         efficiency = stats[("efficiency", "mean")]
 
         print(
@@ -334,7 +334,7 @@ def explain_algorithm_differences(df):
             {
                 "efficiency": ["mean", "max"],
                 "compression_ratio": ["mean", "max"],
-                "enhanced_composite_quality": "mean",
+                "composite_quality": "mean",
             }
         )
         .round(3)
@@ -366,7 +366,7 @@ def explain_algorithm_differences(df):
         f"   • Achieves {gifsicle_data['compression_ratio'].max():.1f}x max compression"
     )
     print(
-        f"   • Maintains {gifsicle_data['enhanced_composite_quality'].mean():.3f} avg quality"
+        f"   • Maintains {gifsicle_data['composite_quality'].mean():.3f} avg quality"
     )
     print("   • Works especially well on motion content (up to 60x compression!)")
 
@@ -383,7 +383,7 @@ def explain_algorithm_differences(df):
     none_data = df[df["frame_algorithm"] == "none-frame"]
     print("   • No frame loss = maximum temporal information")
     print(
-        f"   • Higher quality ({none_data['enhanced_composite_quality'].mean():.3f}) compensates for less compression"
+        f"   • Higher quality ({none_data['composite_quality'].mean():.3f}) compensates for less compression"
     )
     print("   • Efficiency formula rewards this balance")
     print("   • Proves that sometimes 'doing nothing' is optimal")

@@ -13,13 +13,13 @@ from .config import DEFAULT_METRICS_CONFIG, MetricsConfig
 
 
 def normalize_metric(
-    value: float, metric_name: str, min_val: float = 0.0, max_val: float = 1.0
+    metric_name: str, value: float, min_val: float = 0.0, max_val: float = 1.0
 ) -> float:
     """Normalize a metric value to 0-1 range with appropriate direction.
 
     Args:
-        value: Raw metric value
         metric_name: Name of the metric (determines if higher/lower is better)
+        value: Raw metric value
         min_val: Minimum possible value for normalization
         max_val: Maximum possible value for normalization
 
@@ -27,7 +27,14 @@ def normalize_metric(
         Normalized value between 0 and 1
     """
     # Handle special cases with known ranges
-    if metric_name == "mse_mean":
+    if metric_name == "psnr_mean":
+        # PSNR: higher is better, typical range 0-50dB
+        # PSNR = 1.0dB is poor quality, PSNR = 50dB is excellent
+        max_psnr_db = 50.0
+        normalized = min(value, max_psnr_db) / max_psnr_db
+        return max(0.0, min(1.0, normalized))
+        
+    elif metric_name == "mse_mean":
         # MSE can be very large, use log normalization
         if value <= 0:
             return 1.0  # Perfect score for zero MSE
@@ -55,7 +62,7 @@ def normalize_metric(
         return max(0.0, min(1.0, normalized))
 
 
-def calculate_enhanced_composite_quality(
+def calculate_composite_quality(
     metrics: dict[str, float], config: MetricsConfig | None = None
 ) -> float:
     """Calculate enhanced composite quality using all 11 available metrics.
@@ -86,7 +93,7 @@ def calculate_enhanced_composite_quality(
     # Core structural similarity metrics (40% total)
     if "ssim_mean" in metrics:
         raw_value = metrics["ssim_mean"]
-        normalized = normalize_metric(raw_value, "ssim_mean")
+        normalized = normalize_metric("ssim_mean", raw_value)
         contribution = config.ENHANCED_SSIM_WEIGHT * normalized
         composite_quality += contribution
         total_weight += config.ENHANCED_SSIM_WEIGHT
@@ -96,7 +103,7 @@ def calculate_enhanced_composite_quality(
 
     if "ms_ssim_mean" in metrics:
         raw_value = metrics["ms_ssim_mean"]
-        normalized = normalize_metric(raw_value, "ms_ssim_mean")
+        normalized = normalize_metric("ms_ssim_mean", raw_value)
         contribution = config.ENHANCED_MS_SSIM_WEIGHT * normalized
         composite_quality += contribution
         total_weight += config.ENHANCED_MS_SSIM_WEIGHT
@@ -106,49 +113,49 @@ def calculate_enhanced_composite_quality(
 
     # Signal quality metrics (25% total)
     if "psnr_mean" in metrics:
-        normalized = normalize_metric(metrics["psnr_mean"], "psnr_mean")
+        normalized = normalize_metric("psnr_mean", metrics["psnr_mean"])
         composite_quality += config.ENHANCED_PSNR_WEIGHT * normalized
         total_weight += config.ENHANCED_PSNR_WEIGHT
 
     if "mse_mean" in metrics:
-        normalized = normalize_metric(metrics["mse_mean"], "mse_mean")
+        normalized = normalize_metric("mse_mean", metrics["mse_mean"])
         composite_quality += config.ENHANCED_MSE_WEIGHT * normalized
         total_weight += config.ENHANCED_MSE_WEIGHT
 
     # Advanced structural metrics (20% total)
     if "fsim_mean" in metrics:
-        normalized = normalize_metric(metrics["fsim_mean"], "fsim_mean")
+        normalized = normalize_metric("fsim_mean", metrics["fsim_mean"])
         composite_quality += config.ENHANCED_FSIM_WEIGHT * normalized
         total_weight += config.ENHANCED_FSIM_WEIGHT
 
     if "edge_similarity_mean" in metrics:
         normalized = normalize_metric(
-            metrics["edge_similarity_mean"], "edge_similarity_mean"
+            "edge_similarity_mean", metrics["edge_similarity_mean"]
         )
         composite_quality += config.ENHANCED_EDGE_WEIGHT * normalized
         total_weight += config.ENHANCED_EDGE_WEIGHT
 
     if "gmsd_mean" in metrics:
-        normalized = normalize_metric(metrics["gmsd_mean"], "gmsd_mean")
+        normalized = normalize_metric("gmsd_mean", metrics["gmsd_mean"])
         composite_quality += config.ENHANCED_GMSD_WEIGHT * normalized
         total_weight += config.ENHANCED_GMSD_WEIGHT
 
     # Perceptual quality metrics (10% total)
     if "chist_mean" in metrics:
-        normalized = normalize_metric(metrics["chist_mean"], "chist_mean")
+        normalized = normalize_metric("chist_mean", metrics["chist_mean"])
         composite_quality += config.ENHANCED_CHIST_WEIGHT * normalized
         total_weight += config.ENHANCED_CHIST_WEIGHT
 
     if "sharpness_similarity_mean" in metrics:
         normalized = normalize_metric(
-            metrics["sharpness_similarity_mean"], "sharpness_similarity_mean"
+            "sharpness_similarity_mean", metrics["sharpness_similarity_mean"]
         )
         composite_quality += config.ENHANCED_SHARPNESS_WEIGHT * normalized
         total_weight += config.ENHANCED_SHARPNESS_WEIGHT
 
     if "texture_similarity_mean" in metrics:
         normalized = normalize_metric(
-            metrics["texture_similarity_mean"], "texture_similarity_mean"
+            "texture_similarity_mean", metrics["texture_similarity_mean"]
         )
         composite_quality += config.ENHANCED_TEXTURE_WEIGHT * normalized
         total_weight += config.ENHANCED_TEXTURE_WEIGHT
@@ -156,7 +163,7 @@ def calculate_enhanced_composite_quality(
     # Temporal consistency (5% total)
     if "temporal_consistency" in metrics:
         normalized = normalize_metric(
-            metrics["temporal_consistency"], "temporal_consistency"
+            "temporal_consistency", metrics["temporal_consistency"]
         )
         composite_quality += config.ENHANCED_TEMPORAL_WEIGHT * normalized
         total_weight += config.ENHANCED_TEMPORAL_WEIGHT
@@ -268,22 +275,18 @@ def process_metrics_with_enhanced_quality(
     if config is None:
         config = DEFAULT_METRICS_CONFIG
 
-    # Calculate enhanced composite quality
-    enhanced_quality = calculate_enhanced_composite_quality(result, config)
-    result["enhanced_composite_quality"] = enhanced_quality
+    # Calculate enhanced composite quality - now returns single value
+    enhanced_composite = calculate_composite_quality(result, config)
+    result["composite_quality"] = enhanced_composite
+    
 
     # Calculate efficiency metric if compression data is available
     if "compression_ratio" in result:
         # Use enhanced composite quality for efficiency calculation
         efficiency = calculate_efficiency_metric(
-            result["compression_ratio"], enhanced_quality
+            result["compression_ratio"], enhanced_composite
         )
         result["efficiency"] = efficiency
-
-    # Also add legacy composite quality for comparison (if not already present)
-    if "composite_quality" not in result:
-        legacy_quality = calculate_legacy_composite_quality(result, config)
-        result["composite_quality"] = legacy_quality
 
     return result
 

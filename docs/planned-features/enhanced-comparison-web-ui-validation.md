@@ -54,9 +54,10 @@ The current comparison web UI shows basic metrics but lacks the detailed validat
 - [x] Access comprehensive metrics from pipeline results
 - [x] Handle missing or incomplete metric data gracefully
 
-### Phase 2: Python Pipeline Validation System 🔄 IN PROGRESS
-**Progress:** 80% Complete
-**Current Focus:** Completed Subtask 2.1 - Moving to Subtask 2.2 Basic Pipeline Integration
+### Phase 2: Python Pipeline Validation System ✅ COMPLETE
+**Progress:** 100% Complete
+**Completed:** 2025-08-28
+**Current Focus:** Phase 2 Complete - Ready for Phase 3 Web UI Validation Display System
 **Estimated Effort:** 2-3 hours (revised scope)
 
 **Key Architectural Change:** Move validation from browser JavaScript to Python pipeline integration for terminal access and debugging capabilities. **Note:** Content-type specific validation deferred to future AI integration phase.
@@ -68,19 +69,48 @@ The current comparison web UI shows basic metrics but lacks the detailed validat
 - [x] Implement FPS deviation checking with configurable tolerance (±10% default)
 - [x] Create content-type specific threshold infrastructure (ready for future AI integration)
 
-#### Subtask 2.2: Basic Pipeline Integration ⏳ PLANNED
+#### Subtask 2.2: Basic Pipeline Integration ✅ COMPLETE
+**Completed:** 2025-08-28
 **Scope:** Focus on core validation integration without AI content-type classification
-- [ ] Integrate ValidationChecker into experiment pipeline runners (`src/giflab/experimental/runner.py`)
-- [ ] Add validation execution after compression metrics calculation
-- [ ] Use `content_type="unknown"` (default thresholds) for all real GIFs
-- [ ] Implement terminal output for validation results during experiments
-- [ ] Add validation status to experiment metadata for web UI consumption
-- [ ] Ensure backward compatibility with existing experiment data
+- [x] Integrate ValidationChecker into experiment pipeline runners (`src/giflab/core/runner.py`)
+- [x] Add validation execution after compression metrics calculation
+- [x] Use `content_type="unknown"` (default thresholds) for all real GIFs
+- [x] Implement terminal output for validation results during experiments
+- [x] Add validation status to experiment metadata for web UI consumption
+- [x] Ensure backward compatibility with existing experiment data
 
-#### Subtask 2.3: CLI Validation Tools ⏳ PLANNED
-- [ ] Create standalone validation CLI commands for post-processing existing results
-- [ ] Add validation filtering and reporting tools
-- [ ] Enable programmatic access to validation results for debugging workflows
+**Implementation Notes:**
+- ValidationChecker successfully integrated into `GifLabRunner._execute_pipeline_with_metrics()`
+- Real-time terminal validation output working: `🔍 Validation ARTIFACT: smooth_gradient + pipeline_id`
+- 7 validation columns added to CSV results: status, passed, issues_count, messages, etc.
+- All error handling paths include validation result fields
+- Tested and verified with synthetic GIFs showing proper validation detection
+
+#### Subtask 2.3: CLI Validation Tools ✅ COMPLETE
+**Completed:** 2025-08-28
+**Dependencies:** Subtask 2.2 Complete ✅
+
+**Core CLI Commands Implemented:**
+- [x] Create `giflab validate results <csv_file>` - Re-run validation on existing experiment results
+- [x] Create `giflab validate filter <csv_file>` - Filter results by validation status (PASS/WARNING/ERROR/ARTIFACT)
+- [x] Create `giflab validate report <csv_file>` - Generate comprehensive validation analysis reports
+- [x] Create `giflab validate threshold <csv_file>` - Analyze threshold violations and suggest parameter adjustments
+
+**Implementation Tasks Completed:**
+- [x] Create `src/giflab/cli/validate_cmd.py` following existing CLI patterns
+- [x] Implement CSV reading and validation result processing
+- [x] Add filtering by validation status and categories (FPS, quality, artifacts)
+- [x] Create validation report generation with statistics and summaries
+- [x] Register validation commands in CLI main group (`src/giflab/cli/__init__.py`)
+- [x] Add programmatic access functions for debugging workflows (`get_validation_summary`, `filter_validation_results`)
+- [x] Include comprehensive help text and command documentation
+
+**Testing Results:**
+- All 4 CLI commands working correctly: `results`, `filter`, `report`, `threshold`
+- Successfully processes existing experiment CSVs and adds validation data
+- Generates comprehensive validation analysis reports with statistics
+- Provides parameter adjustment suggestions based on validation failures
+- Programmatic access functions enable debugging workflows
 
 ### Phase 3: Web UI Validation Display System ⏳ PLANNED
 **Progress:** 0% Complete
@@ -248,12 +278,12 @@ class ValidationChecker:
   - Multi-metric combination detection logic
   - Validation result data structures and serialization
 
-- `src/giflab/experimental/runner.py`: Pipeline integration (~50-100 line additions)
+- `src/giflab/core/runner.py`: Pipeline integration (~50-100 line additions)
   - Integrate ValidationChecker into experiment execution
   - Terminal validation output during compression
   - Validation result persistence alongside metrics
 
-- `src/giflab/validation/__init__.py`: Module initialization and CLI interfaces (~200-300 lines)
+- `src/giflab/cli/validate_cmd.py`: CLI validation commands (~200-300 lines)
   - Standalone validation CLI commands
   - Validation reporting and filtering tools
   - Configuration management utilities
@@ -288,12 +318,13 @@ class ValidationChecker:
 ### Success Criteria
 
 #### Phase 2 (Current): Basic Pipeline Integration
-- [ ] Validation results available in terminal during experiment execution
-- [ ] ValidationChecker integrated into compression pipeline with `content_type="unknown"`
-- [ ] Frame rate and quality discrepancies detected and reported in terminal
-- [ ] Validation triggers during pipeline execution, not just post-processing
-- [ ] Validation results saved alongside existing metrics for web UI consumption
-- [ ] Backward compatibility maintained with experiments lacking validation data
+- [x] Validation results available in terminal during experiment execution ✅ **2.2 COMPLETE**
+- [x] ValidationChecker integrated into compression pipeline with `content_type="unknown"` ✅ **2.2 COMPLETE**
+- [x] Frame rate and quality discrepancies detected and reported in terminal ✅ **2.2 COMPLETE**
+- [x] Validation triggers during pipeline execution, not just post-processing ✅ **2.2 COMPLETE**
+- [x] Validation results saved alongside existing metrics for web UI consumption ✅ **2.2 COMPLETE**
+- [x] Backward compatibility maintained with experiments lacking validation data ✅ **2.2 COMPLETE**
+- [x] **Subtask 2.3**: CLI validation tools for post-processing and programmatic access ✅ **2.3 COMPLETE**
 
 #### Future Phases: Advanced Features
 - [ ] **Phase 3 (Web UI)**: Visual validation alerts and filtering in comparison UI

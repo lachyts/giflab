@@ -372,6 +372,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
 
 def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
     """Calculate temporal consistency (animation smoothness) of frames.
+    
+    Temporal consistency measures how predictable/smooth the animation is,
+    NOT whether frames are identical. For animated content, consistent 
+    frame-to-frame differences indicate good temporal consistency.
 
     Args:
         frames: List of consecutive frames
@@ -395,35 +399,46 @@ def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
     if not frame_differences:
         return 1.0
 
-    # Calculate consistency as inverse of variance in frame differences
-    # More consistent animations have lower variance in frame-to-frame changes
+    # Key insight: Temporal consistency is about PREDICTABILITY, not minimal change
+    # For animated GIFs, we want consistent patterns in frame differences
+    
     mean_diff = float(np.mean(frame_differences))
     variance_diff = float(np.var(frame_differences))
-
-    # Normalize to 0-1 range (higher = more consistent)
-    if mean_diff == 0:
-        return 1.0
-
-    # Protect against division by zero and handle edge cases
-    epsilon = 1e-8
-    if variance_diff == 0:
-        # Perfect consistency - no variance in frame differences
-        return 1.0
-
-    # Use max to ensure we don't divide by zero
-    denominator = max(mean_diff, epsilon)
-    consistency = 1.0 / (1.0 + variance_diff / denominator)
+    
+    # Handle special cases
+    if mean_diff == 0 and variance_diff == 0:
+        return 1.0  # Static content = perfect consistency
+    
+    if variance_diff == 0 and mean_diff > 0:
+        return 1.0  # Perfectly uniform animation = perfect consistency
+    
+    # For content with variation, measure consistency of the pattern
+    # High variance in frame differences = inconsistent temporal behavior
+    # Low variance = consistent temporal behavior (good)
+    
+    # Normalize variance by the square of mean difference to get relative consistency
+    if mean_diff > 0:
+        relative_variance = variance_diff / (mean_diff ** 2)
+        # Use inverse exponential: lower relative variance = higher consistency
+        consistency = np.exp(-relative_variance * 2.0)
+    else:
+        # Edge case: very small differences, use original method
+        normalized_variance = variance_diff / (255.0 ** 2)
+        normalized_mean = mean_diff / 255.0
+        consistency = np.exp(-normalized_variance * 2.0 - normalized_mean * 0.5)
+    
     return float(max(0.0, min(1.0, consistency)))
 
 
 def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context: bool = False) -> float:
     """Detect disposal method artifacts including background corruption, transparency bleeding, and color shifts.
     
+    This function distinguishes between intended animation changes and actual disposal artifacts.
     Disposal artifacts manifest as:
-    - Background color corruption (gray→pink, white bleeding)
-    - Color palette degradation and intensity shifts  
+    - Inconsistent/corrupted frame transitions
+    - Background color corruption in areas that should be stable
     - Transparency corruption and overlay residue
-    - Visual frame stacking and overlay artifacts
+    - Visual frame stacking and overlay artifacts that break animation patterns
     
     Args:
         frames: List of consecutive frames
@@ -436,6 +451,77 @@ def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context:
     if len(frames) < 2:
         return 1.0  # Need at least 2 frames to detect artifacts
     
+    # Check if this appears to be global animation (all pixels change uniformly)
+    # vs partial animation (some areas stable, others changing)
+    is_global_animation = _detect_global_animation_pattern(frames)
+    
+    if is_global_animation:
+        # For global animation (like solid color cycling), disposal artifacts are rare
+        # Focus on pattern consistency rather than absolute differences
+        return _detect_global_animation_artifacts(frames)
+    else:
+        # For partial animation, use the original detailed detection
+        return _detect_partial_animation_artifacts(frames, frame_reduction_context)
+
+
+def _detect_global_animation_pattern(frames: list[np.ndarray]) -> bool:
+    """Detect if the animation involves global changes (entire frame changes) vs partial changes."""
+    if len(frames) < 3:
+        return False
+    
+    # Sample a few frame transitions
+    sample_transitions = min(3, len(frames) - 1)
+    global_change_scores = []
+    
+    for i in range(sample_transitions):
+        frame1 = frames[i].astype(np.float32)
+        frame2 = frames[i + 1].astype(np.float32)
+        
+        # Calculate per-pixel differences
+        pixel_diffs = np.mean(np.abs(frame1 - frame2), axis=2)
+        
+        # If most pixels changed significantly, it's likely global animation
+        changed_pixels = np.sum(pixel_diffs > 30.0)  # Threshold for significant change
+        total_pixels = pixel_diffs.size
+        change_ratio = changed_pixels / total_pixels
+        
+        global_change_scores.append(change_ratio)
+    
+    # If >70% of pixels change in most transitions, consider it global animation
+    avg_change_ratio = np.mean(global_change_scores)
+    return avg_change_ratio > 0.7
+
+
+def _detect_global_animation_artifacts(frames: list[np.ndarray]) -> float:
+    """Detect artifacts in global animation by looking for pattern inconsistencies."""
+    if len(frames) < 3:
+        return 1.0
+    
+    # For global animation, measure consistency of the animation pattern
+    frame_diffs = []
+    for i in range(len(frames) - 1):
+        frame1 = frames[i].astype(np.float32)
+        frame2 = frames[i + 1].astype(np.float32)
+        diff = np.mean(np.abs(frame1 - frame2))
+        frame_diffs.append(diff)
+    
+    # If animation has consistent differences, it's clean
+    # If differences vary wildly, there might be artifacts
+    if len(frame_diffs) > 1:
+        variance = np.var(frame_diffs)
+        mean_diff = np.mean(frame_diffs)
+        
+        if mean_diff > 0:
+            # Lower relative variance = more consistent pattern = fewer artifacts
+            relative_variance = variance / (mean_diff ** 2)
+            consistency_score = np.exp(-relative_variance * 0.5)  # Gentler penalty
+            return float(max(0.0, min(1.0, consistency_score)))
+    
+    return 1.0  # Default to clean for consistent patterns
+
+
+def _detect_partial_animation_artifacts(frames: list[np.ndarray], frame_reduction_context: bool) -> float:
+    """Detect artifacts in partial animation using the original detailed method."""
     # Extract first and last frames for comparison (most likely to show accumulation)
     first_frame = frames[0].astype(np.float32)
     last_frame = frames[-1].astype(np.float32)
@@ -1334,7 +1420,7 @@ def calculate_comprehensive_metrics(
             else 1.0
         )
 
-        # Process with enhanced quality system (adds enhanced_composite_quality and efficiency)
+        # Process with quality system (adds composite_quality and efficiency)
         result = process_metrics_with_enhanced_quality(result, config)
 
         # Add system metrics

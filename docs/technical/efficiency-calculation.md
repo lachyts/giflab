@@ -191,7 +191,7 @@ config = MetricsConfig(USE_ENHANCED_COMPOSITE_QUALITY=True)
 Efficiency appears as a dedicated column in experiment results:
 
 ```csv
-pipeline_id,compression_ratio,enhanced_composite_quality,efficiency
+pipeline_id,compression_ratio,composite_quality,efficiency
 imagemagick-frame,9.8,1.000,0.855
 gifsicle-frame,9.5,0.932,0.767
 ```
