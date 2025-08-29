@@ -2,46 +2,38 @@
 
 GIF compression and analysis laboratory for systematic performance evaluation.
 
-## 👋 New to GifLab?
-
-**🚀 Complete Beginners:** Start with our [**Beginner's Guide**](docs/guides/beginner.md) for step-by-step instructions and hand-holding through your first GIF analysis.
-
-**🔧 Developers & Advanced Users:** Continue reading for technical details and quick reference.
-
 ---
 
 ## Overview
 
-GifLab analyzes GIF compression by generating a grid of variants with different:
+GifLab analyzes GIF compression by generating variants with configurable parameters across multiple dimensions:
 
-- **Frame keep ratios**: 1.00, 0.90, 0.80, 0.70, 0.50
-- **Palette sizes**: 256, 128, 64 colors  
-- **Lossy levels**: 0%, 60%, 100% (universal percentages, mapped to engine-specific ranges)
+- **Frame reduction**: Configurable keep ratios from full frames to aggressive reduction
+- **Color quantization**: Flexible palette sizes and dithering algorithms  
+- **Lossy compression**: Variable quality levels mapped to engine-specific implementations
 - **Engines**: **gifsicle**, **Animately**, **ImageMagick**, **FFmpeg**, **gifski**
 
-Each variant is measured for file size, comprehensive quality metrics, render time, and **efficiency score** (balanced 50/50 weighting of quality and compression).
+Each variant is measured for file size, comprehensive quality metrics (11 different measures), render time, and efficiency score.
 
 ### Compression Pipeline
 
-GifLab provides a **comprehensive compression pipeline** with access to all major GIF processing engines:
+GifLab provides a comprehensive compression pipeline with access to all major GIF processing engines:
 
-- **Purpose**: Comprehensive testing, pipeline elimination, finding optimal combinations
+- **Purpose**: Systematic testing, pipeline analysis, and optimization discovery
 - **Usage**: `poetry run python -m giflab run --sampling representative`
-- **🆕 Targeted Presets**: `poetry run python -m giflab run --preset frame-focus` (**93-99% more efficient!**)
+- **Focused Presets**: `poetry run python -m giflab run --preset frame-focus`
 
-| Engine | Color | Frame | Lossy | Best For |
-|--------|-------|-------|--------|----------|
-| **gifsicle** | ✅ | ✅ | ✅ | Fast, lightweight, widely compatible |
-| **Animately** | ✅ | ✅ | ✅ | Complex gradients, photo-realistic content |
-| **ImageMagick** | ✅ | ✅ | ✅ | General-purpose, wide format support |
-| **FFmpeg** | ✅ | ✅ | ✅ | High-quality video-based processing |
-| **gifski** | ❌ | ❌ | ✅ | Highest quality lossy compression |
+| Engine | Color | Frame | Lossy |
+|--------|-------|-------|--------|
+| **gifsicle** | ✅ | ✅ | ✅ |
+| **Animately** | ✅ | ✅ | ✅ |
+| **ImageMagick** | ✅ | ✅ | ✅ |
+| **FFmpeg** | ✅ | ✅ | ✅ |
+| **gifski** | ❌ | ❌ | ✅ |
 
-## 🎯 **Targeted Presets**
+## 🎯 **Research Presets**
 
-**Focused, efficient compression testing!**
-
-Targeted presets create only the specific pipeline combinations you need for focused research studies.
+Research presets provide predefined pipeline combinations for common analysis scenarios, and you can create custom presets for specific research needs.
 
 ### Quick Start with Presets
 
@@ -49,72 +41,117 @@ Targeted presets create only the specific pipeline combinations you need for foc
 # List all available presets
 poetry run python -m giflab run --list-presets
 
-# Compare all frame reduction algorithms (5 targeted pipelines)
+# Compare frame reduction algorithms
 poetry run python -m giflab run --preset frame-focus
 
-# Compare color quantization methods (17 targeted pipelines)  
+# Compare color quantization methods
 poetry run python -m giflab run --preset color-optimization
 
-# Quick testing preset (2 pipelines)
+# Quick testing preset
 poetry run python -m giflab run --preset quick-test
 ```
 
 ### Available Research Presets
 
-- **`frame-focus`**: Compare frame reduction algorithms (5 pipelines)
-- **`color-optimization`**: Compare color quantization methods (17 pipelines)  
-- **`lossy-quality-sweep`**: Evaluate lossy compression effectiveness (11 pipelines)
-- **`tool-comparison-baseline`**: Fair engine comparison (64 pipelines)
-- **`dithering-focus`**: Compare dithering algorithms (6 pipelines)
-- **`png-optimization`**: Optimize PNG sequence workflows (4 pipelines)
-- **`quick-test`**: Fast development testing (2 pipelines)
+Built-in presets cover common research scenarios:
+- **`frame-focus`**: Compare frame reduction algorithms
+- **`color-optimization`**: Compare color quantization methods
+- **`lossy-quality-sweep`**: Evaluate lossy compression effectiveness
+- **`tool-comparison-baseline`**: Cross-engine comparison
+- **`dithering-focus`**: Compare dithering algorithms
+- **`png-optimization`**: PNG sequence optimization
+- **`quick-test`**: Fast development testing
 
-📚 **Learn more:** [Targeted Presets Quick Start Guide](docs/quickstart/targeted-presets-quickstart.md)
+### Custom Preset Creation
+
+You can create custom presets by defining your own pipeline combinations. The preset system supports flexible parameter configurations for targeted research studies.
 
 ### Analysis Workflow
 
-GifLab provides a **comprehensive analysis workflow** for systematic optimization:
+GifLab provides a comprehensive analysis workflow for systematic optimization:
 
-1. **Explore** – Generate synthetic GIFs and test pipeline combinations with intelligent sampling or targeted presets to surface the most promising combinations.
-2. **Analyze** – Use built-in analysis tools to identify optimal pipelines for your content type.
-3. **Scale** – Apply selected pipelines to full datasets with optimal performance.
+1. **Explore** – Generate synthetic GIFs and test pipeline combinations with intelligent sampling or research presets
+2. **Validate** – Automatic validation system detects compression issues and data integrity problems
+3. **Analyze** – Use built-in analysis tools to identify optimal pipelines for your content type
+4. **Scale** – Apply validated pipelines to full datasets
 
 Workflow summary:
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| 1. Explore | `giflab run --sampling representative` or `--preset frame-focus` | Tests pipeline combinations on synthetic GIFs, eliminates underperformers, writes results to `results/runs/`. |
-| 2. Analyse | Use notebooks / `giflab select-pipelines` | Analyze results and select top performing pipelines for your use case. |
-| 3. Scale | `giflab run data/raw/ --preset top-performers` | Apply optimized pipelines to full datasets for production use. |
+| 1. Explore | `giflab run --sampling representative` | Test pipeline combinations, eliminate underperformers |
+| 2. Validate | Automatic during processing | Quality validation, artifact detection, parameter verification |
+| 3. Analyze | `giflab select-pipelines results.csv --top 3` | Identify optimal pipelines using Pareto analysis |
+| 4. Scale | `giflab run data/raw/ --pipelines winners.yaml` | Apply validated pipelines to full datasets |
 
-The **Explore → Analyze → Scale** workflow ensures data-driven compression optimization.
+The system includes comprehensive validation to ensure data integrity throughout the compression pipeline.
 
-## 🤖 ML-Driven Optimization Strategy
+## 🔍 **Automated Validation & Debugging**
 
-**GifLab's Vision**: Use machine learning to automatically select the optimal compression tool combination based on GIF characteristics.
+GifLab includes a comprehensive validation system that automatically detects compression issues and provides detailed debugging information to help identify problems quickly.
+
+### Pipeline Validation System
+
+The optimization validation system runs automatically during compression and detects:
+
+- **Quality Degradation**: Monitors composite quality scores against configurable thresholds
+- **Efficiency Problems**: Validates efficiency scores and compression ratios
+- **Frame Reduction Issues**: Detects incorrect frame counts and FPS inconsistencies  
+- **Disposal Artifacts**: Identifies GIF disposal method artifacts and corruption
+- **Temporal Consistency**: Validates frame-to-frame stability in animations
+- **Multi-metric Combinations**: Detects unusual metric patterns that indicate problems
+
+### Validation Status Levels
+
+| Status | Description | Action |
+|--------|-------------|--------|
+| **PASS** | All validation checks passed | Continue processing |
+| **WARNING** | Minor issues detected | Compression acceptable, review settings |
+| **ERROR** | Significant issues found | Compression problematic, investigate |
+| **ARTIFACT** | Disposal artifacts detected | Severe corruption, pipeline failure |
+| **UNKNOWN** | Validation could not run | System error, check logs |
+
+### Content-Type Aware Validation
+
+The system adjusts validation thresholds based on content type:
+- **Animation Heavy**: Different frame reduction tolerances
+- **Smooth Gradients**: Adjusted quality thresholds for lossy compression
+- **Text/Graphics**: Stricter artifact detection
+- **Photo-realistic**: Enhanced temporal consistency checks
+
+### Debugging Failed Pipelines
+
+When validation detects issues, use these commands for debugging:
+
+```bash
+# View detailed failure analysis
+poetry run python -m giflab view-failures results/runs/latest/
+
+# Filter by specific error types
+poetry run python -m giflab view-failures results/runs/latest/ --error-type gifski
+
+# Get detailed error information
+poetry run python -m giflab view-failures results/runs/latest/ --detailed
+```
+
+The validation system helps catch problems early so you can trace issues back to specific pipeline configurations and fix them quickly.
 
 ### The Problem
-Different GIF compression tools excel at different types of content:
-- **Gifsicle**: Better for simple graphics, text, high-contrast content
-- **Animately**: Superior for complex gradients, many colors, photo-realistic content
-- **ImageMagick**: Versatile general-purpose tool with extensive format support
-- **FFmpeg**: High-quality video-based processing with advanced filters
-- **gifski**: Highest quality lossy compression using advanced algorithms
-- **Hybrid approaches**: Can combine strengths of multiple tools
+Different GIF compression tools have varying performance characteristics across content types. Optimal tool selection depends on GIF characteristics such as color complexity, animation patterns, and visual content type.
 
 ### The Solution
 GifLab's compression pipeline tests multiple algorithmic combinations to:
 
-1. **Build a dataset** of GIF characteristics (colors, frames, complexity, content type) paired with optimal tool combinations
-2. **Train ML models** to predict the best compression strategy for new GIFs
-3. **Create intelligent routing** that automatically selects optimal tool chains
-4. **Continuously improve** through feedback and expanded testing
+1. Build datasets of GIF characteristics paired with optimal tool combinations
+2. Train ML models to predict optimal compression strategies
+3. Create automated tool selection based on content analysis
+4. Continuously improve through expanded testing
 
 ### Research Approach
-- **Comprehensive tool testing**: Expand beyond gifsicle/animately to include ImageMagick, FFmpeg, gifski, and other tools
-- **Content classification**: Develop automated content type detection (text, photo, animation, etc.)
-- **Performance prediction**: Train models to predict compression ratio and quality trade-offs
-- **Algorithmic innovation**: Test novel tool combinations and parameter settings
+- Comprehensive multi-engine testing (gifsicle, Animately, ImageMagick, FFmpeg, gifski)
+- Automated content type classification and detection
+- Performance prediction modeling for compression/quality trade-offs
+- Novel tool combination and parameter optimization
 
 *See [ML Strategy Documentation](docs/technical/ml-strategy.md) for detailed implementation plans.*
 
@@ -190,18 +227,33 @@ The resulting CSV includes source tracking columns:
 
 📖 **For detailed documentation, see:** [Directory-Based Source Detection Guide](docs/guides/directory-source-detection.md)
 
-## SSIM Quality Analysis
+## Comprehensive Quality Analysis
 
-GifLab provides multiple SSIM (Structural Similarity Index) calculation modes optimized for different use cases:
+GifLab uses an 11-metric quality assessment system that evaluates multiple dimensions of compression quality:
 
-### Performance Comparison
+### Core Quality Metrics
+
+| Metric | Type | Purpose |
+|--------|------|---------|
+| **SSIM** | Structural similarity | Primary perceptual quality measure |
+| **MS-SSIM** | Multi-scale similarity | Enhanced structural assessment |
+| **PSNR** | Signal quality | Traditional quality measure |
+| **MSE/RMSE** | Pixel error | Direct difference measurement |
+| **FSIM** | Feature similarity | Gradient and phase feature analysis |
+| **GMSD** | Gradient deviation | Gradient-map based assessment |
+| **CHIST** | Color correlation | Histogram-based color fidelity |
+| **Edge Similarity** | Structural | Edge preservation analysis |
+| **Texture Similarity** | Perceptual | Texture pattern correlation |
+| **Sharpness Similarity** | Visual quality | Sharpness preservation |
+| **Temporal Consistency** | Animation | Frame-to-frame stability |
+
+### SSIM Calculation Modes
 
 | Mode | Frames Sampled | Processing Time | Use Case |
 |------|----------------|-----------------|----------|
-| **Fast** | 3 keyframes | ~5ms | Massive datasets (10,000+ GIFs) |
-| **Optimized (10)** | 10 frames | ~6ms | Production pipeline (1,000-10,000 GIFs) |
-| **Optimized (20)** | 20 frames | ~8ms | Balanced accuracy/speed |
-| **Full** | All frames | ~12ms | Research & analysis (small datasets) |
+| **Fast** | 3 keyframes | ~5ms | Large datasets (10,000+ GIFs) |
+| **Optimized** | 10-20 frames | ~6-8ms | Production pipeline |
+| **Full** | All frames | ~12ms | Research analysis |
 
 ### Sampling Strategies
 
@@ -264,57 +316,33 @@ All metrics are exposed via `giflab.metrics.calculate_comprehensive_metrics` and
 
 ## 🎯 Efficiency Scoring System
 
-GifLab calculates an **efficiency score** (0-1 scale) that balances quality preservation with compression performance using equal 50/50 weighting:
+GifLab calculates an **efficiency score** (0-1 scale) using a geometric mean of quality and compression performance:
 
 ```python
 efficiency = (composite_quality^0.5) × (normalized_compression^0.5)
 ```
 
-### Key Features:
-- **Equal weighting**: 50% quality, 50% compression - neither dominates
-- **Log-normalized compression**: Handles diminishing returns above 20x compression
-- **Geometric mean**: Requires both good quality AND good compression for high scores
-- **Bounded output**: Easy-to-interpret 0-1 scale
+### Technical Implementation:
+- **Geometric mean**: Balanced approach requiring both quality preservation and compression effectiveness
+- **Log-normalized compression**: Compression ratio capped at 20x to handle diminishing returns
+- **Composite quality input**: Uses the comprehensive 11-metric quality system
+- **Range**: 0-1 scale for consistent interpretation
 
-### Efficiency Scale:
-| Range | Rating | Example Algorithms |
-|--------|---------|-------------------|  
-| 0.80-1.00 | **EXCELLENT** | imagemagick-frame (0.855) |
-| 0.70-0.79 | **VERY GOOD** | gifsicle-frame (0.767) |
-| 0.60-0.69 | **GOOD** | none-frame (0.642) |
-| 0.50-0.59 | **FAIR** | ffmpeg-frame (0.569) |
-| 0.00-0.49 | **POOR** | Investigate issues |
-
-📖 **For technical details, see:** [Efficiency Calculation Guide](docs/technical/efficiency-calculation.md)
 
 ## 🎯 Pareto Frontier Analysis
 
-GifLab uses **Pareto frontier analysis** to solve the fundamental challenge of comparing compression pipelines fairly when quality scores don't align. This mathematical approach identifies the optimal trade-offs between quality and file size without requiring subjective weightings.
+GifLab uses Pareto frontier analysis to identify mathematically optimal compression pipelines by finding trade-offs where you cannot improve quality without increasing file size, or reduce file size without degrading quality.
 
-### The Problem: Comparing Unlike Pipelines
+### Mathematical Optimality
 
-Traditional pipeline comparison fails when pipelines achieve different quality levels:
-- **Pipeline A**: 0.85 quality, 200KB  
-- **Pipeline B**: 0.90 quality, 180KB
-- **Pipeline C**: 0.88 quality, 250KB
-
-*Which is better?* Simple rankings can't answer this fairly.
-
-### The Solution: Mathematical Optimality
-
-**Pareto frontier analysis** identifies pipelines that are **mathematically optimal** - where you cannot improve one metric (quality) without worsening another (file size).
-
-#### Pareto Optimal Examples:
-- **Pipeline B**: 0.90 quality, 180KB → **Optimal** (dominates A in both metrics)
-- **Pipeline A**: 0.85 quality, 200KB → **Optimal** (best quality for larger sizes)  
-- **Pipeline C**: 0.88 quality, 250KB → **Dominated** (B is better in both quality AND size)
+Pareto analysis eliminates subjective weighting by identifying pipelines that are mathematically optimal for quality-size trade-offs.
 
 ### Pipeline Elimination Benefits
 
-1. **Eliminates Subjectivity**: No need to choose quality-vs-size weights
-2. **Mathematically Rigorous**: Clear, defensible elimination decisions  
-3. **Content-Type Aware**: Different frontiers for different GIF types
-4. **Multi-Metric Support**: Works with SSIM, MS-SSIM, composite quality scores
+1. Eliminates subjective quality-vs-size weighting decisions
+2. Provides mathematically rigorous pipeline comparisons
+3. Supports content-type specific analysis
+4. Works with multiple quality metrics (SSIM, MS-SSIM, composite scores)
 
 ### Experimental Commands
 
@@ -331,32 +359,14 @@ poetry run python -m giflab run --sampling quick
 
 ### Interpretation Guide
 
-**Pareto Frontier Points:**
-- **Leftmost point**: "Best quality achievable (any file size)"
-- **Rightmost point**: "Best compression achievable (acceptable quality)"  
-- **Middle points**: "Optimal quality-size balance points"
+Pareto frontier points represent optimal trade-offs:
+- Leftmost: Maximum quality achievable
+- Rightmost: Maximum compression at acceptable quality  
+- Middle: Balanced quality-size compromises
 
-**Dominated Pipelines:** 
-- These are **never optimal** - always a better choice available
-- Safe to eliminate from production considerations
-- Identified automatically by elimination tests
+Dominated pipelines are automatically identified and can be safely eliminated from consideration.
 
-### Quality-Aligned Efficiency Rankings
 
-For specific quality targets, Pareto analysis provides definitive rankings:
-
-```python
-# At quality 0.85, which pipeline wins?
-quality_85_winners = [
-    ('animately_lossy40_128colors', 145KB),  # Winner
-    ('gifsicle_O2_256colors', 167KB),        # Second  
-    ('ffmpeg_floyd_steinberg', 189KB)        # Third
-]
-```
-
-This answers your key question: **"Which pipeline provides better file size for the same quality?"**
-
-📖 **For technical details, see:** [Pipeline Elimination Guide](docs/guides/elimination-results-tracking.md)
 
 ## Quick Start
 
@@ -406,13 +416,6 @@ poetry run python -m giflab run --sampling full
 poetry run python -m giflab run --sampling targeted
 ```
 
-### 🔬 Engine-Specific Testing
-To test specific engines, use the compression pipeline which automatically includes:
-- **ImageMagick**: General-purpose processing
-- **FFmpeg**: High-quality video-based compression  
-- **gifski**: Premium lossy compression quality
-- **gifsicle**: Fast, reliable baseline
-- **Animately**: Complex gradient optimization
 
 ### 📊 Workflow Recommendations
 
@@ -446,17 +449,6 @@ giflab/
 └─ pyproject.toml        # Poetry configuration
 ```
 
-## Development Status
-
-This project is being developed in stages:
-
-- **✅ S0**: Repo scaffold, Poetry, black/ruff, pytest
-- **✅ S1**: Metadata extraction + SHA + file-name; tests
-- **✅ S2**: Lossy compression functionality
-- **✅ S3**: Frame reduction functionality  
-- **✅ S4**: Color palette reduction functionality
-- **✅ S5**: Quality metrics and SSIM analysis
-- **⏳ S6-S10**: Additional functionality (see PROJECT_SCOPE.md)
 
 ## Requirements
 
