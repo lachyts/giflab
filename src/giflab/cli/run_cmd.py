@@ -79,6 +79,11 @@ from .utils import (
     help="Clear the pipeline results cache before running (forces fresh start)",
 )
 @click.option(
+    "--extract-frames/--no-extract-frames",
+    default=True,
+    help="Extract individual frames from GIFs for visual analysis (default: enabled)",
+)
+@click.option(
     "--preset",
     "-p",
     type=str,
@@ -102,6 +107,7 @@ def run(
     use_gpu: bool,
     use_cache: bool,
     clear_cache: bool,
+    extract_frames: bool,
     preset: str,
     list_presets: bool,
 ) -> None:
@@ -123,7 +129,7 @@ def run(
         # Handle operations that don't need RAW_DIR
         if list_presets:
             # Create pipeline runner with settings
-            runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+            runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, extract_frames=extract_frames)
             try:
                 presets = runner.list_available_presets()
                 click.echo("🎯 Available Presets:")
@@ -155,7 +161,7 @@ def run(
         validated_workers = validate_and_get_worker_count(workers)
 
         # Create pipeline runner with settings
-        runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache)
+        runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, extract_frames=extract_frames)
 
         # Clear cache if requested
         if clear_cache and runner.cache:
@@ -241,11 +247,16 @@ def run(
         click.echo(f"🔄 Resume enabled: {resume}")
         click.echo(f"🧠 Analysis approach: {analysis_type}")
 
-        # Display GPU status
+        # Display GPU and frame extraction status
         if use_gpu:
             click.echo("🚀 GPU acceleration: Enabled")
         else:
             click.echo("🖥️ GPU acceleration: Disabled")
+            
+        if extract_frames:
+            click.echo("🎞️ Frame extraction: Enabled")
+        else:
+            click.echo("🎞️ Frame extraction: Disabled")
 
         # Display results summary
         click.echo("\n📊 Analysis Results Summary:")

@@ -80,6 +80,7 @@ class GifLabRunner:
         output_dir: Path = Path("results/runs"),
         use_gpu: bool = False,
         use_cache: bool = False,
+        extract_frames: bool = True,
     ):
         # Always resolve paths to absolute paths to prevent nesting when working directory changes
         if output_dir.is_absolute():
@@ -92,6 +93,7 @@ class GifLabRunner:
             self.base_output_dir = (project_root / output_dir).resolve()
         self.use_gpu = use_gpu
         self.use_cache = use_cache
+        self.extract_frames = extract_frames
         self.logger = logging.getLogger(__name__)
 
         # Initialize pipeline sampler
@@ -1896,6 +1898,15 @@ class GifLabRunner:
             if not original_dest.exists():
                 copy(original_gif_path, original_dest)
                 self.logger.debug(f"Copied original: {original_gif_path.name} -> {original_dest}")
+                
+                # Extract frames from original GIF
+                if self.extract_frames:
+                    self._extract_gif_frames(
+                        gif_path=original_dest,
+                        gif_name=gif_name, 
+                        pipeline_info="original",
+                        output_dir=gif_visual_dir
+                    )
 
             # Generate descriptive filename for compressed GIF
             compressed_filename = self._generate_compressed_filename(pipeline, params)
@@ -1904,13 +1915,90 @@ class GifLabRunner:
             # Copy compressed GIF
             copy(compressed_gif_path, compressed_dest)
             self.logger.debug(f"Saved compressed: {compressed_filename}.gif")
+            
+            # Extract frames from compressed GIF
+            if self.extract_frames:
+                self._extract_gif_frames(
+                    gif_path=compressed_dest,
+                    gif_name=gif_name,
+                    pipeline_info=compressed_filename, 
+                    output_dir=gif_visual_dir
+                )
 
         except Exception as e:
             self.logger.warning(f"Failed to save visual outputs for {original_gif_path.name}: {e}")
 
+    def _extract_gif_frames(
+        self, 
+        gif_path: Path, 
+        gif_name: str, 
+        pipeline_info: str, 
+        output_dir: Path
+    ) -> None:
+        """Extract individual frames from GIF for visual analysis with proper disposal handling.
+        
+        Uses ImageMagick's coalesce to ensure extracted frames accurately represent
+        what the animated GIF displays, respecting GIF disposal methods.
+        
+        Args:
+            gif_path: Path to the GIF file
+            gif_name: Base name of the GIF (e.g., 'complex_animation')
+            pipeline_info: Pipeline identifier (e.g., 'original' or 'gifsicleframe-f0.5') 
+            output_dir: Directory where frame subdirectory should be created
+        """
+        if not self.extract_frames:
+            return
+            
+        try:
+            # Create frames subdirectory structure
+            frames_base_dir = output_dir / "frames"
+            pipeline_frames_dir = frames_base_dir / pipeline_info
+            pipeline_frames_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Import frame extraction function (now uses ImageMagick with coalesce)
+            try:
+                from ..external_engines.ffmpeg import export_png_sequence
+            except ImportError:
+                self.logger.warning(f"ImageMagick not available - skipping frame extraction for {gif_path.name}")
+                return
+            
+            # Create custom frame pattern with gif name and pipeline info
+            if pipeline_info == "original":
+                frame_pattern = f"{gif_name}_frame_%03d.png"
+            else:
+                frame_pattern = f"{gif_name}_{pipeline_info}_frame_%03d.png"
+            
+            # Extract frames using ImageMagick coalesce for proper disposal handling
+            self.logger.debug(f"Extracting frames from {gif_path.name} using ImageMagick coalesce")
+            metadata = export_png_sequence(
+                input_path=gif_path,
+                output_dir=pipeline_frames_dir,
+                frame_pattern=frame_pattern
+            )
+            
+            # Verify that frames were actually created
+            frame_count = metadata.get('frame_count', 0)
+            if frame_count > 0:
+                self.logger.debug(f"✅ Extracted {frame_count} frames to {pipeline_frames_dir}")
+            else:
+                self.logger.warning(f"No frames extracted for {gif_path.name}")
+                # Remove empty directory
+                if pipeline_frames_dir.exists() and not any(pipeline_frames_dir.iterdir()):
+                    pipeline_frames_dir.rmdir()
+                    
+        except Exception as e:
+            # Don't fail the pipeline if frame extraction fails
+            self.logger.warning(f"Frame extraction failed for {gif_path.name}: {e}")
+            # Remove empty directory if it exists
+            try:
+                if pipeline_frames_dir.exists() and not any(pipeline_frames_dir.iterdir()):
+                    pipeline_frames_dir.rmdir()
+            except Exception:
+                pass  # Don't fail the pipeline over cleanup issues  # Don't fail the pipeline over cleanup issues
+
     def _generate_compressed_filename(self, pipeline: Any, params: dict) -> str:
         """Generate descriptive filename for compressed GIF based on pipeline and parameters."""
-        # Extract meaningful parts from pipeline
+        # Extract meaningful parts from pipeline and embed parameters with their tools
         parts = []
         
         for step in pipeline.steps:
@@ -1919,22 +2007,23 @@ class GifLabRunner:
                 if not tool_name.startswith("none-"):  # Skip no-op tools
                     # Simplify tool names
                     clean_name = tool_name.replace("-", "").replace("_", "")
-                    parts.append(clean_name)
+                    
+                    # Add the tool name
+                    tool_part = clean_name
+                    
+                    # Check if this tool uses specific parameters and append them immediately
+                    if "frame" in tool_name.lower() and params.get("frame_ratio", 1.0) != 1.0 and self._pipeline_uses_frame_reduction(pipeline):
+                        tool_part += f"-f{params['frame_ratio']}"
+                    elif "color" in tool_name.lower() and params.get("colors") and self._pipeline_uses_color_reduction(pipeline):
+                        tool_part += f"-c{params['colors']}"
+                    elif "lossy" in tool_name.lower() and params.get("lossy") and self._pipeline_uses_lossy_compression(pipeline):
+                        tool_part += f"-l{params['lossy']}"
+                    
+                    parts.append(tool_part)
 
         pipeline_part = "-".join(parts) if parts else "unknown"
         
-        # Add parameter details
-        param_parts = []
-        if params.get("colors") and self._pipeline_uses_color_reduction(pipeline):
-            param_parts.append(f"c{params['colors']}")
-        if params.get("lossy") and self._pipeline_uses_lossy_compression(pipeline):
-            param_parts.append(f"l{params['lossy']}")
-        if params.get("frame_ratio", 1.0) != 1.0 and self._pipeline_uses_frame_reduction(pipeline):
-            param_parts.append(f"f{params['frame_ratio']}")
-            
-        param_suffix = "-" + "-".join(param_parts) if param_parts else ""
-        
-        return f"{pipeline_part}{param_suffix}"
+        return pipeline_part
 
 
     def _calculate_gpu_accelerated_metrics(

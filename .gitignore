@@ -88,6 +88,7 @@ logs/*.log
 
 # Results and experimental analysis outputs - selective exclusions
 results/**/*.gif
+results/**/*.png
 results/**/*.csv  
 results/**/*.json
 results/**/*.db
