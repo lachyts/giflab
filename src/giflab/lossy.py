@@ -50,7 +50,7 @@ from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
 from shutil import rmtree, which
-from typing import Any
+from typing import Any, Optional
 
 RUN_TIMEOUT = int(os.getenv("GIFLAB_RUN_TIMEOUT", "10"))
 
@@ -70,8 +70,9 @@ from .frame_keep import (
     build_gifsicle_frame_args,
     validate_frame_keep_ratio,
 )
-from .meta import extract_gif_metadata
 from .input_validation import validate_path_security
+from .meta import extract_gif_metadata
+from .system_tools import discover_tool
 
 
 class LossyEngine(Enum):
@@ -248,6 +249,225 @@ def apply_lossy_compression(
         raise ValueError(f"Unsupported engine: {engine}")
 
 
+def _analyze_gif_disposal_complexity(input_path: Path) -> dict[str, Any]:
+    """Analyze GIF structure to determine disposal method complexity.
+    
+    This function examines the GIF frame structure to detect complex optimized GIFs
+    that rely heavily on disposal methods and may be corrupted by frame reduction.
+    
+    Args:
+        input_path: Path to the input GIF file
+        
+    Returns:
+        Dictionary with complexity analysis:
+        - complexity_score: Float 0.0-1.0 (higher = more complex disposal dependencies)
+        - has_variable_frames: Boolean indicating frames have different sizes
+        - has_offsets: Boolean indicating frames use non-zero offsets
+        - frame_size_variance: Standard deviation of frame sizes (normalized)
+        - disposal_risk: Assessment of disposal corruption risk
+        
+    Note:
+        Uses ImageMagick identify to analyze frame structure without loading pixel data.
+    """
+    import re
+    import statistics
+    import subprocess
+    
+    try:
+        # Check if ImageMagick is available
+        imagemagick_tool = discover_tool('imagemagick')
+        if not imagemagick_tool.available:
+            # Fallback to low complexity if ImageMagick is unavailable
+            return {
+                'complexity_score': 0.0,
+                'has_variable_frames': False,
+                'has_offsets': False,
+                'frame_size_variance': 0.0,
+                'disposal_risk': 'low'
+            }
+        
+        # Use ImageMagick identify to get frame geometry information
+        result = subprocess.run(
+            ['identify', str(input_path)],
+            capture_output=True, text=True, timeout=30
+        )
+        
+        if result.returncode != 0:
+            # Fallback to low complexity if analysis fails
+            return {
+                'complexity_score': 0.0,
+                'has_variable_frames': False,
+                'has_offsets': False,
+                'frame_size_variance': 0.0,
+                'disposal_risk': 'low'
+            }
+        
+        # Parse frame geometry information
+        lines = result.stdout.strip().split('\n')
+        frame_data = []
+        
+        for line in lines:
+            # Extract geometry info: widthxheight canvasxcanvas+xoffset+yoffset
+            # Example: "100x100 100x100+0+0" or "90x41 100x100+3+59"
+            geometry_match = re.search(r'(\d+)x(\d+)\s+\d+x\d+\+(\d+)\+(\d+)', line)
+            if geometry_match:
+                width = int(geometry_match.group(1))
+                height = int(geometry_match.group(2))
+                x_offset = int(geometry_match.group(3))
+                y_offset = int(geometry_match.group(4))
+                frame_data.append({
+                    'width': width,
+                    'height': height,
+                    'x_offset': x_offset,
+                    'y_offset': y_offset,
+                    'area': width * height
+                })
+        
+        if len(frame_data) <= 1:
+            # Single frame or no data - low complexity
+            return {
+                'complexity_score': 0.0,
+                'has_variable_frames': False,
+                'has_offsets': False,
+                'frame_size_variance': 0.0,
+                'disposal_risk': 'low'
+            }
+        
+        # Calculate complexity metrics
+        areas = [frame['area'] for frame in frame_data]
+        x_offsets = [frame['x_offset'] for frame in frame_data]
+        y_offsets = [frame['y_offset'] for frame in frame_data]
+        
+        # Check for variable frame sizes
+        has_variable_frames = len(set(areas)) > 1
+        
+        # Check for non-zero offsets
+        has_offsets = any(x != 0 or y != 0 for x, y in zip(x_offsets, y_offsets, strict=True))
+        
+        # Calculate frame size variance (normalized by max area)
+        if len(areas) > 1:
+            area_variance = statistics.stdev(areas)
+            max_area = max(areas)
+            normalized_variance = area_variance / max_area if max_area > 0 else 0.0
+        else:
+            normalized_variance = 0.0
+        
+        # Calculate overall complexity score
+        complexity_score = 0.0
+        
+        # Factor 1: Variable frame sizes (0.4 weight)
+        if has_variable_frames:
+            size_variation_ratio = len(set(areas)) / len(areas)
+            complexity_score += 0.4 * size_variation_ratio
+        
+        # Factor 2: Non-zero offsets (0.3 weight)
+        if has_offsets:
+            unique_positions = len({(x, y) for x, y in zip(x_offsets, y_offsets, strict=True)})
+            position_variation_ratio = unique_positions / len(frame_data)
+            complexity_score += 0.3 * position_variation_ratio
+        
+        # Factor 3: Frame size variance (0.3 weight)
+        complexity_score += 0.3 * min(1.0, normalized_variance * 2.0)  # Cap at 1.0
+        
+        # Determine disposal risk level
+        if complexity_score >= 0.7:
+            disposal_risk = 'high'
+        elif complexity_score >= 0.4:
+            disposal_risk = 'medium'
+        else:
+            disposal_risk = 'low'
+        
+        return {
+            'complexity_score': round(complexity_score, 3),
+            'has_variable_frames': has_variable_frames,
+            'has_offsets': has_offsets,
+            'frame_size_variance': round(normalized_variance, 3),
+            'disposal_risk': disposal_risk
+        }
+        
+    except Exception:
+        # Fallback to low complexity on any error
+        return {
+            'complexity_score': 0.0,
+            'has_variable_frames': False,
+            'has_offsets': False,
+            'frame_size_variance': 0.0,
+            'disposal_risk': 'low'
+        }
+
+def _select_optimal_disposal_method(input_path: Path, frame_keep_ratio: float, total_frames: int) -> str | None:
+    """Select optimal disposal method for gifsicle based on GIF content analysis.
+    
+    This function analyzes the GIF structure and content to determine the best disposal method
+    to use when reducing frames. It now includes intelligent detection of complex optimized GIFs
+    that rely heavily on disposal methods.
+    
+    Different disposal methods work better for different types of animations:
+    
+    - none: Don't dispose of frame, leave it in place (good for solid backgrounds)
+    - background: Clear frame to background before next frame (good for complex animations)
+    - previous: Restore to previous undisposed frame (rarely optimal for frame reduction)
+    
+    Args:
+        input_path: Path to the input GIF file
+        frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
+        total_frames: Total number of frames in the source GIF
+        
+    Returns:
+        Disposal method string ("none", "background", or None for default)
+        
+    Note:
+        Now uses GIF structural analysis to detect disposal complexity. For complex optimized
+        GIFs with variable frame sizes and offsets, forces safer disposal methods regardless
+        of frame reduction ratio to prevent disposal artifact corruption.
+    """
+    try:
+        # Analyze GIF structural complexity to detect disposal dependencies
+        complexity_analysis = _analyze_gif_disposal_complexity(input_path)
+        
+        disposal_risk = complexity_analysis.get('disposal_risk', 'low')
+        complexity_score = complexity_analysis.get('complexity_score', 0.0)
+        has_variable_frames = complexity_analysis.get('has_variable_frames', False)
+        has_offsets = complexity_analysis.get('has_offsets', False)
+        
+        # For high-complexity GIFs with disposal dependencies, use safer methods
+        if disposal_risk == 'high' or complexity_score >= 0.7:
+            # High complexity: Force background disposal to prevent corruption
+            # This handles cases like animation_heavy with complex frame interdependencies
+            return "background"
+        
+        elif disposal_risk == 'medium' or (has_variable_frames and has_offsets):
+            # Medium complexity: Use background disposal for any frame reduction
+            if frame_keep_ratio < 1.0:
+                return "background"
+            else:
+                return None  # No frame reduction, preserve original disposal
+        
+        # For low complexity GIFs, use the original ratio-based logic
+        else:
+            # For high frame reduction ratios (keeping < 50% of frames), disposal artifacts are more likely
+            if frame_keep_ratio <= 0.5:
+                # For aggressive frame reduction on simple GIFs, let gifsicle preserve original disposal
+                return None
+                
+            # For moderate frame reduction (keeping 50-80% of frames), background disposal often works well
+            elif frame_keep_ratio <= 0.8:
+                return "background"
+                
+            # For light frame reduction (keeping > 80% of frames), none disposal may preserve more detail
+            else:
+                return "none"
+            
+    except Exception:
+        # If analysis fails, fall back to the original conservative logic
+        if frame_keep_ratio <= 0.5:
+            return None
+        elif frame_keep_ratio <= 0.8:
+            return "background"
+        else:
+            return "none"
+
+
 def compress_with_gifsicle(
     input_path: Path,
     output_path: Path,
@@ -321,7 +541,9 @@ def compress_with_gifsicle(
 
     # Add disposal method handling for frame reduction to prevent stacking artifacts
     if frame_keep_ratio < 1.0:
-        cmd.extend(["--disposal=background"])
+        disposal_method = _select_optimal_disposal_method(input_path, frame_keep_ratio, total_frames)
+        if disposal_method:
+            cmd.extend([f"--disposal={disposal_method}"])
 
     # Add lossy compression if level > 0
     if lossy_level > 0:
@@ -930,7 +1152,7 @@ def _setup_png_sequence_directory(
         png_export_result = export_png_sequence(input_path, png_sequence_dir)
 
         frame_count = png_export_result.get("frame_count", 0)
-        if not isinstance(frame_count, (int, float)) or int(frame_count) < 1:
+        if not isinstance(frame_count, int | float) or int(frame_count) < 1:
             logger.error("PNG sequence export failed: no frames generated")
             raise RuntimeError("Failed to export PNG sequence: no frames generated")
 
@@ -1142,7 +1364,7 @@ def _execute_animately_advanced(
             output_fps = output_metadata.orig_fps
             
             # Calculate expected FPS from the JSON config we provided
-            with open(json_config_path, 'r') as f:
+            with open(json_config_path) as f:
                 config_data = json.load(f)
             
             if 'frames' in config_data and config_data['frames']:

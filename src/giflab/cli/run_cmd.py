@@ -22,7 +22,7 @@ from .utils import (
 )
 @click.option(
     "--output-dir",
-    "-o", 
+    "-o",
     type=click.Path(path_type=Path),
     default=Path("results/runs"),
     help="Base directory for timestamped results (default: results/runs)",
@@ -198,6 +198,13 @@ def run(
             except Exception as e:
                 click.echo(f"❌ Error with preset '{preset}': {e}")
                 click.echo("💡 Use --list-presets to see available presets")
+                
+                # Clean up any partially created experiment directory
+                try:
+                    runner._cleanup_failed_experiment()
+                except Exception as cleanup_error:
+                    click.echo(f"⚠️ Warning: Failed to clean up experiment directory: {cleanup_error}")
+                
                 return
         else:
             # Use traditional sampling approach

@@ -17,7 +17,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from shutil import copy
+from shutil import copy, rmtree
 from typing import Any, Optional
 
 import numpy as np
@@ -1903,7 +1903,7 @@ class GifLabRunner:
                 if self.extract_frames:
                     self._extract_gif_frames(
                         gif_path=original_dest,
-                        gif_name=gif_name, 
+                        gif_name=gif_name,
                         pipeline_info="original",
                         output_dir=gif_visual_dir
                     )
@@ -1921,7 +1921,7 @@ class GifLabRunner:
                 self._extract_gif_frames(
                     gif_path=compressed_dest,
                     gif_name=gif_name,
-                    pipeline_info=compressed_filename, 
+                    pipeline_info=compressed_filename,
                     output_dir=gif_visual_dir
                 )
 
@@ -1929,10 +1929,10 @@ class GifLabRunner:
             self.logger.warning(f"Failed to save visual outputs for {original_gif_path.name}: {e}")
 
     def _extract_gif_frames(
-        self, 
-        gif_path: Path, 
-        gif_name: str, 
-        pipeline_info: str, 
+        self,
+        gif_path: Path,
+        gif_name: str,
+        pipeline_info: str,
         output_dir: Path
     ) -> None:
         """Extract individual frames from GIF for visual analysis with proper disposal handling.
@@ -1943,7 +1943,7 @@ class GifLabRunner:
         Args:
             gif_path: Path to the GIF file
             gif_name: Base name of the GIF (e.g., 'complex_animation')
-            pipeline_info: Pipeline identifier (e.g., 'original' or 'gifsicleframe-f0.5') 
+            pipeline_info: Pipeline identifier (e.g., 'original' or 'gifsicleframe-f0.5')
             output_dir: Directory where frame subdirectory should be created
         """
         if not self.extract_frames:
@@ -3009,14 +3009,66 @@ class GifLabRunner:
 
     def _cleanup_temp_synthetic_dir(self) -> None:
         """Clean up temporary synthetic GIFs directory after experiment completion."""
-        import shutil
         temp_synthetic_dir = self.output_dir / "temp_synthetic"
         if temp_synthetic_dir.exists():
             try:
-                shutil.rmtree(temp_synthetic_dir)
+                rmtree(temp_synthetic_dir)
                 self.logger.debug(f"Cleaned up temporary synthetic GIFs directory: {temp_synthetic_dir}")
             except Exception as e:
                 self.logger.warning(f"Failed to clean up temporary directory {temp_synthetic_dir}: {e}")
+
+    def _cleanup_failed_experiment(self) -> None:
+        """Clean up failed experiment directory that contains no meaningful results.
+        
+        This method removes experiment directories that failed early and contain
+        only temp_synthetic directories but no actual results (CSV files, analysis, etc.).
+        This prevents accumulation of empty experiment directories from failed runs.
+        """
+        if not self.output_dir:
+            return
+            
+        try:
+            # Check if this is a failed experiment (only temp_synthetic, no results)
+            has_results = False
+            has_only_temp = False
+            
+            # Look for meaningful result files
+            result_indicators = [
+                "*.csv", "*.json", "*.md", "**/frames/**/*.png", "**/original.gif", "**/compressed.gif"
+            ]
+            
+            for pattern in result_indicators:
+                if list(self.output_dir.glob(pattern)):
+                    has_results = True
+                    break
+            
+            # Check if only temp_synthetic exists
+            contents = list(self.output_dir.iterdir())
+            if len(contents) == 1 and contents[0].name == "temp_synthetic":
+                has_only_temp = True
+            elif len(contents) == 0:
+                has_only_temp = True  # Empty directory
+                
+            # Clean up if this appears to be a failed experiment
+            if not has_results and has_only_temp:
+                self.logger.info(f"Cleaning up failed experiment directory: {self.output_dir.name}")
+                rmtree(self.output_dir)
+                
+                # Also clean up the 'latest' symlink if it points to this directory
+                latest_link = self.output_dir.parent / "latest"
+                if latest_link.is_symlink():
+                    try:
+                        # Handle both relative and absolute symlink targets
+                        symlink_target = latest_link.readlink()
+                        target_name = symlink_target.name if hasattr(symlink_target, 'name') else str(symlink_target).split('/')[-1]
+                        if target_name == self.output_dir.name:
+                            latest_link.unlink()
+                            self.logger.debug("Removed 'latest' symlink pointing to failed experiment")
+                    except Exception:
+                        pass  # Ignore symlink cleanup errors
+                        
+        except Exception as e:
+            self.logger.warning(f"Failed to clean up failed experiment directory: {e}")
 
 
     def _generate_experiment_display_name(self) -> str:
