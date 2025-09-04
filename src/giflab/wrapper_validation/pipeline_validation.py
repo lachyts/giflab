@@ -14,6 +14,7 @@ from PIL import Image
 from ..meta import extract_gif_metadata
 from .core import WrapperOutputValidator
 from .types import ValidationResult
+from .timing_validation import TimingGridValidator, validate_frame_timing_for_operation
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ class PipelineStageValidator:
         """
         self.wrapper_validator = wrapper_validator or WrapperOutputValidator()
         
+        # Initialize timing validator for frame timing validation
+        self.timing_validator = TimingGridValidator(grid_ms=10)
+        
         # Pipeline-specific validation thresholds
         self.pipeline_thresholds = {
             # Allow slight variations between stages due to rounding/encoding
@@ -41,6 +45,7 @@ class PipelineStageValidator:
             "frame_count_tolerance": 1,         # Allow ±1 frame between stages
             "stage_fps_tolerance": 0.15,        # Allow 15% FPS variation between stages
             "png_sequence_frame_tolerance": 1,  # Allow ±1 frame in PNG sequences
+            "timing_validation_enabled": True,  # Enable timing validation for frame operations
         }
     
     def validate_pipeline_execution(
@@ -104,8 +109,10 @@ class PipelineStageValidator:
                 previous_stage_path = current_stage_path
                 try:
                     extract_gif_metadata(current_stage_path)
+                except (OSError, IOError) as e:
+                    logger.error(f"Cannot access stage output file {stage_name}: {e}")
                 except Exception as e:
-                    logger.warning(f"Could not extract metadata from stage {stage_name}: {e}")
+                    logger.error(f"Could not extract metadata from stage {stage_name}: {e}")
             
             # Final validation: compare input to final output
             final_validation = self.validate_pipeline_integrity(
@@ -182,6 +189,17 @@ class PipelineStageValidator:
                 )
                 validations.extend(frame_validation)
                 
+                # Add timing validation for frame reduction operations
+                if self.pipeline_thresholds.get("timing_validation_enabled", True):
+                    timing_validation = self.timing_validator.validate_timing_integrity(
+                        input_path, output_path
+                    )
+                    # Add operation context
+                    if timing_validation.details:
+                        timing_validation.details["pipeline_stage"] = "frame_reduction"
+                        timing_validation.details["stage_index"] = stage_index
+                    validations.append(timing_validation)
+                
             elif pipeline_step.variable == "color_reduction":
                 color_validation = self.validate_color_reduction_stage(
                     input_metadata, output_metadata, pipeline_params, stage_metadata
@@ -248,7 +266,8 @@ class PipelineStageValidator:
                 details={
                     "input_frames": input_frames,
                     "frame_difference": frame_diff,
-                    "tolerance": self.pipeline_thresholds["frame_count_tolerance"]
+                    "tolerance": self.pipeline_thresholds["frame_count_tolerance"],
+                    "timing_validation_recommended": True  # Flag for comprehensive analysis
                 }
             ))
         
@@ -594,13 +613,64 @@ class PipelineStageValidator:
                 }
             )
             
+        except (OSError, IOError) as e:
+            logger.error(f"PNG sequence directory access error: {e}")
+            return ValidationResult(
+                is_valid=False,
+                validation_type="png_sequence_access_error",
+                expected="accessible_png_sequence_directory",
+                actual="directory_access_failed",
+                error_message=f"Cannot access PNG sequence directory: {str(e)}",
+                details={"exception": str(e), "sequence_dir": str(png_sequence_dir), "error_type": "directory_access"}
+            )
         except Exception as e:
-            logger.error(f"PNG sequence validation error: {e}")
+            logger.exception(f"Unexpected PNG sequence validation error: {e}")
             return ValidationResult(
                 is_valid=False,
                 validation_type="png_sequence_validation_error",
                 expected="successful_png_validation",
                 actual="validation_exception",
-                error_message=f"PNG sequence validation failed: {str(e)}",
-                details={"exception": str(e), "sequence_dir": str(png_sequence_dir)}
+                error_message=f"PNG sequence validation failed with unexpected error: {str(e)}",
+                details={"exception": str(e), "sequence_dir": str(png_sequence_dir), "error_type": "unexpected"}
             )
+
+    def validate_timing_integrity_for_stage(
+        self,
+        input_path: Path,
+        output_path: Path,
+        stage_name: str,
+        stage_index: int = 0
+    ) -> ValidationResult:
+        """Validate timing integrity for a specific pipeline stage.
+        
+        Args:
+            input_path: Path to input GIF
+            output_path: Path to output GIF
+            stage_name: Name of the pipeline stage
+            stage_index: Index of the stage in pipeline
+            
+        Returns:
+            ValidationResult for timing validation
+        """
+        if not self.pipeline_thresholds.get("timing_validation_enabled", True):
+            return ValidationResult(
+                is_valid=True,
+                validation_type="timing_validation_disabled",
+                expected="timing_validation_disabled",
+                actual="timing_validation_disabled",
+                details={"stage_name": stage_name, "stage_index": stage_index}
+            )
+        
+        timing_result = self.timing_validator.validate_timing_integrity(
+            input_path, output_path
+        )
+        
+        # Add pipeline context to timing validation
+        if timing_result.details:
+            timing_result.details.update({
+                "pipeline_stage": stage_name,
+                "stage_index": stage_index,
+                "validation_context": "pipeline_stage_validation"
+            })
+        
+        return timing_result

@@ -300,6 +300,14 @@ class ValidationConfig:
     MIN_FPS: float = 0.1                  # Minimum valid FPS
     MAX_FPS: float = 60.0                 # Maximum reasonable FPS
     
+    # Advanced timing validation settings
+    TIMING_VALIDATION_ENABLED: bool = True       # Enable comprehensive timing validation
+    TIMING_VALIDATION_ALERT_ON_FAILURE: bool = True  # Alert when timing validation fails
+    TIMING_GRID_MS: int = 10                     # Timing grid size in milliseconds
+    TIMING_MAX_DRIFT_MS: int = 100               # Maximum acceptable timing drift
+    TIMING_DURATION_DIFF_THRESHOLD: int = 50     # Maximum total duration difference
+    TIMING_ALIGNMENT_ACCURACY_MIN: float = 0.9   # Minimum alignment accuracy (0.0-1.0)
+    
     # Performance and error handling
     VALIDATION_TIMEOUT_MS: int = 5000     # 5 second timeout per validation
     FAIL_ON_VALIDATION_ERROR: bool = False  # Don't break pipelines on validation errors
@@ -340,6 +348,16 @@ class ValidationConfig:
         # Validate timeout
         if self.VALIDATION_TIMEOUT_MS <= 0:
             raise ValueError(f"VALIDATION_TIMEOUT_MS must be positive, got {self.VALIDATION_TIMEOUT_MS}")
+        
+        # Validate timing validation settings
+        if self.TIMING_GRID_MS <= 0:
+            raise ValueError(f"TIMING_GRID_MS must be positive, got {self.TIMING_GRID_MS}")
+        if self.TIMING_MAX_DRIFT_MS < 0:
+            raise ValueError(f"TIMING_MAX_DRIFT_MS must be non-negative, got {self.TIMING_MAX_DRIFT_MS}")
+        if self.TIMING_DURATION_DIFF_THRESHOLD < 0:
+            raise ValueError(f"TIMING_DURATION_DIFF_THRESHOLD must be non-negative, got {self.TIMING_DURATION_DIFF_THRESHOLD}")
+        if self.TIMING_ALIGNMENT_ACCURACY_MIN < 0 or self.TIMING_ALIGNMENT_ACCURACY_MIN > 1:
+            raise ValueError(f"TIMING_ALIGNMENT_ACCURACY_MIN must be between 0 and 1, got {self.TIMING_ALIGNMENT_ACCURACY_MIN}")
 
 
 # Default configuration instances

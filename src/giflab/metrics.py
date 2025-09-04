@@ -1377,6 +1377,54 @@ def calculate_comprehensive_metrics(
             # Fallback to extracted frames count
             original_frame_count = len(original_frames)
             compressed_frame_count = len(compressed_frames)
+        
+        # Add timing validation metrics
+        timing_metrics = {}
+        try:
+            from .wrapper_validation.timing_validation import TimingGridValidator, extract_timing_metrics_for_csv
+            timing_validator = TimingGridValidator(grid_ms=10)
+            timing_result = timing_validator.validate_timing_integrity(original_path, compressed_path)
+            timing_metrics = extract_timing_metrics_for_csv(timing_result)
+            # Add success indicator
+            timing_metrics["timing_validation_status"] = "success"
+        except ImportError as e:
+            logger.error(f"Timing validation module not available: {e}")
+            # Provide failure-indicating timing metrics
+            timing_metrics = {
+                "timing_grid_ms": 10,
+                "grid_length": -1,  # -1 indicates failure
+                "duration_diff_ms": -1,
+                "timing_drift_score": -1.0,  # -1.0 indicates failure, not perfect score
+                "max_timing_drift_ms": -1,
+                "alignment_accuracy": -1.0,  # -1.0 indicates failure
+                "timing_validation_status": "import_failed",
+                "timing_validation_error": str(e)
+            }
+        except (ValueError, OSError) as e:
+            logger.error(f"Timing validation calculation failed: {e}")
+            timing_metrics = {
+                "timing_grid_ms": 10,
+                "grid_length": -1,
+                "duration_diff_ms": -1,
+                "timing_drift_score": -1.0,
+                "max_timing_drift_ms": -1,
+                "alignment_accuracy": -1.0,
+                "timing_validation_status": "calculation_failed",
+                "timing_validation_error": str(e)
+            }
+        except Exception as e:
+            # Log unexpected errors more severely and re-raise to avoid hiding bugs
+            logger.critical(f"Unexpected timing validation error: {e}")
+            timing_metrics = {
+                "timing_grid_ms": 10,
+                "grid_length": -1,
+                "duration_diff_ms": -1,
+                "timing_drift_score": -1.0,
+                "max_timing_drift_ms": -1,
+                "alignment_accuracy": -1.0,
+                "timing_validation_status": "unexpected_error",
+                "timing_validation_error": str(e)
+            }
 
         # Aggregate all metrics with descriptive statistics
         result = {}
@@ -1409,6 +1457,10 @@ def calculate_comprehensive_metrics(
         # Add frame count information
         result["frame_count"] = int(original_frame_count)
         result["compressed_frame_count"] = int(compressed_frame_count)
+        
+        # Add timing validation metrics
+        for key, value in timing_metrics.items():
+            result[key] = value
 
         # Calculate composite quality using enhanced metrics system
         from .enhanced_metrics import process_metrics_with_enhanced_quality
