@@ -3,9 +3,10 @@
 import logging
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import cv2
 import numpy as np
@@ -372,9 +373,9 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
 
 def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
     """Calculate temporal consistency (animation smoothness) of frames.
-    
+
     Temporal consistency measures how predictable/smooth the animation is,
-    NOT whether frames are identical. For animated content, consistent 
+    NOT whether frames are identical. For animated content, consistent
     frame-to-frame differences indicate good temporal consistency.
 
     Args:
@@ -401,94 +402,98 @@ def calculate_temporal_consistency(frames: list[np.ndarray]) -> float:
 
     # Key insight: Temporal consistency is about PREDICTABILITY, not minimal change
     # For animated GIFs, we want consistent patterns in frame differences
-    
+
     mean_diff = float(np.mean(frame_differences))
     variance_diff = float(np.var(frame_differences))
-    
+
     # Handle special cases
     if mean_diff == 0 and variance_diff == 0:
         return 1.0  # Static content = perfect consistency
-    
+
     if variance_diff == 0 and mean_diff > 0:
         return 1.0  # Perfectly uniform animation = perfect consistency
-    
+
     # For content with variation, measure consistency of the pattern
     # High variance in frame differences = inconsistent temporal behavior
     # Low variance = consistent temporal behavior (good)
-    
+
     # Normalize variance by the square of mean difference to get relative consistency
     if mean_diff > 0:
-        relative_variance = variance_diff / (mean_diff ** 2)
+        relative_variance = variance_diff / (mean_diff**2)
         # Use inverse exponential: lower relative variance = higher consistency
         consistency = np.exp(-relative_variance * 2.0)
     else:
         # Edge case: very small differences, use original method
-        normalized_variance = variance_diff / (255.0 ** 2)
+        normalized_variance = variance_diff / (255.0**2)
         normalized_mean = mean_diff / 255.0
         consistency = np.exp(-normalized_variance * 2.0 - normalized_mean * 0.5)
-    
+
     return float(max(0.0, min(1.0, consistency)))
 
 
-def detect_disposal_artifacts(frames: list[np.ndarray], frame_reduction_context: bool = False) -> float:
+def detect_disposal_artifacts(
+    frames: list[np.ndarray], frame_reduction_context: bool = False
+) -> float:
     """Detect disposal method artifacts including background corruption, transparency bleeding, and color shifts.
-    
+
     This function distinguishes between intended animation changes and actual disposal artifacts.
     Disposal artifacts manifest as:
     - Inconsistent/corrupted frame transitions
     - Background color corruption in areas that should be stable
     - Transparency corruption and overlay residue
     - Visual frame stacking and overlay artifacts that break animation patterns
-    
+
     Args:
         frames: List of consecutive frames
         frame_reduction_context: If True, adjusts detection for legitimate frame reduction
                                vs actual disposal method artifacts
-        
+
     Returns:
         Artifact score between 0.0 and 1.0 (0.0 = severe artifacts, 1.0 = clean)
     """
     if len(frames) < 2:
         return 1.0  # Need at least 2 frames to detect artifacts
-    
+
     # Check if this appears to be global animation (all pixels change uniformly)
     # vs partial animation (some areas stable, others changing)
     is_global_animation = _detect_global_animation_pattern(frames)
-    
+
     if is_global_animation:
         # For global animation (like solid color cycling), disposal artifacts are rare
         # Focus on pattern consistency rather than absolute differences
         return _detect_global_animation_artifacts(frames)
     else:
-        # For partial animation, use the original detailed detection
-        return _detect_partial_animation_artifacts(frames, frame_reduction_context)
+        # For partial animation, use enhanced detection with better background tracking
+        return _detect_partial_animation_artifacts_enhanced(
+            frames, frame_reduction_context
+        )
 
 
 def _detect_global_animation_pattern(frames: list[np.ndarray]) -> bool:
     """Detect if the animation involves global changes (entire frame changes) vs partial changes."""
     if len(frames) < 3:
         return False
-    
+
     # Sample a few frame transitions
     sample_transitions = min(3, len(frames) - 1)
     global_change_scores = []
-    
+
     for i in range(sample_transitions):
         frame1 = frames[i].astype(np.float32)
         frame2 = frames[i + 1].astype(np.float32)
-        
+
         # Calculate per-pixel differences
         pixel_diffs = np.mean(np.abs(frame1 - frame2), axis=2)
-        
+
         # If most pixels changed significantly, it's likely global animation
         changed_pixels = np.sum(pixel_diffs > 30.0)  # Threshold for significant change
         total_pixels = pixel_diffs.size
         change_ratio = changed_pixels / total_pixels
-        
+
         global_change_scores.append(change_ratio)
-    
+
     # If >70% of pixels change in most transitions, consider it global animation
-    avg_change_ratio = np.mean(global_change_scores)
+    avg_change_ratio = float(np.mean(global_change_scores))
     return avg_change_ratio > 0.7
 
 
@@ -496,7 +501,7 @@ def _detect_global_animation_artifacts(frames: list[np.ndarray]) -> float:
     """Detect artifacts in global animation by looking for pattern inconsistencies."""
     if len(frames) < 3:
         return 1.0
-    
+
     # For global animation, measure consistency of the animation pattern
     frame_diffs = []
     for i in range(len(frames) - 1):
@@ -504,64 +509,181 @@ def _detect_global_animation_artifacts(frames: list[np.ndarray]) -> float:
         frame2 = frames[i + 1].astype(np.float32)
         diff = np.mean(np.abs(frame1 - frame2))
         frame_diffs.append(diff)
-    
+
     # If animation has consistent differences, it's clean
     # If differences vary wildly, there might be artifacts
     if len(frame_diffs) > 1:
         variance = np.var(frame_diffs)
         mean_diff = np.mean(frame_diffs)
-        
+
         if mean_diff > 0:
             # Lower relative variance = more consistent pattern = fewer artifacts
-            relative_variance = variance / (mean_diff ** 2)
+            relative_variance = variance / (mean_diff**2)
             consistency_score = np.exp(-relative_variance * 0.5)  # Gentler penalty
             return float(max(0.0, min(1.0, consistency_score)))
-    
+
     return 1.0  # Default to clean for consistent patterns
 
 
-def _detect_partial_animation_artifacts(frames: list[np.ndarray], frame_reduction_context: bool) -> float:
+def _detect_partial_animation_artifacts(
+    frames: list[np.ndarray], frame_reduction_context: bool
+) -> float:
     """Detect artifacts in partial animation using the original detailed method."""
     # Extract first and last frames for comparison (most likely to show accumulation)
     first_frame = frames[0].astype(np.float32)
     last_frame = frames[-1].astype(np.float32)
-    
+
     # Ensure frames are the same size
     if first_frame.shape != last_frame.shape:
         last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))  # type: ignore[assignment]
-    
+
     scores = []
-    
+
     # 1. Background Color Stability Detection
     bg_stability = detect_background_color_stability(first_frame, last_frame)
-    scores.append(('background_stability', bg_stability, 0.25))
-    
+    scores.append(("background_stability", bg_stability, 0.25))
+
     # 2. Structural Integrity Detection (for geometric artifacts like duplicate lines)
     structural_score = detect_structural_artifacts(first_frame, last_frame)
-    scores.append(('structural', structural_score, 0.4))
-    
-    # 3. Transparency Corruption Detection  
+    scores.append(("structural", structural_score, 0.4))
+
+    # 3. Transparency Corruption Detection
     transparency_score = detect_transparency_corruption(frames)
-    scores.append(('transparency', transparency_score, 0.2))
-    
+    scores.append(("transparency", transparency_score, 0.2))
+
     # 4. Color Fidelity Measurement
     color_fidelity = detect_color_fidelity_corruption(first_frame, last_frame)
-    scores.append(('color_fidelity', color_fidelity, 0.1))
-    
+    scores.append(("color_fidelity", color_fidelity, 0.1))
+
     # 5. Visual Frame Overlay Detection (legacy density-based)
     overlay_score = detect_frame_overlay_artifacts(frames)
-    scores.append(('overlay', overlay_score, 0.05))
-    
+    scores.append(("overlay", overlay_score, 0.05))
+
     # Calculate weighted final score
     total_weight = sum(weight for _, _, weight in scores)
     final_score = sum(score * weight for _, score, weight in scores) / total_weight
-    
+
     return float(max(0.0, min(1.0, final_score)))
 
 
-def detect_background_color_stability(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+def _detect_partial_animation_artifacts_enhanced(
+    frames: list[np.ndarray], frame_reduction_context: bool
+) -> float:
+    """Enhanced detection of artifacts in partial animation with improved background tracking.
+
+    This enhanced version integrates temporal artifact detection from the temporal_artifacts
+    module to provide better background stability tracking and flicker detection.
+    """
+    from .temporal_artifacts import TemporalArtifactDetector
+
+    # Initialize temporal detector
+    detector = TemporalArtifactDetector()
+
+    # Extract first and last frames for comparison (most likely to show accumulation)
+    first_frame = frames[0].astype(np.float32)
+    last_frame = frames[-1].astype(np.float32)
+
+    # Ensure frames are the same size
+    if first_frame.shape != last_frame.shape:
+        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))  # type: ignore[assignment]
+
+    scores = []
+
+    # 1. Enhanced Background Stability Detection using temporal analysis
+    bg_stability = detect_background_color_stability_enhanced(frames, detector)
+    scores.append(("background_stability_enhanced", bg_stability, 0.3))
+
+    # 2. Flat Region Flicker Detection (new)
+    flat_flicker_metrics = detector.detect_flat_region_flicker(frames)
+    flat_flicker_score = max(0.0, 1.0 - flat_flicker_metrics["flat_flicker_ratio"])
+    scores.append(("flat_region_stability", flat_flicker_score, 0.25))
+
+    # 3. Structural Integrity Detection (existing method)
+    structural_score = detect_structural_artifacts(first_frame, last_frame)
+    scores.append(("structural", structural_score, 0.25))
+
+    # 4. Transparency Corruption Detection
+    transparency_score = detect_transparency_corruption(frames)
+    scores.append(("transparency", transparency_score, 0.1))
+
+    # 5. Color Fidelity Measurement
+    color_fidelity = detect_color_fidelity_corruption(first_frame, last_frame)
+    scores.append(("color_fidelity", color_fidelity, 0.05))
+
+    # 6. Visual Frame Overlay Detection (legacy density-based)
+    overlay_score = detect_frame_overlay_artifacts(frames)
+    scores.append(("overlay", overlay_score, 0.05))
+
+    # Calculate weighted final score
+    total_weight = sum(weight for _, _, weight in scores)
+    final_score = sum(score * weight for _, score, weight in scores) / total_weight
+
+    return float(max(0.0, min(1.0, final_score)))
+
+
+def detect_background_color_stability_enhanced(
+    frames: list[np.ndarray], detector: Any
+) -> float:
+    """Enhanced background color stability detection using temporal analysis.
+
+    This enhanced version uses region-based temporal tracking to better identify
+    background areas and detect corruption across all frames, not just first/last.
+    """
+    if len(frames) < 2:
+        return 1.0
+
+    # Identify stable background regions using the first frame
+    first_frame = frames[0]
+    flat_regions = detector.identify_flat_regions(first_frame, variance_threshold=8.0)
+
+    if not flat_regions:
+        # Fallback to original edge-based method
+        return detect_background_color_stability(first_frame, frames[-1])
+
+    # Track color stability in identified background regions across all frames
+    region_stabilities = []
+
+    for region in flat_regions:
+        x, y, w, h = region
+
+        # Extract region from all frames
+        region_colors = []
+        for frame in frames:
+            # Ensure bounds are within frame
+            actual_h, actual_w = frame.shape[:2]
+            x_end = min(x + w, actual_w)
+            y_end = min(y + h, actual_h)
+
+            if x < actual_w and y < actual_h:
+                patch = frame[y:y_end, x:x_end]
+                # Calculate mean color for this region
+                mean_color = np.mean(patch.reshape(-1, patch.shape[-1]), axis=0)
+                region_colors.append(mean_color)
+
+        if len(region_colors) >= 2:
+            # Calculate color stability across time
+            region_colors_array = np.array(region_colors)
+            color_variance = np.mean(np.var(region_colors_array, axis=0))
+
+            # Convert variance to stability score (lower variance = higher stability)
+            stability = max(
+                0.0, 1.0 - (color_variance / 100.0)
+            )  # 100 is empirical threshold
+            region_stabilities.append(stability)
+
+    if not region_stabilities:
+        # Fallback to original method
+        return detect_background_color_stability(first_frame, frames[-1])
+
+    # Return mean stability across all background regions
+    return float(np.mean(region_stabilities))
+
+
+def detect_background_color_stability(
+    first_frame: np.ndarray, last_frame: np.ndarray
+) -> float:
     """Detect background color corruption between first and last frames.
-    
+
     Background corruption manifests as color shifts (gray→pink) in areas that
     should remain stable throughout the animation.
     """
@@ -569,99 +691,107 @@ def detect_background_color_stability(first_frame: np.ndarray, last_frame: np.nd
     height, width = first_frame.shape[:2]
     edge_width = max(5, width // 20)
     edge_height = max(5, height // 20)
-    
+
     # Extract edge regions (top, bottom, left, right)
     edges_first = []
     edges_last = []
-    
+
     # Top and bottom edges
     edges_first.extend([first_frame[:edge_height, :], first_frame[-edge_height:, :]])
     edges_last.extend([last_frame[:edge_height, :], last_frame[-edge_height:, :]])
-    
-    # Left and right edges  
+
+    # Left and right edges
     edges_first.extend([first_frame[:, :edge_width], first_frame[:, -edge_width:]])
     edges_last.extend([last_frame[:, :edge_width], last_frame[:, -edge_width:]])
-    
+
     # Calculate color shift in edge regions
     total_shift = 0.0
-    for edge_first, edge_last in zip(edges_first, edges_last):
+    for edge_first, edge_last in zip(edges_first, edges_last, strict=False):
         if edge_first.shape != edge_last.shape:
             continue
-            
+
         # Calculate mean color difference in each edge region
         color_diff = np.mean(np.abs(edge_first - edge_last))
         total_shift += color_diff
-    
+
     # Normalize shift (higher shift = lower score)
     avg_shift = total_shift / len(edges_first)
     # Convert to 0-1 score where 0 = severe shift, 1 = no shift
     stability_score = max(0.0, 1.0 - (avg_shift / 50.0))  # 50 is empirical threshold
-    
+
     return stability_score
 
 
 def detect_transparency_corruption(frames: list[np.ndarray]) -> float:
     """Detect transparency and white bleeding artifacts.
-    
+
     Transparency corruption shows as unexpected white pixels or regions
     where transparency should be preserved.
     """
     if len(frames) < 2:
         return 1.0
-    
+
     corruption_scores = []
-    
+
     for i in range(1, len(frames)):
-        frame1 = frames[i-1].astype(np.float32)
+        frame1 = frames[i - 1].astype(np.float32)
         frame2 = frames[i].astype(np.float32)
-        
+
         if frame1.shape != frame2.shape:
             frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))  # type: ignore[assignment]
-        
+
         # Detect unexpected white/bright pixels (transparency bleeding)
         if len(frame1.shape) == 3:
             # Check for white bleeding in RGB
             white_threshold = 240
             bright_pixels_1 = np.sum(np.all(frame1 > white_threshold, axis=2))
             bright_pixels_2 = np.sum(np.all(frame2 > white_threshold, axis=2))
-            
+
             # Corruption = unexpected increase in bright pixels
             pixel_increase = max(0, bright_pixels_2 - bright_pixels_1)
             total_pixels = frame1.shape[0] * frame1.shape[1]
             corruption_ratio = pixel_increase / total_pixels
-            
-            corruption_scores.append(1.0 - min(1.0, corruption_ratio * 10))  # Scale factor
-    
+
+            corruption_scores.append(
+                1.0 - min(1.0, corruption_ratio * 10)
+            )  # Scale factor
+
     if not corruption_scores:
         return 1.0
-    
+
     return float(np.mean(corruption_scores))
 
 
-def detect_color_fidelity_corruption(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+def detect_color_fidelity_corruption(
+    first_frame: np.ndarray, last_frame: np.ndarray
+) -> float:
     """Detect color palette corruption and intensity shifts.
-    
+
     Color fidelity corruption shows as unexpected color changes in regions
     that should maintain consistent colors (red→magenta shifts).
     """
     if first_frame.shape != last_frame.shape:
-        last_frame = cv2.resize(last_frame, (first_frame.shape[1], first_frame.shape[0]))
-    
+        last_frame = cv2.resize(
+            last_frame, (first_frame.shape[1], first_frame.shape[0])
+        )
+
     if len(first_frame.shape) == 3:
         # Calculate per-channel color stability
         channel_stabilities = []
-        
+
         for channel in range(3):  # R, G, B
             first_channel = first_frame[:, :, channel]
             last_channel = last_frame[:, :, channel]
-            
+
             # Calculate mean absolute difference in this color channel
             channel_diff = np.mean(np.abs(first_channel - last_channel))
-            
+
             # Convert to stability score (lower diff = higher stability)
-            stability = max(0.0, 1.0 - (channel_diff / 100.0))  # 100 is empirical threshold
+            stability = max(
+                0.0, 1.0 - (channel_diff / 100.0)
+            )  # 100 is empirical threshold
             channel_stabilities.append(stability)
-        
+
         # Overall color fidelity is minimum channel stability (worst channel determines score)
         return float(min(channel_stabilities))
     else:
@@ -670,39 +800,51 @@ def detect_color_fidelity_corruption(first_frame: np.ndarray, last_frame: np.nda
         return float(max(0.0, 1.0 - (intensity_diff / 100.0)))
 
 
-def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray) -> float:
+def detect_structural_artifacts(
+    first_frame: np.ndarray, last_frame: np.ndarray
+) -> float:
     """Detect structural disposal artifacts like duplicate lines, edges, and geometric elements.
-    
+
     This method detects disposal artifacts that manifest as:
     - Duplicate axis lines in charts
     - Overlapping geometric elements
     - Edge duplication and structural inconsistencies
     - Line artifacts that don't affect overall color/density
-    
+
     Args:
         first_frame: First frame of the animation
         last_frame: Last frame of the animation (most likely to show accumulation)
-        
+
     Returns:
         Score between 0.0 and 1.0 (0.0 = severe structural artifacts, 1.0 = clean)
     """
     try:
         # Convert to grayscale for edge detection
-        gray_first = cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY) if len(first_frame.shape) == 3 else first_frame
-        gray_last = cv2.cvtColor(last_frame, cv2.COLOR_RGB2GRAY) if len(last_frame.shape) == 3 else last_frame
-        
+        gray_first = (
+            cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY)
+            if len(first_frame.shape) == 3
+            else first_frame
+        )
+        gray_last = (
+            cv2.cvtColor(last_frame, cv2.COLOR_RGB2GRAY)
+            if len(last_frame.shape) == 3
+            else last_frame
+        )
+
         # Ensure same dimensions
         if gray_first.shape != gray_last.shape:
-            gray_last = cv2.resize(gray_last, (gray_first.shape[1], gray_first.shape[0]))
-        
+            gray_last = cv2.resize(
+                gray_last, (gray_first.shape[1], gray_first.shape[0])
+            )
+
         # Edge detection using Canny - captures lines and structural elements
         edges_first = cv2.Canny(gray_first.astype(np.uint8), 50, 150)
         edges_last = cv2.Canny(gray_last.astype(np.uint8), 50, 150)
-        
+
         # Calculate edge pixel counts
         edge_count_first = np.sum(edges_first > 0)
         edge_count_last = np.sum(edges_last > 0)
-        
+
         # Detect structural duplication - significant edge increase suggests artifacts
         if edge_count_first == 0:
             # No edges in first frame - can't detect duplication
@@ -716,16 +858,16 @@ def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray)
                 edge_increase_score = max(0.0, 1.0 - ((edge_ratio - 1.2) * 1.5))  # type: ignore[assignment]
             else:
                 edge_increase_score = 1.0
-        
+
         # Detect edge pattern inconsistency using structural similarity
         if edge_count_first > 0 and edge_count_last > 0:
             # Calculate correlation between edge patterns
             edges_first_norm = edges_first.astype(np.float32) / 255.0
             edges_last_norm = edges_last.astype(np.float32) / 255.0
-            
+
             # Use SSIM on edge maps to detect structural corruption
             edge_ssim = ssim(edges_first_norm, edges_last_norm, data_range=1.0)
-            
+
             # Low SSIM between edge patterns indicates structural corruption
             # But account for legitimate animation changes
             if edge_ssim < 0.6:  # Significant structural change
@@ -734,12 +876,12 @@ def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray)
                 edge_pattern_score = 1.0
         else:
             edge_pattern_score = 1.0
-        
+
         # Combine edge increase and pattern consistency (equal weighting)
-        final_score = (edge_increase_score * 0.6 + edge_pattern_score * 0.4)
-        
+        final_score = edge_increase_score * 0.6 + edge_pattern_score * 0.4
+
         return float(max(0.0, min(1.0, final_score)))
-        
+
     except Exception as e:
         logger.warning(f"Structural artifact detection failed: {e}")
         return 1.0  # Assume clean on error
@@ -747,31 +889,35 @@ def detect_structural_artifacts(first_frame: np.ndarray, last_frame: np.ndarray)
 
 def detect_frame_overlay_artifacts(frames: list[np.ndarray]) -> float:
     """Detect visual frame overlay artifacts using density-based approach.
-    
+
     This is the legacy detection method for frame stacking artifacts.
     """
     if len(frames) < 3:
         return 1.0
-    
+
     # Calculate content density changes
     content_densities = []
     for frame in frames:
-        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) if len(frame.shape) == 3 else frame
+        gray = (
+            cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) if len(frame.shape) == 3 else frame
+        )
         non_bg_pixels = np.sum(gray > 25)
         total_pixels = gray.shape[0] * gray.shape[1]
         density = non_bg_pixels / total_pixels
         content_densities.append(density)
-    
+
     # Check for problematic density increases
     increases = 0
     for i in range(1, len(content_densities)):
-        if content_densities[i] > content_densities[i-1] * 1.15:  # 15% increase threshold
+        if (
+            content_densities[i] > content_densities[i - 1] * 1.15
+        ):  # 15% increase threshold
             increases += 1
-    
+
     # Score based on density increase pattern
     max_increases = len(frames) - 1
     score = 1.0 - (increases / max_increases) if max_increases > 0 else 1.0
-    
+
     return float(max(0.0, min(1.0, score)))
 
 
@@ -808,7 +954,9 @@ def calculate_file_size_kb(file_path: Path) -> float:
         raise OSError(f"Cannot access file {file_path}: {e}") from e
 
 
-def measure_render_time(func: Callable[..., Any], *args: Any, **kwargs: Any) -> tuple[Any, int]:
+def measure_render_time(
+    func: Callable[..., Any], *args: Any, **kwargs: Any
+) -> tuple[Any, int]:
     """Measure execution time of a function in milliseconds.
 
     Args:
@@ -1119,9 +1267,9 @@ def _aggregate_metric(values: list[float], metric_name: str) -> dict[str, float]
 
 
 def _calculate_positional_samples(
-    aligned_pairs: list[tuple[np.ndarray, np.ndarray]], 
-    metric_func: Any, 
-    metric_name: str
+    aligned_pairs: list[tuple[np.ndarray, np.ndarray]],
+    metric_func: Any,
+    metric_name: str,
 ) -> dict[str, float]:
     """Calculate metrics for first, middle, and last frames to understand positional effects.
 
@@ -1180,7 +1328,10 @@ def _calculate_positional_samples(
 
 
 def calculate_comprehensive_metrics(
-    original_path: Path, compressed_path: Path, config: MetricsConfig | None = None, frame_reduction_context: bool = False
+    original_path: Path,
+    compressed_path: Path,
+    config: MetricsConfig | None = None,
+    frame_reduction_context: bool = False,
 ) -> dict[str, float]:
     """Calculate comprehensive quality metrics between original and compressed GIFs.
 
@@ -1362,13 +1513,53 @@ def calculate_comprehensive_metrics(
         temporal_delta = abs(temporal_post - temporal_pre)
 
         # Calculate disposal artifact detection
-        disposal_artifacts_pre = detect_disposal_artifacts(original_frames, frame_reduction_context)
-        disposal_artifacts_post = detect_disposal_artifacts(compressed_frames, frame_reduction_context)
+        disposal_artifacts_pre = detect_disposal_artifacts(
+            original_frames, frame_reduction_context
+        )
+        disposal_artifacts_post = detect_disposal_artifacts(
+            compressed_frames, frame_reduction_context
+        )
         disposal_artifacts_delta = abs(disposal_artifacts_post - disposal_artifacts_pre)
-        
+
+        # Calculate enhanced temporal artifact metrics (Task 1.2)
+        enhanced_temporal_metrics = {}
+        try:
+            from .temporal_artifacts import calculate_enhanced_temporal_metrics
+
+            enhanced_temporal_metrics = calculate_enhanced_temporal_metrics(
+                original_frames, compressed_frames, device=None
+            )
+        except ImportError as e:
+            logger.warning(f"Enhanced temporal artifacts module not available: {e}")
+            enhanced_temporal_metrics = {
+                "flicker_excess": 0.0,
+                "flicker_frame_ratio": 0.0,
+                "flat_flicker_ratio": 0.0,
+                "flat_region_count": 0,
+                "temporal_pumping_score": 0.0,
+                "quality_oscillation_frequency": 0.0,
+                "lpips_t_mean": 0.0,
+                "lpips_t_p95": 0.0,
+                "frame_count": len(compressed_frames),
+            }
+        except Exception as e:
+            logger.error(f"Enhanced temporal artifacts calculation failed: {e}")
+            enhanced_temporal_metrics = {
+                "flicker_excess": 0.0,
+                "flicker_frame_ratio": 0.0,
+                "flat_flicker_ratio": 0.0,
+                "flat_region_count": 0,
+                "temporal_pumping_score": 0.0,
+                "quality_oscillation_frequency": 0.0,
+                "lpips_t_mean": 0.0,
+                "lpips_t_p95": 0.0,
+                "frame_count": len(compressed_frames),
+            }
+
         # Extract frame count information
         try:
             from .meta import extract_gif_metadata
+
             original_metadata = extract_gif_metadata(original_path)
             compressed_metadata = extract_gif_metadata(compressed_path)
             original_frame_count = original_metadata.orig_frames
@@ -1377,13 +1568,19 @@ def calculate_comprehensive_metrics(
             # Fallback to extracted frames count
             original_frame_count = len(original_frames)
             compressed_frame_count = len(compressed_frames)
-        
+
         # Add timing validation metrics
         timing_metrics = {}
         try:
-            from .wrapper_validation.timing_validation import TimingGridValidator, extract_timing_metrics_for_csv
-            timing_validator = TimingGridValidator(grid_ms=10)
-            timing_result = timing_validator.validate_timing_integrity(original_path, compressed_path)
+            from .wrapper_validation.timing_validation import (
+                TimingGridValidator,
+                extract_timing_metrics_for_csv,
+            )
+
+            timing_validator = TimingGridValidator()
+            timing_result = timing_validator.validate_timing_integrity(
+                original_path, compressed_path
+            )
             timing_metrics = extract_timing_metrics_for_csv(timing_result)
             # Add success indicator
             timing_metrics["timing_validation_status"] = "success"
@@ -1398,7 +1595,7 @@ def calculate_comprehensive_metrics(
                 "max_timing_drift_ms": -1,
                 "alignment_accuracy": -1.0,  # -1.0 indicates failure
                 "timing_validation_status": "import_failed",
-                "timing_validation_error": str(e)
+                "timing_validation_error": str(e),
             }
         except (ValueError, OSError) as e:
             logger.error(f"Timing validation calculation failed: {e}")
@@ -1410,7 +1607,7 @@ def calculate_comprehensive_metrics(
                 "max_timing_drift_ms": -1,
                 "alignment_accuracy": -1.0,
                 "timing_validation_status": "calculation_failed",
-                "timing_validation_error": str(e)
+                "timing_validation_error": str(e),
             }
         except Exception as e:
             # Log unexpected errors more severely and re-raise to avoid hiding bugs
@@ -1423,7 +1620,7 @@ def calculate_comprehensive_metrics(
                 "max_timing_drift_ms": -1,
                 "alignment_accuracy": -1.0,
                 "timing_validation_status": "unexpected_error",
-                "timing_validation_error": str(e)
+                "timing_validation_error": str(e),
             }
 
         # Aggregate all metrics with descriptive statistics
@@ -1444,7 +1641,7 @@ def calculate_comprehensive_metrics(
         result["temporal_consistency_pre"] = float(temporal_pre)
         result["temporal_consistency_post"] = float(temporal_post)
         result["temporal_consistency_delta"] = float(temporal_delta)
-        
+
         # Add disposal artifact metrics
         result["disposal_artifacts"] = float(disposal_artifacts_post)
         result["disposal_artifacts_std"] = 0.0
@@ -1453,11 +1650,19 @@ def calculate_comprehensive_metrics(
         result["disposal_artifacts_pre"] = float(disposal_artifacts_pre)
         result["disposal_artifacts_post"] = float(disposal_artifacts_post)
         result["disposal_artifacts_delta"] = float(disposal_artifacts_delta)
-        
+
+        # Add enhanced temporal artifact metrics (Task 1.2)
+        for metric_key, metric_value in enhanced_temporal_metrics.items():
+            result[metric_key] = (
+                float(metric_value)
+                if isinstance(metric_value, int | float)
+                else metric_value
+            )
+
         # Add frame count information
         result["frame_count"] = int(original_frame_count)
         result["compressed_frame_count"] = int(compressed_frame_count)
-        
+
         # Add timing validation metrics
         for key, value in timing_metrics.items():
             result[key] = value
@@ -1510,7 +1715,9 @@ def calculate_comprehensive_metrics(
                     if metric_name in metric_functions:
                         try:
                             positional_data = _calculate_positional_samples(
-                                aligned_pairs, metric_functions[metric_name], metric_name
+                                aligned_pairs,
+                                metric_functions[metric_name],
+                                metric_name,
                             )
                             result.update(positional_data)
                         except Exception as e:

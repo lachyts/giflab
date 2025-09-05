@@ -33,7 +33,7 @@ def normalize_metric(
         max_psnr_db = 50.0
         normalized = min(value, max_psnr_db) / max_psnr_db
         return max(0.0, min(1.0, normalized))
-        
+
     elif metric_name == "mse_mean":
         # MSE can be very large, use log normalization
         if value <= 0:
@@ -278,7 +278,6 @@ def process_metrics_with_enhanced_quality(
     # Calculate enhanced composite quality - now returns single value
     enhanced_composite = calculate_composite_quality(result, config)
     result["composite_quality"] = enhanced_composite
-    
 
     # Calculate efficiency metric if compression data is available
     if "compression_ratio" in result:

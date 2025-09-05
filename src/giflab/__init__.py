@@ -49,7 +49,9 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
     metrics_stub.structural_similarity = _ssim  # type: ignore[attr-defined]
 
     # Local Binary Pattern surrogate – returns zeros array to keep shape.
-    def _local_binary_pattern(image: Any, P: int = 8, R: int = 1, method: str = "default") -> Any:  # noqa: D401
+    def _local_binary_pattern(
+        image: Any, P: int = 8, R: int = 1, method: str = "default"
+    ) -> Any:  # noqa: D401
         """Very lightweight intensity-based pseudo-LBP.
 
         Encodes each pixel as a bucketed intensity (0-P) to preserve *some*

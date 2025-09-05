@@ -73,11 +73,17 @@ def check_gpu_availability(use_gpu: bool) -> str:
 
         cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
         if cuda_devices > 0:
-            return f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)"
+            return (
+                f"🚀 GPU acceleration: Enabled ({cuda_devices} CUDA device(s) available)"
+            )
         else:
-            return "🔄 GPU acceleration: Requested but no CUDA devices found - will use CPU"
+            return (
+                "🔄 GPU acceleration: Requested but no CUDA devices found - will use CPU"
+            )
     except ImportError:
-        return "🔄 GPU acceleration: Requested but OpenCV CUDA not available - will use CPU"
+        return (
+            "🔄 GPU acceleration: Requested but OpenCV CUDA not available - will use CPU"
+        )
     except Exception:
         return "🔄 GPU acceleration: Requested but initialization failed - will use CPU"
 

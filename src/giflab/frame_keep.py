@@ -154,10 +154,10 @@ def build_gifsicle_timing_args(
         Returns: ['--delay', '20', '--loopcount', '0']
     """
     timing_args = []
-    
+
     # Calculate adjusted delays for remaining frames
     adjusted_delays = calculate_adjusted_delays(original_delays, frame_indices)
-    
+
     # Use uniform delay based on average of adjusted delays (simpler approach)
     if adjusted_delays:
         avg_delay = sum(adjusted_delays) / len(adjusted_delays)
@@ -165,14 +165,14 @@ def build_gifsicle_timing_args(
         # Gifsicle uses centiseconds (1/100 second), minimum 2 (20ms)
         delay_cs = max(2, int(avg_delay // 10))
         timing_args.extend(["--delay", str(delay_cs)])
-    
+
     # Add loop count preservation
     if loop_count is not None:
         timing_args.extend([f"--loopcount={loop_count}"])
     else:
         # Default to infinite loop if not specified
         timing_args.extend(["--loopcount=0"])
-    
+
     return timing_args
 
 
@@ -243,7 +243,8 @@ def validate_frame_keep_ratio(keep_ratio: float) -> None:
     # Allow small floating point differences
     tolerance = 1e-6
     is_valid = any(
-        abs(keep_ratio - valid_ratio) < tolerance for valid_ratio in (valid_ratios or [])
+        abs(keep_ratio - valid_ratio) < tolerance
+        for valid_ratio in (valid_ratios or [])
     )
 
     if not is_valid:
@@ -357,11 +358,11 @@ def extract_gif_timing_info(input_path: Path) -> dict[str, Any]:
 
             # Extract loop count (0 = infinite, None = not set)
             loop_count = img.info.get("loop", None)
-            
+
             # Count frames and extract delays
             frame_delays = []
             frame_count = 0
-            
+
             try:
                 # Use PIL's built-in frame counting if available
                 if hasattr(img, "n_frames"):
@@ -378,21 +379,25 @@ def extract_gif_timing_info(input_path: Path) -> dict[str, Any]:
                             break
                         except Exception:
                             break
-                        
+
                         # Safety limit to prevent infinite loops
                         if current_frame > 10000:
-                            raise ValueError(f"GIF appears to have excessive frames (>{current_frame})")
+                            raise ValueError(
+                                f"GIF appears to have excessive frames (>{current_frame})"
+                            )
 
                 # Extract delays for each frame
                 for i in range(frame_count):
                     try:
                         img.seek(i)
-                        duration = img.info.get("duration", 100)  # Default 100ms if not specified
+                        duration = img.info.get(
+                            "duration", 100
+                        )  # Default 100ms if not specified
                         # GIF standard minimum is 10ms, but browsers often enforce 20ms
                         frame_delays.append(max(20, duration))
                     except (EOFError, Exception):
                         frame_delays.append(100)  # Fallback delay
-                        
+
             except EOFError:
                 pass  # Normal end of frames
             except Exception as e:
@@ -406,7 +411,9 @@ def extract_gif_timing_info(input_path: Path) -> dict[str, Any]:
                 frame_delays = [100] * frame_count
 
             # Calculate average delay
-            average_delay = sum(frame_delays) / len(frame_delays) if frame_delays else 100
+            average_delay = (
+                sum(frame_delays) / len(frame_delays) if frame_delays else 100
+            )
 
             return {
                 "frame_delays": frame_delays,
@@ -419,12 +426,16 @@ def extract_gif_timing_info(input_path: Path) -> dict[str, Any]:
         # Re-raise ValueError as-is (e.g., "File is not a GIF")
         raise
     except Exception as e:
-        raise OSError(f"Error reading GIF timing info from {input_path}: {str(e)}") from e
+        raise OSError(
+            f"Error reading GIF timing info from {input_path}: {str(e)}"
+        ) from e
 
 
-def calculate_adjusted_delays(original_delays: list[int], frame_indices: list[int]) -> list[int]:
+def calculate_adjusted_delays(
+    original_delays: list[int], frame_indices: list[int]
+) -> list[int]:
     """Calculate adjusted frame delays when frames are removed.
-    
+
     When frames are removed, the timing of remaining frames needs to be adjusted
     to maintain the original animation speed. This function calculates the new
     delays for the kept frames.
@@ -449,7 +460,7 @@ def calculate_adjusted_delays(original_delays: list[int], frame_indices: list[in
         return [sum(original_delays)]  # Single frame gets total duration
 
     adjusted_delays = []
-    
+
     for i, frame_idx in enumerate(frame_indices):
         if i == len(frame_indices) - 1:
             # Last frame: include all remaining delays from current frame to end
@@ -460,7 +471,7 @@ def calculate_adjusted_delays(original_delays: list[int], frame_indices: list[in
             next_frame_idx = frame_indices[i + 1]
             frame_range_delays = original_delays[frame_idx:next_frame_idx]
             adjusted_delay = sum(frame_range_delays)
-        
+
         # Ensure minimum delay (GIF standard minimum with browser compatibility)
         adjusted_delay = max(20, adjusted_delay)
         adjusted_delays.append(adjusted_delay)

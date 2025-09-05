@@ -79,15 +79,15 @@ class TestAdditionalMetrics:
         frame2 = np.zeros((64, 64, 3), dtype=np.uint8)
 
         # Fill with similar colors
-        frame1[:32, :32] = [255, 0, 0]    # Red quadrant
-        frame1[:32, 32:] = [0, 255, 0]    # Green quadrant
-        frame1[32:, :32] = [0, 0, 255]    # Blue quadrant
+        frame1[:32, :32] = [255, 0, 0]  # Red quadrant
+        frame1[:32, 32:] = [0, 255, 0]  # Green quadrant
+        frame1[32:, :32] = [0, 0, 255]  # Blue quadrant
         frame1[32:, 32:] = [255, 255, 0]  # Yellow quadrant
 
         # Slightly different colors
-        frame2[:32, :32] = [250, 5, 5]    # Slightly different red
-        frame2[:32, 32:] = [5, 250, 5]    # Slightly different green
-        frame2[32:, :32] = [5, 5, 250]    # Slightly different blue
+        frame2[:32, :32] = [250, 5, 5]  # Slightly different red
+        frame2[:32, 32:] = [5, 250, 5]  # Slightly different green
+        frame2[32:, :32] = [5, 5, 250]  # Slightly different blue
         frame2[32:, 32:] = [250, 250, 5]  # Slightly different yellow
 
         return frame1, frame2
@@ -98,8 +98,8 @@ class TestAdditionalMetrics:
         frame2 = np.zeros((64, 64, 3), dtype=np.uint8)
 
         # Completely different color patterns
-        frame1[:] = [255, 0, 0]    # All red
-        frame2[:] = [0, 0, 255]    # All blue
+        frame1[:] = [255, 0, 0]  # All red
+        frame2[:] = [0, 0, 255]  # All blue
 
         return frame1, frame2
 
@@ -138,7 +138,7 @@ class TestAdditionalMetrics:
         for i in range(0, 64, square_size):
             for j in range(0, 64, square_size):
                 if ((i // square_size) + (j // square_size)) % 2 == 0:
-                    frame1[i:i+square_size, j:j+square_size] = 255
+                    frame1[i : i + square_size, j : j + square_size] = 255
 
         # Create similar but slightly different checkerboard (smaller squares)
         frame2 = np.zeros((64, 64, 3), dtype=np.uint8)
@@ -146,7 +146,7 @@ class TestAdditionalMetrics:
         for i in range(0, 64, square_size):
             for j in range(0, 64, square_size):
                 if ((i // square_size) + (j // square_size)) % 2 == 0:
-                    frame2[i:i+square_size, j:j+square_size] = 255
+                    frame2[i : i + square_size, j : j + square_size] = 255
 
         return frame1, frame2
 
@@ -158,7 +158,7 @@ class TestAdditionalMetrics:
         for i in range(0, 64, square_size):
             for j in range(0, 64, square_size):
                 if ((i // square_size) + (j // square_size)) % 2 == 0:
-                    frame1[i:i+square_size, j:j+square_size] = 255
+                    frame1[i : i + square_size, j : j + square_size] = 255
 
         # Smooth gradient (very different texture)
         frame2 = np.zeros((64, 64, 3), dtype=np.uint8)
@@ -257,8 +257,8 @@ class TestAdditionalMetrics:
         # because noise has more "features". The key test is identical > different.
         assert identical_fsim >= different_fsim
         assert identical_fsim > 0.95  # Should be very high for identical
-        assert similar_fsim > 0.0     # Should be positive
-        assert different_fsim > 0.0   # Should be positive
+        assert similar_fsim > 0.0  # Should be positive
+        assert different_fsim > 0.0  # Should be positive
 
     def test_gmsd_comprehensive(self):
         """Test GMSD with gradient patterns."""
@@ -275,8 +275,8 @@ class TestAdditionalMetrics:
         gmsd(diff_grad1, diff_grad2)
 
         assert identical_gmsd <= similar_gmsd
-        assert identical_gmsd < 0.1   # Should be very low for identical
-        assert similar_gmsd > 0.0     # Should be positive for different frames
+        assert identical_gmsd < 0.1  # Should be very low for identical
+        assert similar_gmsd > 0.0  # Should be positive for different frames
 
     # ------------------------------------------------------------------
     # Color-based metrics
@@ -297,7 +297,7 @@ class TestAdditionalMetrics:
 
         assert identical_chist >= similar_chist >= different_chist
         assert identical_chist > 0.95  # Should be very high for identical
-        assert different_chist < 0.8   # Should be lower for different colors
+        assert different_chist < 0.8  # Should be lower for different colors
 
     # ------------------------------------------------------------------
     # Edge-based metrics
@@ -319,7 +319,7 @@ class TestAdditionalMetrics:
         assert identical_edge >= similar_edge
         assert identical_edge > 0.95  # Should be very high for identical
         # Note: Similar edges may have 0 similarity if they don't overlap
-        assert similar_edge >= 0.0    # Should be non-negative
+        assert similar_edge >= 0.0  # Should be non-negative
         assert different_edge >= 0.0  # Should be non-negative
 
     # ------------------------------------------------------------------
@@ -341,8 +341,10 @@ class TestAdditionalMetrics:
 
         assert identical_texture >= similar_texture >= different_texture
         assert identical_texture > 0.95  # Should be very high for identical
-        assert similar_texture > 0.95    # Checkerboards are quite similar
-        assert different_texture < 0.7   # Checkerboard vs gradient should be clearly different
+        assert similar_texture > 0.95  # Checkerboards are quite similar
+        assert (
+            different_texture < 0.7
+        )  # Checkerboard vs gradient should be clearly different
 
     # ------------------------------------------------------------------
     # Sharpness-based metrics
@@ -363,7 +365,7 @@ class TestAdditionalMetrics:
 
         assert identical_sharp >= similar_sharp >= different_sharp
         assert identical_sharp > 0.95  # Should be very high for identical
-        assert different_sharp < 0.9   # Should be lower for different sharpness
+        assert different_sharp < 0.9  # Should be lower for different sharpness
 
     # ------------------------------------------------------------------
     # Comprehensive ordering test
@@ -377,21 +379,21 @@ class TestAdditionalMetrics:
 
         # Test each metric maintains proper ordering
         metrics_higher_better = [
-            ('chist', chist),
+            ("chist", chist),
         ]
 
         # More lenient test for metrics that may not always maintain strict ordering
         metrics_higher_better_lenient = [
-            ('fsim', fsim),
-            ('edge_similarity', edge_similarity),
-            ('texture_similarity', texture_similarity),
-            ('sharpness_similarity', sharpness_similarity),
+            ("fsim", fsim),
+            ("edge_similarity", edge_similarity),
+            ("texture_similarity", texture_similarity),
+            ("sharpness_similarity", sharpness_similarity),
         ]
 
         metrics_lower_better = [
-            ('mse', mse),
-            ('rmse', rmse),
-            ('gmsd', gmsd),
+            ("mse", mse),
+            ("rmse", rmse),
+            ("gmsd", gmsd),
         ]
 
         # Strict higher-is-better metrics
@@ -400,8 +402,12 @@ class TestAdditionalMetrics:
             similar_score = metric_func(*similar)
             different_score = metric_func(*different)
 
-            assert identical_score >= similar_score, f"{name}: identical ({identical_score:.3f}) should be >= similar ({similar_score:.3f})"
-            assert similar_score >= different_score, f"{name}: similar ({similar_score:.3f}) should be >= different ({different_score:.3f})"
+            assert (
+                identical_score >= similar_score
+            ), f"{name}: identical ({identical_score:.3f}) should be >= similar ({similar_score:.3f})"
+            assert (
+                similar_score >= different_score
+            ), f"{name}: similar ({similar_score:.3f}) should be >= different ({different_score:.3f})"
 
         # Lenient higher-is-better metrics (just check identical >= different)
         for name, metric_func in metrics_higher_better_lenient:
@@ -409,7 +415,9 @@ class TestAdditionalMetrics:
             similar_score = metric_func(*similar)
             different_score = metric_func(*different)
 
-            assert identical_score >= different_score, f"{name}: identical ({identical_score:.3f}) should be >= different ({different_score:.3f})"
+            assert (
+                identical_score >= different_score
+            ), f"{name}: identical ({identical_score:.3f}) should be >= different ({different_score:.3f})"
             # Note: We don't enforce similar >= different for these metrics
             # because they may behave non-monotonically with certain content types
 
@@ -419,5 +427,9 @@ class TestAdditionalMetrics:
             similar_score = metric_func(*similar)
             different_score = metric_func(*different)
 
-            assert identical_score <= similar_score, f"{name}: identical ({identical_score:.3f}) should be <= similar ({similar_score:.3f})"
-            assert similar_score <= different_score, f"{name}: similar ({similar_score:.3f}) should be <= different ({different_score:.3f})"
+            assert (
+                identical_score <= similar_score
+            ), f"{name}: identical ({identical_score:.3f}) should be <= similar ({similar_score:.3f})"
+            assert (
+                similar_score <= different_score
+            ), f"{name}: similar ({similar_score:.3f}) should be <= different ({different_score:.3f})"

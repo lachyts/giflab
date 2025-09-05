@@ -293,15 +293,15 @@ TARGETED_PRESETS = {
     # Wrapper Validation Presets: Test individual tool wrappers in isolation
     #
     # Pattern for creating wrapper validation presets for any tool:
-    # 1. Set all three slots (frame, color, lossy) as "variable" 
+    # 1. Set all three slots (frame, color, lossy) as "variable"
     # 2. Each slot scope includes both the tool-specific implementation and the "none-" equivalent
-    #    - frame_slot: ["<tool>-frame", "none-frame"] 
+    #    - frame_slot: ["<tool>-frame", "none-frame"]
     #    - color_slot: ["<tool>-color", "none-color"]
     #    - lossy_slot: ["<tool>-lossy", "none-lossy"]
     # 3. Use factorial sampling to generate all 8 combinations (2³ = 8 pipelines):
     #    - Full tool pipeline: tool-frame → tool-color → tool-lossy
     #    - Frame + Color only: tool-frame → tool-color → none-lossy
-    #    - Frame + Lossy only: tool-frame → none-color → tool-lossy  
+    #    - Frame + Lossy only: tool-frame → none-color → tool-lossy
     #    - Frame only: tool-frame → none-color → none-lossy
     #    - Color + Lossy only: none-frame → tool-color → tool-lossy
     #    - Color only: none-frame → tool-color → none-lossy
@@ -313,7 +313,7 @@ TARGETED_PRESETS = {
     #
     # Future tool validation presets:
     # - "ffmpeg-wrapper-validation"
-    # - "imagemagick-wrapper-validation" 
+    # - "imagemagick-wrapper-validation"
     # - "animately-wrapper-validation"
     "gifsicle-frame-validation": ExperimentPreset(
         name="GIFsicle Frame Wrapper Validation",
@@ -354,7 +354,7 @@ TARGETED_PRESETS = {
         author="GifLab Research Team",
     ),
     "gifsicle-lossy-validation": ExperimentPreset(
-        name="GIFsicle Lossy Wrapper Validation", 
+        name="GIFsicle Lossy Wrapper Validation",
         description="Test gifsicle-lossy wrapper in pure isolation",
         frame_slot=SlotConfiguration(
             type="locked", implementation="none-frame", parameters={"ratio": 1.0}

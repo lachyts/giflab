@@ -36,6 +36,8 @@ from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
 from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
 from .external_engines.ffmpeg_enhanced import (
     FFmpegDitheringMethod,
+)
+from .external_engines.ffmpeg_enhanced import (
     color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering,
 )
 from .external_engines.gifski import lossy_compress as gifski_lossy_compress
@@ -105,9 +107,11 @@ class GifsicleColorReducer(ColorReductionTool):
             frame_keep_ratio=1.0,
             color_keep_count=colors,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -145,9 +149,11 @@ class GifsicleFrameReducer(FrameReductionTool):
             frame_keep_ratio=ratio,
             color_keep_count=None,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -185,9 +191,11 @@ class GifsicleLossyCompressor(LossyCompressionTool):
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -304,9 +312,11 @@ class AnimatelyColorReducer(ColorReductionTool):
             frame_keep_ratio=1.0,
             color_keep_count=colors,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -344,9 +354,11 @@ class AnimatelyFrameReducer(FrameReductionTool):
             frame_keep_ratio=ratio,
             color_keep_count=None,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -384,9 +396,11 @@ class AnimatelyLossyCompressor(LossyCompressionTool):
             frame_keep_ratio=1.0,
             color_keep_count=None,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
     def combines_with(self, other: ExternalTool) -> bool:
         return getattr(other, "COMBINE_GROUP", None) == self.COMBINE_GROUP
@@ -490,9 +504,11 @@ class ImageMagickColorReducer(ColorReductionTool):
             colors=colors,
             dithering_method=dithering_method,
         )
-        
+
         # Add validation
-        return validate_wrapper_apply_result(self, input_path, output_path, params, result)
+        return validate_wrapper_apply_result(
+            self, input_path, output_path, params, result
+        )
 
 
 class ImageMagickFrameReducer(FrameReductionTool):
@@ -554,10 +570,12 @@ class ImageMagickLossyCompressor(LossyCompressionTool):
             output_path,
             quality=quality,
         )
-        
+
         # Add validation
         if result is not None:
-            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+            return validate_wrapper_apply_result(
+                self, input_path, output_path, params or {}, result
+            )
         else:
             return {"error": "ImageMagick compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 
@@ -605,10 +623,12 @@ class FFmpegColorReducer(ColorReductionTool):
             dithering_method=cast(FFmpegDitheringMethod, dithering_method),
             fps=fps,
         )
-        
+
         # Add validation
         if result is not None:
-            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+            return validate_wrapper_apply_result(
+                self, input_path, output_path, params or {}, result
+            )
         else:
             return {"error": "FFmpeg color reduction failed - no result returned", "success": False}  # type: ignore[unreachable]
 
@@ -693,10 +713,12 @@ class FFmpegLossyCompressor(LossyCompressionTool):
             output_path,
             q_scale=q_scale,
         )
-        
+
         # Add validation
         if result is not None:
-            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+            return validate_wrapper_apply_result(
+                self, input_path, output_path, params or {}, result
+            )
         else:
             return {"error": "FFmpeg lossy compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 
@@ -1176,10 +1198,12 @@ class GifskiLossyCompressor(LossyCompressionTool):
             quality=quality,
             png_sequence_dir=png_sequence_dir,
         )
-        
+
         # Add validation
         if result is not None:
-            return validate_wrapper_apply_result(self, input_path, output_path, params or {}, result)
+            return validate_wrapper_apply_result(
+                self, input_path, output_path, params or {}, result
+            )
         else:
             return {"error": "Gifski compression failed - no result returned", "success": False}  # type: ignore[unreachable]
 

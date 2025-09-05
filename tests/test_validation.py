@@ -82,7 +82,7 @@ class TestValidateRawDir:
         test_dir.mkdir()
 
         # Mock os.access to return False for read permission
-        with patch('os.access', return_value=False):
+        with patch("os.access", return_value=False):
             with pytest.raises(ValidationError, match="RAW_DIR is not readable"):
                 validate_raw_dir(test_dir)
 
@@ -118,7 +118,9 @@ class TestValidatePathSecurity:
         ]
 
         for dangerous_path in dangerous_paths:
-            with pytest.raises(ValidationError, match="potentially dangerous characters"):
+            with pytest.raises(
+                ValidationError, match="potentially dangerous characters"
+            ):
                 validate_path_security(dangerous_path)
 
     @pytest.mark.fast
@@ -180,7 +182,7 @@ class TestValidateOutputPath:
         output_path = tmp_path / "output.csv"
 
         # Mock os.access to return False for write permission
-        with patch('os.access', return_value=False):
+        with patch("os.access", return_value=False):
             with pytest.raises(ValidationError, match="not writable"):
                 validate_output_path(output_path)
 
@@ -196,7 +198,7 @@ class TestValidateOutputPath:
                 return False  # File is not writable
             return True  # Parent is writable
 
-        with patch('os.access', side_effect=mock_access):
+        with patch("os.access", side_effect=mock_access):
             with pytest.raises(ValidationError, match="Output file is not writable"):
                 validate_output_path(output_path)
 
@@ -220,7 +222,7 @@ class TestValidateWorkerCount:
         with pytest.raises(ValidationError, match="cannot be negative"):
             validate_worker_count(-1)
 
-    @patch('multiprocessing.cpu_count', return_value=4)
+    @patch("multiprocessing.cpu_count", return_value=4)
     def test_validate_worker_count_too_high(self, mock_cpu_count):
         """Test validation with excessively high worker count."""
         with pytest.raises(ValidationError, match="Worker count too high"):
@@ -309,7 +311,7 @@ class TestSanitizeFilename:
 
     def test_sanitize_filename_invalid_chars(self):
         """Test sanitization with invalid characters."""
-        result = sanitize_filename("file<>:\"|?*name.txt")
+        result = sanitize_filename('file<>:"|?*name.txt')
         assert result == "file_______name.txt"
 
     def test_sanitize_filename_custom_replacement(self):

@@ -30,7 +30,7 @@ def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None
     images = []
     for i in range(frames):
         # Create a simple colored square that changes color
-        img = Image.new('RGB', size, color=(i * 50 % 255, 100, 150))
+        img = Image.new("RGB", size, color=(i * 50 % 255, 100, 150))
         draw = ImageDraw.Draw(img)
         # Add a simple shape that moves
         draw.rectangle([i * 5, i * 5, i * 5 + 10, i * 5 + 10], fill=(255, 255, 255))
@@ -42,7 +42,7 @@ def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None
         save_all=True,
         append_images=images[1:],
         duration=200,  # 200ms per frame
-        loop=0
+        loop=0,
     )
 
 
@@ -58,13 +58,12 @@ class TestEngineAvailability:
 
         try:
             result = subprocess.run(
-                [gifsicle_path, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=9
+                [gifsicle_path, "--version"], capture_output=True, text=True, timeout=9
             )
             assert result.returncode == 0, f"gifsicle not working: {result.stderr}"
-            assert "gifsicle" in result.stdout.lower(), f"Unexpected version output: {result.stdout}"
+            assert (
+                "gifsicle" in result.stdout.lower()
+            ), f"Unexpected version output: {result.stdout}"
         except FileNotFoundError:
             pytest.skip(f"gifsicle not found at {gifsicle_path}")
         except subprocess.TimeoutExpired:
@@ -79,13 +78,12 @@ class TestEngineAvailability:
 
         try:
             result = subprocess.run(
-                [animately_path, "--help"],
-                capture_output=True,
-                text=True,
-                timeout=9
+                [animately_path, "--help"], capture_output=True, text=True, timeout=9
             )
             # Animately might return non-zero for --help, so check output instead
-            assert "--input" in result.stdout or "--input" in result.stderr, f"Unexpected help output: {result.stdout}"
+            assert (
+                "--input" in result.stdout or "--input" in result.stderr
+            ), f"Unexpected help output: {result.stdout}"
         except FileNotFoundError:
             pytest.skip(f"Animately not found at {animately_path}")
         except subprocess.TimeoutExpired:
@@ -129,8 +127,14 @@ class TestGifsicleIntegration:
 
         # Check if gifsicle is available
         try:
-            subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            subprocess.run(
+                [gifsicle_path, "--version"], capture_output=True, check=True, timeout=5
+            )
+        except (
+            FileNotFoundError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ):
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
 
         # Test compression
@@ -152,8 +156,14 @@ class TestGifsicleIntegration:
 
         # Check if gifsicle is available
         try:
-            subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            subprocess.run(
+                [gifsicle_path, "--version"], capture_output=True, check=True, timeout=5
+            )
+        except (
+            FileNotFoundError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ):
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
 
         # Test compression
@@ -247,7 +257,12 @@ class TestEngineComparison:
         # Double-check gifsicle with version command
         if gifsicle_available:
             try:
-                subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
+                subprocess.run(
+                    [gifsicle_path, "--version"],
+                    capture_output=True,
+                    check=True,
+                    timeout=5,
+                )
             except Exception:
                 gifsicle_available = False
 
@@ -261,7 +276,9 @@ class TestEngineComparison:
             if gifsicle_available:
                 gifsicle_output = Path(temp_dir) / "gifsicle_output.gif"
                 try:
-                    results["gifsicle"] = compress_with_gifsicle(test_gif, gifsicle_output, lossy_level=0)
+                    results["gifsicle"] = compress_with_gifsicle(
+                        test_gif, gifsicle_output, lossy_level=0
+                    )
                     results["gifsicle"]["output_size"] = gifsicle_output.stat().st_size
                 except Exception as e:
                     results["gifsicle"] = {"error": str(e)}
@@ -270,8 +287,12 @@ class TestEngineComparison:
             if animately_available:
                 animately_output = Path(temp_dir) / "animately_output.gif"
                 try:
-                    results["animately"] = compress_with_animately(test_gif, animately_output, lossy_level=0)
-                    results["animately"]["output_size"] = animately_output.stat().st_size
+                    results["animately"] = compress_with_animately(
+                        test_gif, animately_output, lossy_level=0
+                    )
+                    results["animately"][
+                        "output_size"
+                    ] = animately_output.stat().st_size
                 except Exception as e:
                     results["animately"] = {"error": str(e)}
 
@@ -281,7 +302,9 @@ class TestEngineComparison:
             if "error" in result:
                 print(f"{engine}: ERROR - {result['error']}")
             else:
-                print(f"{engine}: {result['render_ms']}ms, {result['output_size']} bytes")
+                print(
+                    f"{engine}: {result['render_ms']}ms, {result['output_size']} bytes"
+                )
 
         # At least one should succeed
         successful_engines = [k for k, v in results.items() if "error" not in v]
@@ -304,7 +327,9 @@ class TestHighLevelAPI:
         gifsicle_path = DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH
 
         try:
-            subprocess.run([gifsicle_path, "--version"], capture_output=True, check=True, timeout=5)
+            subprocess.run(
+                [gifsicle_path, "--version"], capture_output=True, check=True, timeout=5
+            )
         except Exception:
             pytest.skip(f"gifsicle not available at {gifsicle_path}")
 
@@ -316,7 +341,7 @@ class TestHighLevelAPI:
                 output_path,
                 lossy_level=0,
                 frame_keep_ratio=1.0,
-                engine=LossyEngine.GIFSICLE
+                engine=LossyEngine.GIFSICLE,
             )
 
             assert output_path.exists()
@@ -337,7 +362,7 @@ class TestHighLevelAPI:
                 output_path,
                 lossy_level=0,
                 frame_keep_ratio=1.0,
-                engine=LossyEngine.ANIMATELY
+                engine=LossyEngine.ANIMATELY,
             )
 
             assert output_path.exists()

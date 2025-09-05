@@ -22,12 +22,13 @@ import numpy as np
 from PIL import Image
 
 try:
-    import torch
     import open_clip
+    import torch
+
     CLIP_AVAILABLE = not bool(os.environ.get("GIFLAB_DISABLE_CLIP"))
 except ImportError:
     torch = None  # type: ignore[assignment]
-    open_clip = None  # type: ignore[assignment]
+    open_clip = None
     CLIP_AVAILABLE = False
 
 from .meta import extract_gif_metadata
@@ -227,7 +228,9 @@ class HybridCompressionTagger:
                 frame_indices = list(range(frame_count))
             else:
                 # Sample frames evenly across the GIF
-                frame_indices = np.linspace(0, frame_count - 1, max_frames, dtype=int).tolist()
+                frame_indices = np.linspace(
+                    0, frame_count - 1, max_frames, dtype=int
+                ).tolist()
 
             for frame_idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)

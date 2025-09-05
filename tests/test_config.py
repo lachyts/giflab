@@ -32,7 +32,7 @@ class TestCompressionConfig:
             FRAME_KEEP_RATIOS=[1.0, 0.5],
             COLOR_KEEP_COUNTS=[128, 64],
             LOSSY_LEVELS=[0, 80],
-            ENGINES=["gifsicle"]
+            ENGINES=["gifsicle"],
         )
 
         assert config.FRAME_KEEP_RATIOS == [1.0, 0.5]
@@ -59,8 +59,7 @@ class TestPathConfig:
     def test_custom_paths(self):
         """Test custom path configuration."""
         config = PathConfig(
-            RAW_DIR=Path("/custom/raw"),
-            RENDERS_DIR=Path("/custom/renders")
+            RAW_DIR=Path("/custom/raw"), RENDERS_DIR=Path("/custom/renders")
         )
 
         assert config.RAW_DIR == Path("/custom/raw")
@@ -91,7 +90,7 @@ class TestEngineConfig:
             IMAGEMAGICK_PATH="/custom/magick",
             FFMPEG_PATH="/custom/ffmpeg",
             FFPROBE_PATH="/custom/ffprobe",
-            GIFSKI_PATH="/custom/gifski"
+            GIFSKI_PATH="/custom/gifski",
         )
 
         assert config.GIFSICLE_PATH == "/custom/gifsicle"
@@ -104,38 +103,38 @@ class TestEngineConfig:
     def test_environment_variable_overrides(self):
         """Test that environment variables override default paths."""
         env_vars = {
-            'GIFLAB_GIFSICLE_PATH': '/env/gifsicle',
-            'GIFLAB_ANIMATELY_PATH': '/env/animately',
-            'GIFLAB_IMAGEMAGICK_PATH': '/env/magick',
-            'GIFLAB_FFMPEG_PATH': '/env/ffmpeg',
-            'GIFLAB_FFPROBE_PATH': '/env/ffprobe',
-            'GIFLAB_GIFSKI_PATH': '/env/gifski',
+            "GIFLAB_GIFSICLE_PATH": "/env/gifsicle",
+            "GIFLAB_ANIMATELY_PATH": "/env/animately",
+            "GIFLAB_IMAGEMAGICK_PATH": "/env/magick",
+            "GIFLAB_FFMPEG_PATH": "/env/ffmpeg",
+            "GIFLAB_FFPROBE_PATH": "/env/ffprobe",
+            "GIFLAB_GIFSKI_PATH": "/env/gifski",
         }
-        
+
         with patch.dict(os.environ, env_vars):
             config = EngineConfig()
-            
-            assert config.GIFSICLE_PATH == '/env/gifsicle'
-            assert config.ANIMATELY_PATH == '/env/animately'
-            assert config.IMAGEMAGICK_PATH == '/env/magick'
-            assert config.FFMPEG_PATH == '/env/ffmpeg'
-            assert config.FFPROBE_PATH == '/env/ffprobe'
-            assert config.GIFSKI_PATH == '/env/gifski'
+
+            assert config.GIFSICLE_PATH == "/env/gifsicle"
+            assert config.ANIMATELY_PATH == "/env/animately"
+            assert config.IMAGEMAGICK_PATH == "/env/magick"
+            assert config.FFMPEG_PATH == "/env/ffmpeg"
+            assert config.FFPROBE_PATH == "/env/ffprobe"
+            assert config.GIFSKI_PATH == "/env/gifski"
 
     def test_partial_environment_overrides(self):
         """Test that only set environment variables are overridden."""
         env_vars = {
-            'GIFLAB_GIFSICLE_PATH': '/env/gifsicle',
-            'GIFLAB_FFMPEG_PATH': '/env/ffmpeg',
+            "GIFLAB_GIFSICLE_PATH": "/env/gifsicle",
+            "GIFLAB_FFMPEG_PATH": "/env/ffmpeg",
         }
-        
+
         with patch.dict(os.environ, env_vars):
             config = EngineConfig()
-            
+
             # Overridden paths
-            assert config.GIFSICLE_PATH == '/env/gifsicle'
-            assert config.FFMPEG_PATH == '/env/ffmpeg'
-            
+            assert config.GIFSICLE_PATH == "/env/gifsicle"
+            assert config.FFMPEG_PATH == "/env/ffmpeg"
+
             # Default paths (not overridden)
             assert config.ANIMATELY_PATH == "animately"
             assert config.IMAGEMAGICK_PATH == "magick"
@@ -145,14 +144,14 @@ class TestEngineConfig:
     def test_environment_overrides_with_custom_initialization(self):
         """Test that environment variables override even custom initialization values."""
         env_vars = {
-            'GIFLAB_GIFSICLE_PATH': '/env/gifsicle',
+            "GIFLAB_GIFSICLE_PATH": "/env/gifsicle",
         }
-        
+
         with patch.dict(os.environ, env_vars):
             config = EngineConfig(GIFSICLE_PATH="/custom/gifsicle")
-            
+
             # Environment variable should win over custom initialization
-            assert config.GIFSICLE_PATH == '/env/gifsicle'
+            assert config.GIFSICLE_PATH == "/env/gifsicle"
 
 
 def test_default_configurations():
@@ -171,7 +170,7 @@ def test_default_configurations():
     assert len(DEFAULT_COMPRESSION_CONFIG.COLOR_KEEP_COUNTS) == 6  # Updated from 3 to 6
     assert len(DEFAULT_COMPRESSION_CONFIG.LOSSY_LEVELS) == 3
     assert len(DEFAULT_COMPRESSION_CONFIG.ENGINES) == 2
-    
+
     # Verify engine config defaults
     assert DEFAULT_ENGINE_CONFIG.GIFSICLE_PATH == "gifsicle"
     assert DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH == "animately"

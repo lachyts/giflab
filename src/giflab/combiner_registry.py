@@ -38,7 +38,7 @@ def register(group: str) -> Callable[[CombinerFn], CombinerFn]:
 
 def combiner_for(group: str | None) -> CombinerFn | None:  # noqa: D401
     """Return the combiner for *group* (or ``None`` if not registered)."""
-    
+
     if group is None:
         return None
     return _COMBINERS.get(group)

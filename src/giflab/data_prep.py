@@ -94,7 +94,9 @@ def normalise_metrics(
     if method not in {"zscore", "minmax"}:
         raise ValueError("method must be 'zscore' or 'minmax'")
 
-    out: dict[str, float] = cast(dict[str, float], metrics if inplace else dict(metrics))
+    out: dict[str, float] = cast(
+        dict[str, float], metrics if inplace else dict(metrics)
+    )
 
     numeric_keys = [k for k, v in metrics.items() if isinstance(v, int | float)]
     values = np.array([metrics[k] for k in numeric_keys], dtype=np.float64)
@@ -125,7 +127,9 @@ def apply_confidence_weights(
     Missing confidence defaults to **1.0** (no change). Negative confidences
     raise ``ValueError``.
     """
-    out: dict[str, float] = cast(dict[str, float], metrics if inplace else dict(metrics))
+    out: dict[str, float] = cast(
+        dict[str, float], metrics if inplace else dict(metrics)
+    )
 
     for key, value in metrics.items():
         conf = float(confidences.get(key, 1.0))

@@ -22,14 +22,14 @@ from ..elimination_errors import ErrorTypes
 # Import synthetic GIF components for backward compatibility
 from ..synthetic_gifs import SyntheticGifSpec
 from .pareto import ParetoAnalyzer
-from .runner import GifLabRunner, AnalysisResult
+from .runner import AnalysisResult, GifLabRunner
 from .sampling import SAMPLING_STRATEGIES, PipelineSampler, SamplingStrategy
 
 # Re-export key components
 __all__ = [
     # Core components
     "GifLabRunner",
-    "AnalysisResult", 
+    "AnalysisResult",
     "ParetoAnalyzer",
     "PipelineSampler",
     "SAMPLING_STRATEGIES",

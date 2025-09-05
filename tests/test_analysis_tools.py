@@ -1,4 +1,3 @@
-
 import pandas as pd
 
 from giflab.analysis_tools import (
@@ -12,11 +11,21 @@ from giflab.dynamic_pipeline import generate_all_pipelines
 def _fake_df() -> pd.DataFrame:
     data = {
         "variable": [
-            "frame_reduction", "frame_reduction",
-            "color_reduction", "color_reduction",
-            "lossy_compression", "lossy_compression",
+            "frame_reduction",
+            "frame_reduction",
+            "color_reduction",
+            "color_reduction",
+            "lossy_compression",
+            "lossy_compression",
         ],
-        "engine": ["gifsicle", "animately", "gifsicle", "imagemagick", "gifsicle", "ffmpeg"],
+        "engine": [
+            "gifsicle",
+            "animately",
+            "gifsicle",
+            "imagemagick",
+            "gifsicle",
+            "ffmpeg",
+        ],
         "ssim": [0.9, 0.85, 0.92, 0.88, 0.8, 0.82],
     }
     return pd.DataFrame(data)

@@ -216,7 +216,9 @@ def _normalize_frame_dimensions(frame_files: list) -> list:
     normalized_files = []
     temp_dir = None
 
-    for i, (frame_file, dimension) in enumerate(zip(frame_files, frame_dimensions, strict=True)):
+    for i, (frame_file, dimension) in enumerate(
+        zip(frame_files, frame_dimensions, strict=True)
+    ):
         if dimension == target_dimension or dimension is None:
             # Frame already has target dimension or couldn't be read
             normalized_files.append(frame_file)

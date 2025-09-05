@@ -18,100 +18,107 @@ logger = logging.getLogger(__name__)
 
 class QualityThresholdValidator:
     """Validates quality degradation using existing metrics system.
-    
+
     This validator leverages the existing 11-metric comprehensive quality
     system to detect catastrophic quality failures that would indicate
     wrapper corruption rather than normal compression trade-offs.
     """
-    
+
     def __init__(self, metrics_config: Any = None) -> None:
         """Initialize quality validator.
-        
+
         Args:
             metrics_config: Metrics configuration to use. Defaults to system config.
         """
         self.metrics_config = metrics_config or DEFAULT_METRICS_CONFIG
-        
+
         # Quality thresholds for detecting catastrophic failures
         # These are much lower than normal quality targets - we're only
         # trying to catch severe corruption, not optimize compression quality
         self.catastrophic_thresholds = {
             # Composite quality thresholds (0-1 scale)
             "min_composite_quality": 0.1,
-            
             # Individual metric thresholds (detect severe outliers)
-            "min_ssim_mean": 0.2,              # SSIM below 20% is very bad
-            "max_mse_mean": 10000.0,           # MSE above 10000 indicates major corruption
-            "min_psnr_mean": 10.0,             # PSNR below 10dB is extremely poor
-            
+            "min_ssim_mean": 0.2,  # SSIM below 20% is very bad
+            "max_mse_mean": 10000.0,  # MSE above 10000 indicates major corruption
+            "min_psnr_mean": 10.0,  # PSNR below 10dB is extremely poor
             # Temporal consistency (animation-specific)
-            "min_temporal_consistency": 0.1,   # Severe temporal artifacts
-            
+            "min_temporal_consistency": 0.1,  # Severe temporal artifacts
             # Edge case protections
-            "max_quality_variance": 0.9,       # Quality shouldn't vary wildly between frames
+            "max_quality_variance": 0.9,  # Quality shouldn't vary wildly between frames
         }
-    
+
     def validate_quality_degradation(
         self,
         input_path: Path,
         output_path: Path,
         wrapper_metadata: dict[str, Any],
-        operation_type: str = "unknown"
+        operation_type: str = "unknown",
     ) -> ValidationResult:
         """Validate quality degradation is within acceptable bounds.
-        
+
         This method uses the existing comprehensive metrics system to detect
         catastrophic quality failures while allowing normal compression trade-offs.
-        
+
         Args:
             input_path: Original file
             output_path: Compressed file
             wrapper_metadata: Metadata from wrapper execution
             operation_type: Type of operation performed for context
-            
+
         Returns:
             ValidationResult indicating if quality degradation is acceptable
         """
         try:
             # Determine if this is a frame reduction operation
             is_frame_reduction = operation_type == "frame_reduction"
-            
+
             # Calculate comprehensive quality metrics
             metrics = calculate_comprehensive_metrics(
                 input_path,
                 output_path,
                 config=self.metrics_config,
-                frame_reduction_context=is_frame_reduction
+                frame_reduction_context=is_frame_reduction,
             )
-            
+
             # Calculate composite quality scores
             if self.metrics_config.USE_ENHANCED_COMPOSITE_QUALITY:
-                composite_quality = calculate_composite_quality(metrics, self.metrics_config)
+                composite_quality = calculate_composite_quality(
+                    metrics, self.metrics_config
+                )
                 quality_type = "enhanced_composite"
-                
+
                 # Use context-aware threshold for frame reduction operations
                 if is_frame_reduction:
                     # Frame reduction operations naturally have lower quality due to temporal gaps
                     # Use more lenient threshold based on research findings
                     min_quality_threshold = 0.05  # 5% threshold for frame reduction
                 else:
-                    min_quality_threshold = self.catastrophic_thresholds["min_composite_quality"]
+                    min_quality_threshold = self.catastrophic_thresholds[
+                        "min_composite_quality"
+                    ]
             else:
                 # Use legacy 4-metric composite quality
                 composite_quality = self._calculate_legacy_composite_quality(metrics)
                 quality_type = "legacy_composite"
-                min_quality_threshold = self.catastrophic_thresholds["min_composite_quality"]
-            
+                min_quality_threshold = self.catastrophic_thresholds[
+                    "min_composite_quality"
+                ]
+
             # Check for catastrophic quality failure
             quality_acceptable = composite_quality >= min_quality_threshold
-            
+
             # Additional checks for severe outliers in individual metrics
-            outlier_checks = self._check_metric_outliers(metrics, frame_reduction_context=is_frame_reduction)
-            outliers_acceptable = all(check["acceptable"] for check in outlier_checks.values())
-            
+            outlier_checks = self._check_metric_outliers(
+                metrics, frame_reduction_context=is_frame_reduction
+            )
+            outliers_acceptable = all(
+                check["acceptable"] for check in outlier_checks.values()
+            )
+
             # Overall validation result
             is_valid = quality_acceptable and outliers_acceptable
-            
+
             # Prepare detailed information
             details = {
                 "composite_quality": composite_quality,
@@ -123,10 +130,10 @@ class QualityThresholdValidator:
                     "ssim_mean": metrics.get("ssim_mean"),
                     "psnr_mean": metrics.get("psnr_mean"),
                     "mse_mean": metrics.get("mse_mean"),
-                    "temporal_consistency": metrics.get("temporal_consistency")
-                }
+                    "temporal_consistency": metrics.get("temporal_consistency"),
+                },
             }
-            
+
             # Create error message if validation failed
             error_message = None
             if not is_valid:
@@ -135,29 +142,33 @@ class QualityThresholdValidator:
                     error_parts.append(
                         f"{quality_type} quality {composite_quality:.3f} below threshold {min_quality_threshold}"
                     )
-                
-                failed_outliers = [name for name, check in outlier_checks.items() if not check["acceptable"]]
+
+                failed_outliers = [
+                    name
+                    for name, check in outlier_checks.items()
+                    if not check["acceptable"]
+                ]
                 if failed_outliers:
                     error_parts.append(f"Metric outliers detected: {failed_outliers}")
-                
+
                 error_message = "; ".join(error_parts)
-            
+
             return ValidationResult(
                 is_valid=is_valid,
                 validation_type="quality_degradation",
                 expected={
                     "min_composite_quality": min_quality_threshold,
-                    "acceptable_degradation": True
+                    "acceptable_degradation": True,
                 },
                 actual={
                     "composite_quality": composite_quality,
                     "quality_acceptable": quality_acceptable,
-                    "outliers_acceptable": outliers_acceptable
+                    "outliers_acceptable": outliers_acceptable,
                 },
                 error_message=error_message,
-                details=details
+                details=details,
             )
-            
+
         except Exception as e:
             logger.error(f"Quality validation error: {e}")
             return ValidationResult(
@@ -166,12 +177,12 @@ class QualityThresholdValidator:
                 expected="quality_metrics_calculation",
                 actual="calculation_failed",
                 error_message=f"Quality validation failed: {str(e)}",
-                details={"exception": str(e)}
+                details={"exception": str(e)},
             )
-    
+
     def _calculate_legacy_composite_quality(self, metrics: dict[str, float]) -> float:
         """Calculate legacy 4-metric composite quality score.
-        
+
         This is a fallback for when enhanced composite quality is disabled.
         """
         # Use the same weights as the legacy system
@@ -179,48 +190,55 @@ class QualityThresholdValidator:
             "ssim_mean": self.metrics_config.SSIM_WEIGHT,
             "ms_ssim_mean": self.metrics_config.MS_SSIM_WEIGHT,
             "psnr_mean": self.metrics_config.PSNR_WEIGHT,
-            "temporal_consistency": self.metrics_config.TEMPORAL_WEIGHT
+            "temporal_consistency": self.metrics_config.TEMPORAL_WEIGHT,
         }
-        
+
         composite_quality = 0.0
         total_weight = 0.0
-        
+
         for metric_name, weight in weights.items():
             if metric_name in metrics:
                 value = metrics[metric_name]
-                
+
                 # Normalize metrics to 0-1 scale
                 if metric_name == "psnr_mean":
                     # PSNR: normalize using configured max
                     normalized_value = min(value / self.metrics_config.PSNR_MAX_DB, 1.0)
-                elif metric_name in ["ssim_mean", "ms_ssim_mean", "temporal_consistency"]:
+                elif metric_name in [
+                    "ssim_mean",
+                    "ms_ssim_mean",
+                    "temporal_consistency",
+                ]:
                     # These should already be 0-1
                     normalized_value = max(0.0, min(value, 1.0))
                 else:
                     normalized_value = value
-                
+
                 composite_quality += weight * normalized_value
                 total_weight += weight
-        
+
         return composite_quality / total_weight if total_weight > 0 else 0.0
-    
-    def _check_metric_outliers(self, metrics: dict[str, float], frame_reduction_context: bool = False) -> dict[str, dict[str, Any]]:
+
+    def _check_metric_outliers(
+        self, metrics: dict[str, float], frame_reduction_context: bool = False
+    ) -> dict[str, dict[str, Any]]:
         """Check for severe outliers in individual metrics.
-        
+
         Returns dict with outlier check results for each metric.
         """
         checks = {}
-        
+
         # SSIM check
         if "ssim_mean" in metrics:
             ssim_value = metrics["ssim_mean"]
             checks["ssim"] = {
                 "value": ssim_value,
                 "threshold": self.catastrophic_thresholds["min_ssim_mean"],
-                "acceptable": ssim_value >= self.catastrophic_thresholds["min_ssim_mean"],
-                "description": "Structural similarity"
+                "acceptable": ssim_value
+                >= self.catastrophic_thresholds["min_ssim_mean"],
+                "description": "Structural similarity",
             }
-        
+
         # MSE check (higher is worse)
         if "mse_mean" in metrics:
             mse_value = metrics["mse_mean"]
@@ -228,48 +246,50 @@ class QualityThresholdValidator:
                 "value": mse_value,
                 "threshold": self.catastrophic_thresholds["max_mse_mean"],
                 "acceptable": mse_value <= self.catastrophic_thresholds["max_mse_mean"],
-                "description": "Mean squared error"
+                "description": "Mean squared error",
             }
-        
+
         # PSNR check
         if "psnr_mean" in metrics:
             psnr_value = metrics["psnr_mean"]
             checks["psnr"] = {
                 "value": psnr_value,
                 "threshold": self.catastrophic_thresholds["min_psnr_mean"],
-                "acceptable": psnr_value >= self.catastrophic_thresholds["min_psnr_mean"],
-                "description": "Peak signal-to-noise ratio"
+                "acceptable": psnr_value
+                >= self.catastrophic_thresholds["min_psnr_mean"],
+                "description": "Peak signal-to-noise ratio",
             }
-        
+
         # Temporal consistency check (for animations)
         if "temporal_consistency" in metrics:
             temporal_value = metrics["temporal_consistency"]
-            
+
             # Use context-aware threshold for frame reduction operations
             if frame_reduction_context:
                 # Frame reduction operations naturally have lower temporal consistency
                 # Use more lenient threshold based on research findings
-                temporal_threshold = 0.05  # 5% threshold for frame reduction (vs 10% normal)
+                temporal_threshold = (
+                    0.05  # 5% threshold for frame reduction (vs 10% normal)
+                )
             else:
-                temporal_threshold = self.catastrophic_thresholds["min_temporal_consistency"]
-            
+                temporal_threshold = self.catastrophic_thresholds[
+                    "min_temporal_consistency"
+                ]
+
             checks["temporal"] = {
                 "value": temporal_value,
                 "threshold": temporal_threshold,
                 "acceptable": temporal_value >= temporal_threshold,
-                "description": "Temporal consistency"
+                "description": "Temporal consistency",
             }
-        
+
         return checks
-    
+
     def validate_quality_variance(
-        self,
-        input_path: Path,
-        output_path: Path,
-        wrapper_metadata: dict[str, Any]
+        self, input_path: Path, output_path: Path, wrapper_metadata: dict[str, Any]
     ) -> ValidationResult:
         """Validate quality doesn't vary wildly between frames.
-        
+
         This can indicate corruption or processing issues affecting
         some frames more than others.
         """
@@ -277,42 +297,51 @@ class QualityThresholdValidator:
             # Calculate metrics - the comprehensive metrics should include per-frame data
             # Note: variance validation doesn't need frame reduction context since it's checking variance, not artifacts
             metrics = calculate_comprehensive_metrics(
-                input_path,
-                output_path,
-                config=self.metrics_config
+                input_path, output_path, config=self.metrics_config
             )
-            
+
             # Look for quality variance indicators in the metrics
             variance_indicators = []
-            
+
             # Check positional variance if available
             for metric_name in ["ssim", "mse", "psnr"]:
                 variance_key = f"{metric_name}_positional_variance"
                 if variance_key in metrics:
                     variance = metrics[variance_key]
-                    variance_indicators.append({
-                        "metric": metric_name,
-                        "variance": variance,
-                        "acceptable": variance <= self.catastrophic_thresholds["max_quality_variance"]
-                    })
-            
+                    variance_indicators.append(
+                        {
+                            "metric": metric_name,
+                            "variance": variance,
+                            "acceptable": variance
+                            <= self.catastrophic_thresholds["max_quality_variance"],
+                        }
+                    )
+
             # Overall variance acceptability
-            variance_acceptable = all(
-                indicator["acceptable"] for indicator in variance_indicators
-            ) if variance_indicators else True
-            
+            variance_acceptable = (
+                all(indicator["acceptable"] for indicator in variance_indicators)
+                if variance_indicators
+                else True
+            )
+
             return ValidationResult(
                 is_valid=variance_acceptable,
                 validation_type="quality_variance",
-                expected={"max_variance": self.catastrophic_thresholds["max_quality_variance"]},
+                expected={
+                    "max_variance": self.catastrophic_thresholds["max_quality_variance"]
+                },
                 actual={"variance_indicators": variance_indicators},
-                error_message=None if variance_acceptable else f"High quality variance detected across frames: {[i for i in variance_indicators if not i['acceptable']]}",
+                error_message=None
+                if variance_acceptable
+                else f"High quality variance detected across frames: {[i for i in variance_indicators if not i['acceptable']]}",
                 details={
                     "variance_indicators": variance_indicators,
-                    "variance_threshold": self.catastrophic_thresholds["max_quality_variance"]
-                }
+                    "variance_threshold": self.catastrophic_thresholds[
+                        "max_quality_variance"
+                    ],
+                },
             )
-            
+
         except Exception as e:
             logger.error(f"Quality variance validation error: {e}")
             return ValidationResult(
@@ -321,5 +350,5 @@ class QualityThresholdValidator:
                 expected="quality_variance_calculation",
                 actual="calculation_failed",
                 error_message=f"Quality variance validation failed: {str(e)}",
-                details={"exception": str(e)}
+                details={"exception": str(e)},
             )

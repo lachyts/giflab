@@ -107,9 +107,7 @@ class PipelineResultsCache:
                 )
 
                 conn.commit()
-                self.logger.debug(
-                    f"📁 Initialized cache database: {self.cache_db_path}"
-                )
+                self.logger.debug(f"📁 Initialized cache database: {self.cache_db_path}")
 
         except Exception as e:
             self.logger.warning(f"Failed to initialize cache database: {e}")
@@ -212,7 +210,9 @@ class PipelineResultsCache:
             self.logger.warning(f"Failed to retrieve cached result: {e}")
             return None
 
-    def queue_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict) -> None:
+    def queue_result(
+        self, pipeline_id: str, gif_name: str, params: dict, result: dict
+    ) -> None:
         """Queue a successful pipeline test result for batch storage.
 
         Args:
@@ -351,7 +351,9 @@ class PipelineResultsCache:
         except Exception as e:
             self.logger.warning(f"Failed to flush failures batch: {e}")
 
-    def store_result(self, pipeline_id: str, gif_name: str, params: dict, result: dict) -> None:
+    def store_result(
+        self, pipeline_id: str, gif_name: str, params: dict, result: dict
+    ) -> None:
         """Store a pipeline test result (legacy method - now uses batching).
 
         Args:

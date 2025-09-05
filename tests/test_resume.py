@@ -40,7 +40,7 @@ def sample_jobs(temp_dirs, sample_gif_metadata):
             lossy=lossy,
             frame_keep_ratio=ratio,
             color_keep_count=colors,
-            output_path=output_path
+            output_path=output_path,
         )
         jobs.append(job)
 
@@ -50,10 +50,24 @@ def sample_jobs(temp_dirs, sample_gif_metadata):
 def create_csv_file(csv_path: Path, records: list):
     """Helper to create CSV file with test records."""
     fieldnames = [
-        "gif_sha", "orig_filename", "engine", "engine_version", "lossy",
-        "frame_keep_ratio", "color_keep_count", "kilobytes", "ssim",
-        "render_ms", "orig_kilobytes", "orig_width", "orig_height",
-        "orig_frames", "orig_fps", "orig_n_colors", "entropy", "timestamp"
+        "gif_sha",
+        "orig_filename",
+        "engine",
+        "engine_version",
+        "lossy",
+        "frame_keep_ratio",
+        "color_keep_count",
+        "kilobytes",
+        "ssim",
+        "render_ms",
+        "orig_kilobytes",
+        "orig_width",
+        "orig_height",
+        "orig_frames",
+        "orig_fps",
+        "orig_n_colors",
+        "entropy",
+        "timestamp",
     ]
 
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +93,9 @@ class TestResumeLoadCSVRecords:
         assert len(records) == 0
         assert isinstance(records, set)
 
-    def test_load_existing_csv_records_valid_data(self, test_config, temp_dirs, sample_gif_metadata):
+    def test_load_existing_csv_records_valid_data(
+        self, test_config, temp_dirs, sample_gif_metadata
+    ):
         """Test loading valid CSV records."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config)
@@ -105,7 +121,7 @@ class TestResumeLoadCSVRecords:
                 "orig_fps": "24.0",
                 "orig_n_colors": "128",
                 "entropy": "4.2",
-                "timestamp": "2024-01-01T10:00:00"
+                "timestamp": "2024-01-01T10:00:00",
             },
             {
                 "gif_sha": sha2,
@@ -125,8 +141,8 @@ class TestResumeLoadCSVRecords:
                 "orig_fps": "12.0",
                 "orig_n_colors": "64",
                 "entropy": "3.8",
-                "timestamp": "2024-01-01T10:00:00"
-            }
+                "timestamp": "2024-01-01T10:00:00",
+            },
         ]
 
         create_csv_file(csv_path, test_records)
@@ -167,7 +183,7 @@ class TestResumeLoadCSVRecords:
                 "orig_fps": "24.0",
                 "orig_n_colors": "128",
                 "entropy": "4.2",
-                "timestamp": "2024-01-01T10:00:00"
+                "timestamp": "2024-01-01T10:00:00",
             },
             {
                 "gif_sha": sha2,
@@ -187,8 +203,8 @@ class TestResumeLoadCSVRecords:
                 "orig_fps": "12.0",
                 "orig_n_colors": "64",
                 "entropy": "3.8",
-                "timestamp": "2024-01-01T10:00:00"
-            }
+                "timestamp": "2024-01-01T10:00:00",
+            },
         ]
 
         create_csv_file(csv_path, test_records)
@@ -217,7 +233,9 @@ class TestResumeLoadCSVRecords:
 class TestResumeFilterJobs:
     """Test job filtering logic for resume functionality."""
 
-    def test_filter_existing_jobs_resume_disabled(self, test_config, sample_jobs, temp_dirs):
+    def test_filter_existing_jobs_resume_disabled(
+        self, test_config, sample_jobs, temp_dirs
+    ):
         """Test that all jobs are returned when resume is disabled."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=False)
@@ -225,26 +243,28 @@ class TestResumeFilterJobs:
         csv_path = temp_dirs["csv"] / "test.csv"
 
         # Even with existing CSV, all jobs should be returned
-        test_records = [{
-            "gif_sha": sample_jobs[0].metadata.gif_sha,
-            "orig_filename": sample_jobs[0].metadata.orig_filename,
-            "engine": sample_jobs[0].engine,
-            "engine_version": "1.94",
-            "lossy": str(sample_jobs[0].lossy),
-            "frame_keep_ratio": str(sample_jobs[0].frame_keep_ratio),
-            "color_keep_count": str(sample_jobs[0].color_keep_count),
-            "kilobytes": "50.0",
-            "ssim": "0.95",
-            "render_ms": "1000",
-            "orig_kilobytes": "100.0",
-            "orig_width": "480",
-            "orig_height": "270",
-            "orig_frames": "24",
-            "orig_fps": "24.0",
-            "orig_n_colors": "128",
-            "entropy": "4.2",
-            "timestamp": "2024-01-01T10:00:00"
-        }]
+        test_records = [
+            {
+                "gif_sha": sample_jobs[0].metadata.gif_sha,
+                "orig_filename": sample_jobs[0].metadata.orig_filename,
+                "engine": sample_jobs[0].engine,
+                "engine_version": "1.94",
+                "lossy": str(sample_jobs[0].lossy),
+                "frame_keep_ratio": str(sample_jobs[0].frame_keep_ratio),
+                "color_keep_count": str(sample_jobs[0].color_keep_count),
+                "kilobytes": "50.0",
+                "ssim": "0.95",
+                "render_ms": "1000",
+                "orig_kilobytes": "100.0",
+                "orig_width": "480",
+                "orig_height": "270",
+                "orig_frames": "24",
+                "orig_fps": "24.0",
+                "orig_n_colors": "128",
+                "entropy": "4.2",
+                "timestamp": "2024-01-01T10:00:00",
+            }
+        ]
 
         create_csv_file(csv_path, test_records)
 
@@ -252,7 +272,9 @@ class TestResumeFilterJobs:
 
         assert len(filtered_jobs) == len(sample_jobs)
 
-    def test_filter_existing_jobs_complete_jobs(self, test_config, sample_jobs, temp_dirs):
+    def test_filter_existing_jobs_complete_jobs(
+        self, test_config, sample_jobs, temp_dirs
+    ):
         """Test filtering out completely finished jobs (CSV record + output file)."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=True)
@@ -265,26 +287,28 @@ class TestResumeFilterJobs:
 
         for job in complete_jobs:
             # Create CSV record
-            test_records.append({
-                "gif_sha": job.metadata.gif_sha,
-                "orig_filename": job.metadata.orig_filename,
-                "engine": job.engine,
-                "engine_version": "1.94",
-                "lossy": str(job.lossy),
-                "frame_keep_ratio": str(job.frame_keep_ratio),
-                "color_keep_count": str(job.color_keep_count),
-                "kilobytes": "50.0",
-                "ssim": "0.95",
-                "render_ms": "1000",
-                "orig_kilobytes": "100.0",
-                "orig_width": "480",
-                "orig_height": "270",
-                "orig_frames": "24",
-                "orig_fps": "24.0",
-                "orig_n_colors": "128",
-                "entropy": "4.2",
-                "timestamp": "2024-01-01T10:00:00"
-            })
+            test_records.append(
+                {
+                    "gif_sha": job.metadata.gif_sha,
+                    "orig_filename": job.metadata.orig_filename,
+                    "engine": job.engine,
+                    "engine_version": "1.94",
+                    "lossy": str(job.lossy),
+                    "frame_keep_ratio": str(job.frame_keep_ratio),
+                    "color_keep_count": str(job.color_keep_count),
+                    "kilobytes": "50.0",
+                    "ssim": "0.95",
+                    "render_ms": "1000",
+                    "orig_kilobytes": "100.0",
+                    "orig_width": "480",
+                    "orig_height": "270",
+                    "orig_frames": "24",
+                    "orig_fps": "24.0",
+                    "orig_n_colors": "128",
+                    "entropy": "4.2",
+                    "timestamp": "2024-01-01T10:00:00",
+                }
+            )
 
             # Create output file
             job.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -299,18 +323,32 @@ class TestResumeFilterJobs:
 
         # Verify the filtered jobs are the incomplete ones
         remaining_job_keys = {
-            (job.metadata.gif_sha, job.engine, job.lossy, job.frame_keep_ratio, job.color_keep_count)
+            (
+                job.metadata.gif_sha,
+                job.engine,
+                job.lossy,
+                job.frame_keep_ratio,
+                job.color_keep_count,
+            )
             for job in filtered_jobs
         }
 
         expected_remaining = {
-            (job.metadata.gif_sha, job.engine, job.lossy, job.frame_keep_ratio, job.color_keep_count)
+            (
+                job.metadata.gif_sha,
+                job.engine,
+                job.lossy,
+                job.frame_keep_ratio,
+                job.color_keep_count,
+            )
             for job in sample_jobs[2:]
         }
 
         assert remaining_job_keys == expected_remaining
 
-    def test_filter_existing_jobs_partial_completion(self, test_config, sample_jobs, temp_dirs):
+    def test_filter_existing_jobs_partial_completion(
+        self, test_config, sample_jobs, temp_dirs
+    ):
         """Test handling of partially completed jobs (output file but no CSV record)."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=True)
@@ -340,26 +378,28 @@ class TestResumeFilterJobs:
 
         # Create CSV record for first job but no output file
         csv_only_job = sample_jobs[0]
-        test_records = [{
-            "gif_sha": csv_only_job.metadata.gif_sha,
-            "orig_filename": csv_only_job.metadata.orig_filename,
-            "engine": csv_only_job.engine,
-            "engine_version": "1.94",
-            "lossy": str(csv_only_job.lossy),
-            "frame_keep_ratio": str(csv_only_job.frame_keep_ratio),
-            "color_keep_count": str(csv_only_job.color_keep_count),
-            "kilobytes": "50.0",
-            "ssim": "0.95",
-            "render_ms": "1000",
-            "orig_kilobytes": "100.0",
-            "orig_width": "480",
-            "orig_height": "270",
-            "orig_frames": "24",
-            "orig_fps": "24.0",
-            "orig_n_colors": "128",
-            "entropy": "4.2",
-            "timestamp": "2024-01-01T10:00:00"
-        }]
+        test_records = [
+            {
+                "gif_sha": csv_only_job.metadata.gif_sha,
+                "orig_filename": csv_only_job.metadata.orig_filename,
+                "engine": csv_only_job.engine,
+                "engine_version": "1.94",
+                "lossy": str(csv_only_job.lossy),
+                "frame_keep_ratio": str(csv_only_job.frame_keep_ratio),
+                "color_keep_count": str(csv_only_job.color_keep_count),
+                "kilobytes": "50.0",
+                "ssim": "0.95",
+                "render_ms": "1000",
+                "orig_kilobytes": "100.0",
+                "orig_width": "480",
+                "orig_height": "270",
+                "orig_frames": "24",
+                "orig_fps": "24.0",
+                "orig_n_colors": "128",
+                "entropy": "4.2",
+                "timestamp": "2024-01-01T10:00:00",
+            }
+        ]
 
         create_csv_file(csv_path, test_records)
 
@@ -372,8 +412,10 @@ class TestResumeFilterJobs:
 class TestResumeIntegration:
     """Integration tests for complete resume functionality."""
 
-    @patch('giflab.pipeline.extract_gif_metadata')
-    def test_resume_mixed_completion_states(self, mock_extract_metadata, test_config, temp_dirs):
+    @patch("giflab.pipeline.extract_gif_metadata")
+    def test_resume_mixed_completion_states(
+        self, mock_extract_metadata, test_config, temp_dirs
+    ):
         """Test resume with mixed completion states across multiple jobs."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=True)
@@ -394,7 +436,7 @@ class TestResumeIntegration:
             orig_frames=24,
             orig_fps=24.0,
             orig_n_colors=128,
-            entropy=4.2
+            entropy=4.2,
         )
 
         metadata2 = GifMetadata(
@@ -406,10 +448,12 @@ class TestResumeIntegration:
             orig_frames=16,
             orig_fps=12.0,
             orig_n_colors=64,
-            entropy=3.8
+            entropy=3.8,
         )
 
-        def mock_metadata_side_effect(path, source_platform="unknown", source_metadata=None):
+        def mock_metadata_side_effect(
+            path, source_platform="unknown", source_metadata=None
+        ):
             if path.name == "test1.gif":
                 return metadata1
             elif path.name == "test2.gif":
@@ -425,7 +469,9 @@ class TestResumeIntegration:
         csv_path = temp_dirs["csv"] / "test.csv"
 
         # 1. First job of gif1: completely finished (CSV + output)
-        complete_job = next(job for job in all_jobs if job.metadata.gif_sha == metadata1.gif_sha)
+        complete_job = next(
+            job for job in all_jobs if job.metadata.gif_sha == metadata1.gif_sha
+        )
         complete_job.output_path.parent.mkdir(parents=True, exist_ok=True)
         complete_job.output_path.touch()
 
@@ -448,11 +494,13 @@ class TestResumeIntegration:
             "orig_fps": str(complete_job.metadata.orig_fps),
             "orig_n_colors": str(complete_job.metadata.orig_n_colors),
             "entropy": str(complete_job.metadata.entropy),
-            "timestamp": "2024-01-01T10:00:00"
+            "timestamp": "2024-01-01T10:00:00",
         }
 
         # 3. One job from gif2: partial (output file but no CSV record)
-        gif2_jobs = [job for job in all_jobs if job.metadata.gif_sha == metadata2.gif_sha]
+        gif2_jobs = [
+            job for job in all_jobs if job.metadata.gif_sha == metadata2.gif_sha
+        ]
         partial_job = gif2_jobs[0]
         partial_job.output_path.parent.mkdir(parents=True, exist_ok=True)
         partial_job.output_path.touch()
@@ -463,8 +511,12 @@ class TestResumeIntegration:
         filtered_jobs = pipeline.filter_existing_jobs(all_jobs, csv_path)
 
         # Should filter out only the complete job
-        total_jobs_per_gif = len(compression_config.ENGINES) * len(compression_config.LOSSY_LEVELS) * \
-                           len(compression_config.FRAME_KEEP_RATIOS) * len(compression_config.COLOR_KEEP_COUNTS)
+        total_jobs_per_gif = (
+            len(compression_config.ENGINES)
+            * len(compression_config.LOSSY_LEVELS)
+            * len(compression_config.FRAME_KEEP_RATIOS)
+            * len(compression_config.COLOR_KEEP_COUNTS)
+        )
 
         expected_remaining = (2 * total_jobs_per_gif) - 1  # 2 GIFs minus 1 complete job
         assert len(filtered_jobs) == expected_remaining
@@ -478,17 +530,25 @@ class TestResumeIntegration:
             complete_job.engine,
             complete_job.lossy,
             complete_job.frame_keep_ratio,
-            complete_job.color_keep_count
+            complete_job.color_keep_count,
         )
 
         filtered_keys = {
-            (job.metadata.gif_sha, job.engine, job.lossy, job.frame_keep_ratio, job.color_keep_count)
+            (
+                job.metadata.gif_sha,
+                job.engine,
+                job.lossy,
+                job.frame_keep_ratio,
+                job.color_keep_count,
+            )
             for job in filtered_jobs
         }
 
         assert complete_job_key not in filtered_keys
 
-    def test_resume_cleanup_failed_partial_files(self, test_config, sample_jobs, temp_dirs):
+    def test_resume_cleanup_failed_partial_files(
+        self, test_config, sample_jobs, temp_dirs
+    ):
         """Test cleanup of partial files when unlink fails."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=True)
@@ -502,13 +562,15 @@ class TestResumeIntegration:
         partial_job.output_path.touch()
 
         # Mock unlink to fail
-        with patch.object(Path, 'unlink', side_effect=OSError("Permission denied")):
+        with patch.object(Path, "unlink", side_effect=OSError("Permission denied")):
             filtered_jobs = pipeline.filter_existing_jobs(sample_jobs, csv_path)
 
             # Should still return all jobs for processing despite cleanup failure
             assert len(filtered_jobs) == len(sample_jobs)
 
-    def test_resume_performance_large_csv(self, test_config, temp_dirs, sample_gif_metadata):
+    def test_resume_performance_large_csv(
+        self, test_config, temp_dirs, sample_gif_metadata
+    ):
         """Test resume performance with large CSV file."""
         compression_config, path_config = test_config
         pipeline = CompressionPipeline(compression_config, path_config, resume=True)
@@ -523,26 +585,28 @@ class TestResumeIntegration:
             remaining_chars = 64 - len(sha_num)
             sha_hex = sha_num + "a" * remaining_chars  # pad with 'a' to get 64 chars
 
-            large_records.append({
-                "gif_sha": sha_hex,
-                "orig_filename": f"test{i}.gif",
-                "engine": "gifsicle",
-                "engine_version": "1.94",
-                "lossy": str(i % 3 * 40),  # 0, 40, 80
-                "frame_keep_ratio": "1.0",
-                "color_keep_count": "256",
-                "kilobytes": "50.0",
-                "ssim": "0.95",
-                "render_ms": "1000",
-                "orig_kilobytes": "100.0",
-                "orig_width": "480",
-                "orig_height": "270",
-                "orig_frames": "24",
-                "orig_fps": "24.0",
-                "orig_n_colors": "128",
-                "entropy": "4.2",
-                "timestamp": "2024-01-01T10:00:00"
-            })
+            large_records.append(
+                {
+                    "gif_sha": sha_hex,
+                    "orig_filename": f"test{i}.gif",
+                    "engine": "gifsicle",
+                    "engine_version": "1.94",
+                    "lossy": str(i % 3 * 40),  # 0, 40, 80
+                    "frame_keep_ratio": "1.0",
+                    "color_keep_count": "256",
+                    "kilobytes": "50.0",
+                    "ssim": "0.95",
+                    "render_ms": "1000",
+                    "orig_kilobytes": "100.0",
+                    "orig_width": "480",
+                    "orig_height": "270",
+                    "orig_frames": "24",
+                    "orig_fps": "24.0",
+                    "orig_n_colors": "128",
+                    "entropy": "4.2",
+                    "timestamp": "2024-01-01T10:00:00",
+                }
+            )
 
         create_csv_file(csv_path, large_records)
 

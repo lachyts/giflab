@@ -13,6 +13,7 @@ from giflab.dynamic_pipeline import generate_all_pipelines
 # Helper to create a tiny 2-frame GIF for quick tests
 # ---------------------------------------------------------------------------
 
+
 def _make_test_gif(tmp_path: Path) -> Path:
     path = tmp_path / "test.gif"
     img1 = Image.new("RGB", (20, 20), color="red")
@@ -25,23 +26,30 @@ def _make_test_gif(tmp_path: Path) -> Path:
 # Variable-isolation tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.fast
-@pytest.mark.parametrize("variable", [
-    "frame_reduction",
-    "color_reduction",
-    "lossy_compression",
-])
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "frame_reduction",
+        "color_reduction",
+        "lossy_compression",
+    ],
+)
 def test_at_least_one_tool_available(variable):
     wrappers = tools_for_variable(variable)
     assert wrappers, f"No wrappers found for variable={variable}"
 
 
 @pytest.mark.fast
-@pytest.mark.parametrize("variable,params", [
-    ("frame_reduction", {"ratio": 1.0}),
-    ("color_reduction", {"colors": 256}),
-    ("lossy_compression", {"lossy_level": 0}),
-])
+@pytest.mark.parametrize(
+    "variable,params",
+    [
+        ("frame_reduction", {"ratio": 1.0}),
+        ("color_reduction", {"colors": 256}),
+        ("lossy_compression", {"lossy_level": 0}),
+    ],
+)
 def test_noop_wrapper_apply_succeeds(variable, params, tmp_path):
     # Pick the always-available no-operation wrapper for this variable
     wrappers = [w for w in tools_for_variable(variable) if w.NAME.startswith("none")]
@@ -62,6 +70,7 @@ def test_noop_wrapper_apply_succeeds(variable, params, tmp_path):
 # Dynamic pipeline generation tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.fast
 def test_generate_all_pipelines_non_empty():
     pipelines = generate_all_pipelines()
@@ -79,7 +88,9 @@ def test_pipeline_identifiers_unique():
 def test_collapsed_steps_order_and_length():
     pipelines = generate_all_pipelines()
     max_pipes = int(os.getenv("GIFLAB_MAX_PIPES", "50"))
-    assert len(pipelines) <= max_pipes, "Generated pipelines exceed GIFLAB_MAX_PIPES cap"
+    assert (
+        len(pipelines) <= max_pipes
+    ), "Generated pipelines exceed GIFLAB_MAX_PIPES cap"
     for p in pipelines:
         # Steps must be in non-decreasing variable order according to spec
         order_map = {

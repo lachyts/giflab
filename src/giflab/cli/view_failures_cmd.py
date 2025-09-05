@@ -42,7 +42,9 @@ from .utils import handle_generic_error
     is_flag=True,
     help="Show detailed error information including stack traces",
 )
-def view_failures(results_dir: Path, error_type: str, limit: int, detailed: bool) -> None:
+def view_failures(
+    results_dir: Path, error_type: str, limit: int, detailed: bool
+) -> None:
     """
     View detailed information about failed pipelines from elimination testing.
 

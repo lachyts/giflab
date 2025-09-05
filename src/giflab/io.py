@@ -8,11 +8,12 @@ import os
 import signal
 import sys
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from shutil import copy2, move
-from typing import Any, Generator, cast
+from typing import Any, cast
 
 # Cross-platform file locking
 if sys.platform == "win32":
@@ -31,6 +32,7 @@ if sys.platform == "win32":
             msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
         except OSError:
             pass
+
 else:
     import fcntl
 

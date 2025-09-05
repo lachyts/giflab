@@ -123,12 +123,12 @@ def frame_reduce(
 
     # Calculate which frames to keep using standardized algorithm
     frames_to_keep = calculate_frame_indices(total_frames, keep_ratio)
-    
+
     # Convert to ImageMagick deletion pattern
     # Keep frames by deleting all others
     all_frames = set(range(total_frames))
     frames_to_delete = sorted(all_frames - set(frames_to_keep))
-    
+
     if not frames_to_delete:
         # Nothing to delete, just copy
         start = time.perf_counter()
@@ -142,32 +142,32 @@ def frame_reduce(
             "command": "cp",
             "kilobytes": size_kb,
         }
-    
+
     # Use simpler approach: delete frames and set uniform delay
     adjusted_delays = calculate_adjusted_delays(original_delays, frames_to_keep)
-    
+
     # Build ImageMagick command with timing and loop preservation
     cmd = [_magick_binary(), str(input_path), "-coalesce"]
-    
+
     # Delete unwanted frames
     delete_pattern = ",".join(str(frame) for frame in frames_to_delete)
     cmd.extend(["-delete", delete_pattern])
-    
+
     # Set uniform delay based on average of adjusted delays
     if adjusted_delays:
         avg_delay = sum(adjusted_delays) / len(adjusted_delays)
         delay_ticks = max(2, int(avg_delay // 10))  # Convert ms to ticks (1/100s)
         cmd.extend(["-delay", str(delay_ticks)])
-    
+
     # Preserve loop count
     if loop_count is not None:
         cmd.extend(["-loop", str(loop_count)])
     else:
         cmd.extend(["-loop", "0"])  # Default to infinite loop
-    
+
     # Optimize and save
     cmd.extend(["-layers", "optimize", str(output_path)])
-    
+
     return run_command(cmd, engine="imagemagick", output_path=output_path)
 
 

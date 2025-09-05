@@ -205,7 +205,10 @@ def test_bayer_scale_performance(
             try:
                 # Generate output with this Bayer scale
                 result = color_reduce_with_dithering(
-                    input_path, output_path, colors=colors, dithering_method=cast(FFmpegDitheringMethod, method)
+                    input_path,
+                    output_path,
+                    colors=colors,
+                    dithering_method=cast(FFmpegDitheringMethod, method),
                 )
 
                 # Calculate quality metrics
@@ -245,7 +248,10 @@ def analyze_dithering_by_content_type(
                     output_path = Path(tmpdir) / f"test_{method.replace(':', '_')}.gif"
 
                     result = color_reduce_with_dithering(
-                        gif_path, output_path, colors=colors, dithering_method=cast(FFmpegDitheringMethod, method)
+                        gif_path,
+                        output_path,
+                        colors=colors,
+                        dithering_method=cast(FFmpegDitheringMethod, method),
                     )
 
                     results[content_type][method] = result
@@ -257,7 +263,7 @@ def analyze_dithering_by_content_type(
 
 
 def validate_sierra2_vs_floyd_steinberg(
-    test_gifs: list[Path]
+    test_gifs: list[Path],
 ) -> dict[str, dict[str, Any]]:
     """Validate research finding that Sierra2 offers better balance than Floyd-Steinberg.
 
@@ -277,7 +283,10 @@ def validate_sierra2_vs_floyd_steinberg(
                     output_path = Path(tmpdir) / f"{method}_test.gif"
 
                     result = color_reduce_with_dithering(
-                        gif_path, output_path, colors=16, dithering_method=cast(FFmpegDitheringMethod, method)
+                        gif_path,
+                        output_path,
+                        colors=16,
+                        dithering_method=cast(FFmpegDitheringMethod, method),
                     )
 
                     comparison_results[gif_name][method] = result

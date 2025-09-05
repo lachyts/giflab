@@ -61,7 +61,7 @@ class TestCalculateEntropy:
     def test_entropy_uniform_image(self):
         """Test entropy calculation for uniform (low entropy) image."""
         # Create a uniform gray image
-        uniform_img = Image.new('L', (10, 10), color=128)
+        uniform_img = Image.new("L", (10, 10), color=128)
         entropy = calculate_entropy(uniform_img)
 
         # Uniform image should have very low entropy (close to 0)
@@ -72,7 +72,7 @@ class TestCalculateEntropy:
         """Test entropy calculation for random (high entropy) image."""
         # Create a random image
         random_array = np.random.randint(0, 256, (50, 50), dtype=np.uint8)
-        random_img = Image.fromarray(random_array, mode='L')
+        random_img = Image.fromarray(random_array, mode="L")
         entropy = calculate_entropy(random_img)
 
         # Random image should have higher entropy
@@ -82,7 +82,7 @@ class TestCalculateEntropy:
     def test_entropy_color_image(self):
         """Test entropy calculation converts color to grayscale."""
         # Create a color image
-        color_img = Image.new('RGB', (10, 10), color=(255, 0, 0))
+        color_img = Image.new("RGB", (10, 10), color=(255, 0, 0))
         entropy = calculate_entropy(color_img)
 
         # Should work without error and return reasonable value
@@ -105,7 +105,7 @@ class TestGifMetadata:
             orig_frames=10,
             orig_fps=24.0,
             orig_n_colors=256,
-            entropy=5.5
+            entropy=5.5,
         )
 
         assert metadata.gif_sha == "abc123"
@@ -131,7 +131,7 @@ class TestGifMetadata:
             orig_height=100,
             orig_frames=10,
             orig_fps=24.0,
-            orig_n_colors=256
+            orig_n_colors=256,
         )
 
         assert metadata.entropy is None
@@ -151,7 +151,7 @@ class TestExtractGifMetadata:
         frames = []
         for i in range(3):
             # Create frames with different colors
-            img = Image.new('P', (20, 20), color=i * 80)
+            img = Image.new("P", (20, 20), color=i * 80)
             # Add a simple palette
             palette = []
             for j in range(256):
@@ -165,7 +165,7 @@ class TestExtractGifMetadata:
             save_all=True,
             append_images=frames[1:],
             duration=100,  # 100ms per frame
-            loop=0
+            loop=0,
         )
 
         return gif_path
@@ -199,8 +199,8 @@ class TestExtractGifMetadata:
         """Test error handling for non-GIF file."""
         # Create a PNG file instead of GIF
         png_path = tmp_path / "test.png"
-        img = Image.new('RGB', (10, 10), color=(255, 0, 0))
-        img.save(png_path, 'PNG')
+        img = Image.new("RGB", (10, 10), color=(255, 0, 0))
+        img.save(png_path, "PNG")
 
         with pytest.raises(ValueError, match="File is not a GIF"):
             extract_gif_metadata(png_path)
@@ -221,13 +221,13 @@ class TestExtractGifMetadata:
         gif_path = tmp_path / "single.gif"
 
         # Create a single frame GIF
-        img = Image.new('P', (50, 30), color=100)
+        img = Image.new("P", (50, 30), color=100)
         palette = []
         for i in range(256):
             palette.extend([i, 0, 0])  # Red gradient palette
         img.putpalette(palette)
 
-        img.save(gif_path, 'GIF')
+        img.save(gif_path, "GIF")
         return gif_path
 
     @pytest.mark.fast
@@ -274,12 +274,12 @@ class TestMetaIntegration:
             # Create progressively more complex frames
             if i == 0:
                 # Simple solid color
-                img = Image.new('P', (40, 40), color=50)
+                img = Image.new("P", (40, 40), color=50)
             else:
                 # Add some noise/pattern
                 arr = np.random.randint(0, 100, (40, 40), dtype=np.uint8)
-                img = Image.fromarray(arr, mode='L')
-                img = img.convert('P')
+                img = Image.fromarray(arr, mode="L")
+                img = img.convert("P")
 
             # Add palette
             palette = list(range(256)) * 3
@@ -292,7 +292,7 @@ class TestMetaIntegration:
             save_all=True,
             append_images=frames[1:],
             duration=50,  # 50ms per frame = 20 FPS
-            loop=0
+            loop=0,
         )
 
         # Extract metadata

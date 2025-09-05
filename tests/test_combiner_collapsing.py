@@ -20,7 +20,10 @@ from giflab.tool_wrappers import (
 @pytest.fixture
 def dummy_gif(tmp_path: Path) -> Path:
     p = tmp_path / "dummy.gif"
-    p.write_bytes(b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04" b"\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02L\x01\x00;")
+    p.write_bytes(
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04"
+        b"\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02L\x01\x00;"
+    )
     return p
 
 
@@ -40,11 +43,13 @@ def _metadata_for(path: Path) -> GifMetadata:  # minimal helper
 def test_mixed_tool_collapsing(tmp_path: Path, dummy_gif: Path):
     """Animately+Animately+Gifsicle should collapse into *two* CLI calls."""
     # Build pipeline: Animately frame → AnimatelyColorReducer → Gifsicle lossy
-    pipeline = Pipeline([
-        PipelineStep("frame_reduction", AnimatelyFrameReducer),
-        PipelineStep("color_reduction", AnimatelyColorReducer),
-        PipelineStep("lossy_compression", GifsicleLossyBasic),
-    ])
+    pipeline = Pipeline(
+        [
+            PipelineStep("frame_reduction", AnimatelyFrameReducer),
+            PipelineStep("color_reduction", AnimatelyColorReducer),
+            PipelineStep("lossy_compression", GifsicleLossyBasic),
+        ]
+    )
 
     # Minimal ExperimentalPipeline
     cfg = ExperimentalConfig(ENABLE_DETAILED_ANALYSIS=False)
@@ -67,10 +72,13 @@ def test_mixed_tool_collapsing(tmp_path: Path, dummy_gif: Path):
     # Patch combiners dict so collapsing uses mocks
     from giflab import combiner_registry as _cr
 
-    with patch.dict(_cr._COMBINERS, {
-        "animately": lambda *a, **k: {"render_ms": 1},
-        "gifsicle": lambda *a, **k: {"render_ms": 1},
-    }):
+    with patch.dict(
+        _cr._COMBINERS,
+        {
+            "animately": lambda *a, **k: {"render_ms": 1},
+            "gifsicle": lambda *a, **k: {"render_ms": 1},
+        },
+    ):
         res = runner._execute_dynamic_pipeline(job)
 
     # result should contain two steps (animately group + gifsicle group)
@@ -84,16 +92,21 @@ def test_mixed_tool_collapsing(tmp_path: Path, dummy_gif: Path):
         ("ffmpeg", "FFmpegColorReducer", "FFmpegLossyCompressor"),
     ],
 )
-def test_placeholder_combiner_groups(tmp_path: Path, dummy_gif: Path, group, color_cls, lossy_cls):
+def test_placeholder_combiner_groups(
+    tmp_path: Path, dummy_gif: Path, group, color_cls, lossy_cls
+):
     import importlib
+
     tw_mod = importlib.import_module("giflab.tool_wrappers")
     color_cls_obj = getattr(tw_mod, color_cls)
     lossy_cls_obj = getattr(tw_mod, lossy_cls)
 
-    pipeline = Pipeline([
-        PipelineStep("color_reduction", color_cls_obj),
-        PipelineStep("lossy_compression", lossy_cls_obj),
-    ])
+    pipeline = Pipeline(
+        [
+            PipelineStep("color_reduction", color_cls_obj),
+            PipelineStep("lossy_compression", lossy_cls_obj),
+        ]
+    )
 
     cfg = ExperimentalConfig(ENABLE_DETAILED_ANALYSIS=False)
     runner = ExperimentalPipeline(cfg, workers=1)

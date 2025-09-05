@@ -36,7 +36,9 @@ from .utils import (
 )
 @click.option(
     "--sampling",
-    type=click.Choice(["representative", "full", "factorial", "progressive", "targeted", "quick"]),
+    type=click.Choice(
+        ["representative", "full", "factorial", "progressive", "targeted", "quick"]
+    ),
     default="representative",
     help="Sampling strategy to optimize testing time (default: representative)",
 )
@@ -129,7 +131,12 @@ def run(
         # Handle operations that don't need RAW_DIR
         if list_presets:
             # Create pipeline runner with settings
-            runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, extract_frames=extract_frames)
+            runner = GifLabRunner(
+                output_dir,
+                use_gpu=use_gpu,
+                use_cache=use_cache,
+                extract_frames=extract_frames,
+            )
             try:
                 presets = runner.list_available_presets()
                 click.echo("🎯 Available Presets:")
@@ -150,18 +157,27 @@ def run(
                 # Create a dummy path that won't be used
                 validated_raw_dir = Path(".")
             else:
-                click.echo("❌ Error: RAW_DIR argument is required unless using --list-presets")
+                click.echo(
+                    "❌ Error: RAW_DIR argument is required unless using --list-presets"
+                )
                 click.echo("💡 Use 'giflab run --help' for usage information")
                 return
         else:
             # Validate RAW_DIR input
-            validated_raw_dir = validate_and_get_raw_dir(raw_dir, require_gifs=not estimate_time)
+            validated_raw_dir = validate_and_get_raw_dir(
+                raw_dir, require_gifs=not estimate_time
+            )
 
         # Validate worker count
         validated_workers = validate_and_get_worker_count(workers)
 
         # Create pipeline runner with settings
-        runner = GifLabRunner(output_dir, use_gpu=use_gpu, use_cache=use_cache, extract_frames=extract_frames)
+        runner = GifLabRunner(
+            output_dir,
+            use_gpu=use_gpu,
+            use_cache=use_cache,
+            extract_frames=extract_frames,
+        )
 
         # Clear cache if requested
         if clear_cache and runner.cache:
@@ -173,19 +189,25 @@ def run(
             # Use targeted preset approach
             try:
                 click.echo(f"🎯 Using targeted preset: {preset}")
-                
+
                 if estimate_time:
                     # Quick time estimate for preset
                     synthetic_gifs = runner.get_targeted_synthetic_gifs()
                     test_pipelines = runner.generate_targeted_pipelines(preset)
-                    total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+                    total_jobs = (
+                        len(synthetic_gifs)
+                        * len(test_pipelines)
+                        * len(runner.test_params)
+                    )
                     estimated_time = runner._estimate_execution_time(total_jobs)
-                    
+
                     click.echo(f"📊 Total jobs: {total_jobs:,}")
                     click.echo(f"⏱️ Estimated time: {estimated_time}")
-                    click.echo("✅ Time estimation complete. Remove --estimate-time to run analysis.")
+                    click.echo(
+                        "✅ Time estimation complete. Remove --estimate-time to run analysis."
+                    )
                     return
-                
+
                 # Run targeted analysis
                 elimination_result = runner.run_targeted_experiment(
                     preset_id=preset,
@@ -194,48 +216,60 @@ def run(
                     custom_gif_dir=validated_raw_dir,
                 )
                 analysis_type = f"targeted preset ({preset})"
-                
+
             except Exception as e:
                 click.echo(f"❌ Error with preset '{preset}': {e}")
                 click.echo("💡 Use --list-presets to see available presets")
-                
+
                 # Clean up any partially created experiment directory
                 try:
                     runner._cleanup_failed_experiment()
                 except Exception as cleanup_error:
-                    click.echo(f"⚠️ Warning: Failed to clean up experiment directory: {cleanup_error}")
-                
+                    click.echo(
+                        f"⚠️ Warning: Failed to clean up experiment directory: {cleanup_error}"
+                    )
+
                 return
         else:
             # Use traditional sampling approach
             from ..dynamic_pipeline import generate_all_pipelines
-            
+
             all_pipelines = generate_all_pipelines()
-            
+
             if sampling != "full":
-                test_pipelines = runner.select_pipelines_intelligently(all_pipelines, sampling)
+                test_pipelines = runner.select_pipelines_intelligently(
+                    all_pipelines, sampling
+                )
                 strategy_info = runner.SAMPLING_STRATEGIES[sampling]
                 click.echo(f"🧠 Sampling strategy: {strategy_info.name}")
                 click.echo(f"📋 {strategy_info.description}")
                 analysis_type = f"sampling ({sampling})"
             elif max_pipelines > 0 and max_pipelines < len(all_pipelines):
                 test_pipelines = all_pipelines[:max_pipelines]
-                click.echo(f"⚠️ Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines")
+                click.echo(
+                    f"⚠️ Limited testing: Using {max_pipelines} of {len(all_pipelines)} available pipelines"
+                )
                 analysis_type = f"limited testing ({max_pipelines} pipelines)"
             else:
                 test_pipelines = all_pipelines
-                click.echo("🔬 Full comprehensive testing: Using all available pipelines")
+                click.echo(
+                    "🔬 Full comprehensive testing: Using all available pipelines"
+                )
                 analysis_type = "full comprehensive"
 
             # Calculate job estimates
             synthetic_gifs = runner.generate_synthetic_gifs()
-            total_jobs = len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+            total_jobs = (
+                len(synthetic_gifs) * len(test_pipelines) * len(runner.test_params)
+            )
             estimated_time = runner._estimate_execution_time(total_jobs)
 
             if estimate_time:
                 click.echo(f"📊 Total jobs: {total_jobs:,}")
                 click.echo(f"⏱️ Estimated time: {estimated_time}")
-                click.echo("✅ Time estimation complete. Remove --estimate-time to run analysis.")
+                click.echo(
+                    "✅ Time estimation complete. Remove --estimate-time to run analysis."
+                )
                 return
 
             # Run traditional analysis
@@ -259,7 +293,7 @@ def run(
             click.echo("🚀 GPU acceleration: Enabled")
         else:
             click.echo("🖥️ GPU acceleration: Disabled")
-            
+
         if extract_frames:
             click.echo("🎞️ Frame extraction: Enabled")
         else:
@@ -267,23 +301,35 @@ def run(
 
         # Display results summary
         click.echo("\n📊 Analysis Results Summary:")
-        click.echo(f"   📉 Eliminated pipelines: {len(elimination_result.eliminated_pipelines)}")
-        click.echo(f"   ✅ Retained pipelines: {len(elimination_result.retained_pipelines)}")
-        
-        total_pipelines = len(elimination_result.eliminated_pipelines) + len(elimination_result.retained_pipelines)
+        click.echo(
+            f"   📉 Eliminated pipelines: {len(elimination_result.eliminated_pipelines)}"
+        )
+        click.echo(
+            f"   ✅ Retained pipelines: {len(elimination_result.retained_pipelines)}"
+        )
+
+        total_pipelines = len(elimination_result.eliminated_pipelines) + len(
+            elimination_result.retained_pipelines
+        )
         if total_pipelines > 0:
-            elimination_rate = (len(elimination_result.eliminated_pipelines) / total_pipelines * 100)
+            elimination_rate = (
+                len(elimination_result.eliminated_pipelines) / total_pipelines * 100
+            )
             click.echo(f"   📈 Elimination rate: {elimination_rate:.1f}%")
 
         # Show top performers
         if elimination_result.retained_pipelines:
             click.echo("\n🏆 Top performing pipelines:")
-            for i, pipeline in enumerate(list(elimination_result.retained_pipelines)[:5], 1):
+            for i, pipeline in enumerate(
+                list(elimination_result.retained_pipelines)[:5], 1
+            ):
                 click.echo(f"   {i}. {pipeline}")
 
         click.echo("\n✅ Compression analysis complete!")
         click.echo(f"📁 Results saved to: {output_dir}")
-        click.echo(f"💡 Use 'giflab select-pipelines {output_dir}/latest/results.csv --top 3' to get production configs")
+        click.echo(
+            f"💡 Use 'giflab select-pipelines {output_dir}/latest/results.csv --top 3' to get production configs"
+        )
 
     except KeyboardInterrupt:
         handle_keyboard_interrupt("Compression analysis")

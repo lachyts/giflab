@@ -251,13 +251,13 @@ def apply_lossy_compression(
 
 def _analyze_gif_disposal_complexity(input_path: Path) -> dict[str, Any]:
     """Analyze GIF structure to determine disposal method complexity.
-    
+
     This function examines the GIF frame structure to detect complex optimized GIFs
     that rely heavily on disposal methods and may be corrupted by frame reduction.
-    
+
     Args:
         input_path: Path to the input GIF file
-        
+
     Returns:
         Dictionary with complexity analysis:
         - complexity_score: Float 0.0-1.0 (higher = more complex disposal dependencies)
@@ -265,85 +265,88 @@ def _analyze_gif_disposal_complexity(input_path: Path) -> dict[str, Any]:
         - has_offsets: Boolean indicating frames use non-zero offsets
         - frame_size_variance: Standard deviation of frame sizes (normalized)
         - disposal_risk: Assessment of disposal corruption risk
-        
+
     Note:
         Uses ImageMagick identify to analyze frame structure without loading pixel data.
     """
     import re
     import statistics
     import subprocess
-    
+
     try:
         # Check if ImageMagick is available
-        imagemagick_tool = discover_tool('imagemagick')
+        imagemagick_tool = discover_tool("imagemagick")
         if not imagemagick_tool.available:
             # Fallback to low complexity if ImageMagick is unavailable
             return {
-                'complexity_score': 0.0,
-                'has_variable_frames': False,
-                'has_offsets': False,
-                'frame_size_variance': 0.0,
-                'disposal_risk': 'low'
+                "complexity_score": 0.0,
+                "has_variable_frames": False,
+                "has_offsets": False,
+                "frame_size_variance": 0.0,
+                "disposal_risk": "low",
             }
-        
+
         # Use ImageMagick identify to get frame geometry information
         result = subprocess.run(
-            ['identify', str(input_path)],
-            capture_output=True, text=True, timeout=30
+            ["identify", str(input_path)], capture_output=True, text=True, timeout=30
         )
-        
+
         if result.returncode != 0:
             # Fallback to low complexity if analysis fails
             return {
-                'complexity_score': 0.0,
-                'has_variable_frames': False,
-                'has_offsets': False,
-                'frame_size_variance': 0.0,
-                'disposal_risk': 'low'
+                "complexity_score": 0.0,
+                "has_variable_frames": False,
+                "has_offsets": False,
+                "frame_size_variance": 0.0,
+                "disposal_risk": "low",
             }
-        
+
         # Parse frame geometry information
-        lines = result.stdout.strip().split('\n')
+        lines = result.stdout.strip().split("\n")
         frame_data = []
-        
+
         for line in lines:
             # Extract geometry info: widthxheight canvasxcanvas+xoffset+yoffset
             # Example: "100x100 100x100+0+0" or "90x41 100x100+3+59"
-            geometry_match = re.search(r'(\d+)x(\d+)\s+\d+x\d+\+(\d+)\+(\d+)', line)
+            geometry_match = re.search(r"(\d+)x(\d+)\s+\d+x\d+\+(\d+)\+(\d+)", line)
             if geometry_match:
                 width = int(geometry_match.group(1))
                 height = int(geometry_match.group(2))
                 x_offset = int(geometry_match.group(3))
                 y_offset = int(geometry_match.group(4))
-                frame_data.append({
-                    'width': width,
-                    'height': height,
-                    'x_offset': x_offset,
-                    'y_offset': y_offset,
-                    'area': width * height
-                })
-        
+                frame_data.append(
+                    {
+                        "width": width,
+                        "height": height,
+                        "x_offset": x_offset,
+                        "y_offset": y_offset,
+                        "area": width * height,
+                    }
+                )
+
         if len(frame_data) <= 1:
             # Single frame or no data - low complexity
             return {
-                'complexity_score': 0.0,
-                'has_variable_frames': False,
-                'has_offsets': False,
-                'frame_size_variance': 0.0,
-                'disposal_risk': 'low'
+                "complexity_score": 0.0,
+                "has_variable_frames": False,
+                "has_offsets": False,
+                "frame_size_variance": 0.0,
+                "disposal_risk": "low",
             }
-        
+
         # Calculate complexity metrics
-        areas = [frame['area'] for frame in frame_data]
-        x_offsets = [frame['x_offset'] for frame in frame_data]
-        y_offsets = [frame['y_offset'] for frame in frame_data]
-        
+        areas = [frame["area"] for frame in frame_data]
+        x_offsets = [frame["x_offset"] for frame in frame_data]
+        y_offsets = [frame["y_offset"] for frame in frame_data]
+
         # Check for variable frame sizes
         has_variable_frames = len(set(areas)) > 1
-        
+
         # Check for non-zero offsets
-        has_offsets = any(x != 0 or y != 0 for x, y in zip(x_offsets, y_offsets, strict=True))
-        
+        has_offsets = any(
+            x != 0 or y != 0 for x, y in zip(x_offsets, y_offsets, strict=True)
+        )
+
         # Calculate frame size variance (normalized by max area)
         if len(areas) > 1:
             area_variance = statistics.stdev(areas)
@@ -351,71 +354,76 @@ def _analyze_gif_disposal_complexity(input_path: Path) -> dict[str, Any]:
             normalized_variance = area_variance / max_area if max_area > 0 else 0.0
         else:
             normalized_variance = 0.0
-        
+
         # Calculate overall complexity score
         complexity_score = 0.0
-        
+
         # Factor 1: Variable frame sizes (0.4 weight)
         if has_variable_frames:
             size_variation_ratio = len(set(areas)) / len(areas)
             complexity_score += 0.4 * size_variation_ratio
-        
+
         # Factor 2: Non-zero offsets (0.3 weight)
         if has_offsets:
-            unique_positions = len({(x, y) for x, y in zip(x_offsets, y_offsets, strict=True)})
+            unique_positions = len(
+                {(x, y) for x, y in zip(x_offsets, y_offsets, strict=True)}
+            )
             position_variation_ratio = unique_positions / len(frame_data)
             complexity_score += 0.3 * position_variation_ratio
-        
+
         # Factor 3: Frame size variance (0.3 weight)
         complexity_score += 0.3 * min(1.0, normalized_variance * 2.0)  # Cap at 1.0
-        
+
         # Determine disposal risk level
         if complexity_score >= 0.7:
-            disposal_risk = 'high'
+            disposal_risk = "high"
         elif complexity_score >= 0.4:
-            disposal_risk = 'medium'
+            disposal_risk = "medium"
         else:
-            disposal_risk = 'low'
-        
+            disposal_risk = "low"
+
         return {
-            'complexity_score': round(complexity_score, 3),
-            'has_variable_frames': has_variable_frames,
-            'has_offsets': has_offsets,
-            'frame_size_variance': round(normalized_variance, 3),
-            'disposal_risk': disposal_risk
+            "complexity_score": round(complexity_score, 3),
+            "has_variable_frames": has_variable_frames,
+            "has_offsets": has_offsets,
+            "frame_size_variance": round(normalized_variance, 3),
+            "disposal_risk": disposal_risk,
         }
-        
+
     except Exception:
         # Fallback to low complexity on any error
         return {
-            'complexity_score': 0.0,
-            'has_variable_frames': False,
-            'has_offsets': False,
-            'frame_size_variance': 0.0,
-            'disposal_risk': 'low'
+            "complexity_score": 0.0,
+            "has_variable_frames": False,
+            "has_offsets": False,
+            "frame_size_variance": 0.0,
+            "disposal_risk": "low",
         }
 
-def _select_optimal_disposal_method(input_path: Path, frame_keep_ratio: float, total_frames: int) -> str | None:
+
+def _select_optimal_disposal_method(
+    input_path: Path, frame_keep_ratio: float, total_frames: int
+) -> str | None:
     """Select optimal disposal method for gifsicle based on GIF content analysis.
-    
+
     This function analyzes the GIF structure and content to determine the best disposal method
     to use when reducing frames. It now includes intelligent detection of complex optimized GIFs
     that rely heavily on disposal methods.
-    
+
     Different disposal methods work better for different types of animations:
-    
+
     - none: Don't dispose of frame, leave it in place (good for solid backgrounds)
     - background: Clear frame to background before next frame (good for complex animations)
     - previous: Restore to previous undisposed frame (rarely optimal for frame reduction)
-    
+
     Args:
         input_path: Path to the input GIF file
         frame_keep_ratio: Ratio of frames to keep (0.0 to 1.0)
         total_frames: Total number of frames in the source GIF
-        
+
     Returns:
         Disposal method string ("none", "background", or None for default)
-        
+
     Note:
         Now uses GIF structural analysis to detect disposal complexity. For complex optimized
         GIFs with variable frame sizes and offsets, forces safer disposal methods regardless
@@ -424,40 +432,40 @@ def _select_optimal_disposal_method(input_path: Path, frame_keep_ratio: float, t
     try:
         # Analyze GIF structural complexity to detect disposal dependencies
         complexity_analysis = _analyze_gif_disposal_complexity(input_path)
-        
-        disposal_risk = complexity_analysis.get('disposal_risk', 'low')
-        complexity_score = complexity_analysis.get('complexity_score', 0.0)
-        has_variable_frames = complexity_analysis.get('has_variable_frames', False)
-        has_offsets = complexity_analysis.get('has_offsets', False)
-        
+
+        disposal_risk = complexity_analysis.get("disposal_risk", "low")
+        complexity_score = complexity_analysis.get("complexity_score", 0.0)
+        has_variable_frames = complexity_analysis.get("has_variable_frames", False)
+        has_offsets = complexity_analysis.get("has_offsets", False)
+
         # For high-complexity GIFs with disposal dependencies, use safer methods
-        if disposal_risk == 'high' or complexity_score >= 0.7:
+        if disposal_risk == "high" or complexity_score >= 0.7:
             # High complexity: Force background disposal to prevent corruption
             # This handles cases like animation_heavy with complex frame interdependencies
             return "background"
-        
-        elif disposal_risk == 'medium' or (has_variable_frames and has_offsets):
+
+        elif disposal_risk == "medium" or (has_variable_frames and has_offsets):
             # Medium complexity: Use background disposal for any frame reduction
             if frame_keep_ratio < 1.0:
                 return "background"
             else:
                 return None  # No frame reduction, preserve original disposal
-        
+
         # For low complexity GIFs, use the original ratio-based logic
         else:
             # For high frame reduction ratios (keeping < 50% of frames), disposal artifacts are more likely
             if frame_keep_ratio <= 0.5:
                 # For aggressive frame reduction on simple GIFs, let gifsicle preserve original disposal
                 return None
-                
+
             # For moderate frame reduction (keeping 50-80% of frames), background disposal often works well
             elif frame_keep_ratio <= 0.8:
                 return "background"
-                
+
             # For light frame reduction (keeping > 80% of frames), none disposal may preserve more detail
             else:
                 return "none"
-            
+
     except Exception:
         # If analysis fails, fall back to the original conservative logic
         if frame_keep_ratio <= 0.5:
@@ -541,7 +549,9 @@ def compress_with_gifsicle(
 
     # Add disposal method handling for frame reduction to prevent stacking artifacts
     if frame_keep_ratio < 1.0:
-        disposal_method = _select_optimal_disposal_method(input_path, frame_keep_ratio, total_frames)
+        disposal_method = _select_optimal_disposal_method(
+            input_path, frame_keep_ratio, total_frames
+        )
         if disposal_method:
             cmd.extend([f"--disposal={disposal_method}"])
 
@@ -576,21 +586,24 @@ def compress_with_gifsicle(
                 calculate_frame_indices,
                 extract_gif_timing_info,
             )
+
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]
-            
+
             # Calculate which frames to keep
             frame_indices = calculate_frame_indices(total_frames, frame_keep_ratio)
-            
+
             # Add frame selection arguments
             frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
             cmd.extend(frame_args)
-            
+
             # Add timing preservation arguments with adjusted delays
-            timing_args = build_gifsicle_timing_args(original_delays, frame_indices, loop_count)
+            timing_args = build_gifsicle_timing_args(
+                original_delays, frame_indices, loop_count
+            )
             cmd.extend(timing_args)
-            
+
         except Exception:
             # Fallback to old behavior if timing extraction fails
             frame_args = build_gifsicle_frame_args(frame_keep_ratio, total_frames)
@@ -601,13 +614,16 @@ def compress_with_gifsicle(
         # Even when not reducing frames, preserve timing and loop count
         try:
             from .frame_keep import build_gifsicle_timing_args, extract_gif_timing_info
+
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]
-            
+
             # No frame reduction, so use all frame indices
             frame_indices = list(range(len(original_delays)))
-            timing_args = build_gifsicle_timing_args(original_delays, frame_indices, loop_count)
+            timing_args = build_gifsicle_timing_args(
+                original_delays, frame_indices, loop_count
+            )
             cmd.extend(timing_args)
         except Exception:
             # Default to infinite loop
@@ -777,7 +793,7 @@ def compress_with_animately(
     if frame_keep_ratio < 1.0:
         frame_args = build_animately_frame_args(frame_keep_ratio, total_frames)
         cmd.extend(frame_args)
-        
+
         # Extract and preserve original timing information
         try:
             from .frame_keep import (
@@ -785,25 +801,26 @@ def compress_with_animately(
                 calculate_frame_indices,
                 extract_gif_timing_info,
             )
+
             timing_info = extract_gif_timing_info(input_path)
             original_delays = timing_info["frame_delays"]
             loop_count = timing_info["loop_count"]
-            
+
             # Calculate adjusted delays for remaining frames
             frame_indices = calculate_frame_indices(total_frames, frame_keep_ratio)
             adjusted_delays = calculate_adjusted_delays(original_delays, frame_indices)
-            
+
             # Use average delay to maintain timing consistency
             if adjusted_delays:
                 avg_delay = sum(adjusted_delays) / len(adjusted_delays)
                 cmd.extend(["--delay", str(int(avg_delay))])
-                
+
             # Preserve loop count
             if loop_count is not None:
                 cmd.extend(["--loops", str(loop_count)])
             else:
                 cmd.extend(["--loops", "0"])  # Default to infinite loop
-                
+
         except Exception:
             # Fallback: just preserve basic looping
             cmd.extend(["--loops", "0"])
@@ -811,6 +828,7 @@ def compress_with_animately(
         # Even when not reducing frames, preserve original loop count
         try:
             from .frame_keep import extract_gif_timing_info
+
             timing_info = extract_gif_timing_info(input_path)
             loop_count = timing_info["loop_count"]
             if loop_count is not None:
@@ -1034,7 +1052,7 @@ def get_compression_estimate(
 
 @contextmanager
 def _managed_temp_directory(
-    prefix: str = "animately_png_"
+    prefix: str = "animately_png_",
 ) -> Generator[Path, None, None]:
     """Context manager for temporary directory creation and cleanup.
 
@@ -1183,9 +1201,13 @@ def _extract_frame_timing(input_path: Path, total_frames: int) -> list[int]:
         logger.debug("Extracting frame timing information from GIF")
         with Image.open(input_path) as img:
             # Extract original FPS for debugging
-            original_fps = 1000.0 / img.info.get("duration", 100) if img.info.get("duration") else 10.0
+            original_fps = (
+                1000.0 / img.info.get("duration", 100)
+                if img.info.get("duration")
+                else 10.0
+            )
             logger.info(f"Original GIF FPS: {original_fps:.2f}")
-            
+
             for i in range(total_frames):
                 try:
                     img.seek(i)
@@ -1267,15 +1289,21 @@ def _generate_json_config(
 
         # Debug the frame delays in the JSON config
         sample_delays = [frame["delay"] for frame in frame_files[:5]]  # First 5 frames
-        avg_json_delay = sum(frame["delay"] for frame in frame_files) / len(frame_files) if frame_files else 0
+        avg_json_delay = (
+            sum(frame["delay"] for frame in frame_files) / len(frame_files)
+            if frame_files
+            else 0
+        )
         json_fps = 1000.0 / avg_json_delay if avg_json_delay > 0 else 0.0
-        
+
         logger.info(
             f"Generated JSON config with {len(frame_files)} frames, "
             f"lossy={json_config['lossy']}, "
             f"colors={json_config.get('colors', 'default')}"
         )
-        logger.info(f"JSON config delays - sample: {sample_delays}, avg: {avg_json_delay:.1f}ms, FPS: {json_fps:.2f}")
+        logger.info(
+            f"JSON config delays - sample: {sample_delays}, avg: {avg_json_delay:.1f}ms, FPS: {json_fps:.2f}"
+        )
         logger.debug(
             f"Generated JSON config with {len(frame_files)} frames, "
             f"lossy={json_config['lossy']}, "
@@ -1356,39 +1384,56 @@ def _execute_animately_advanced(
         logger.info(
             f"Compression completed in {render_ms}ms, output size: {output_size} bytes"
         )
-        
+
         # Validate that Animately preserved the timing correctly
         try:
             from .meta import extract_gif_metadata
+
             output_metadata = extract_gif_metadata(output_path)
             output_fps = output_metadata.orig_fps
-            
+
             # Calculate expected FPS from the JSON config we provided
             with open(json_config_path) as f:
                 config_data = json.load(f)
-            
-            if 'frames' in config_data and config_data['frames']:
-                frame_delays = [frame.get('delay', 100) for frame in config_data['frames']]
+
+            if "frames" in config_data and config_data["frames"]:
+                frame_delays = [
+                    frame.get("delay", 100) for frame in config_data["frames"]
+                ]
                 expected_avg_delay = sum(frame_delays) / len(frame_delays)
-                expected_fps = 1000.0 / expected_avg_delay if expected_avg_delay > 0 else 10.0
-                
-                fps_deviation = abs(output_fps - expected_fps) / expected_fps if expected_fps > 0 else 0
-                
-                logger.info(f"FPS validation: expected {expected_fps:.2f}, got {output_fps:.2f}, deviation {fps_deviation*100:.1f}%")
-                
+                expected_fps = (
+                    1000.0 / expected_avg_delay if expected_avg_delay > 0 else 10.0
+                )
+
+                fps_deviation = (
+                    abs(output_fps - expected_fps) / expected_fps
+                    if expected_fps > 0
+                    else 0
+                )
+
+                logger.info(
+                    f"FPS validation: expected {expected_fps:.2f}, got {output_fps:.2f}, deviation {fps_deviation*100:.1f}%"
+                )
+
                 if fps_deviation > 0.5:  # More than 50% FPS deviation
                     logger.error(
                         f"❌ Animately advanced-lossy timing corruption detected! "
                         f"Expected FPS: {expected_fps:.2f}, Got: {output_fps:.2f} "
                         f"(deviation: {fps_deviation*100:.1f}%)"
                     )
-                    logger.error("Known Animately bug: advanced-lossy mode does not preserve JSON delay values")
-                    
+                    logger.error(
+                        "Known Animately bug: advanced-lossy mode does not preserve JSON delay values"
+                    )
+
                     # Add timing corruption to stderr for tracking in results
                     timing_error = f"FPS corruption: expected {expected_fps:.2f}fps, got {output_fps:.2f}fps"
-                    stderr_output = f"{timing_error}. {result.stderr}" if result.stderr else timing_error
+                    stderr_output = (
+                        f"{timing_error}. {result.stderr}"
+                        if result.stderr
+                        else timing_error
+                    )
                     return render_ms, stderr_output
-            
+
         except Exception as e:
             logger.warning(f"Could not validate output timing: {e}")
 

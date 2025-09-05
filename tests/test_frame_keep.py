@@ -206,17 +206,21 @@ class TestValidateFrameKeepRatio:
 class TestGetFrameReductionInfo:
     """Tests for get_frame_reduction_info function."""
 
-    @patch('pathlib.Path.exists')
-    @patch('PIL.Image.open')
+    @patch("pathlib.Path.exists")
+    @patch("PIL.Image.open")
     def test_valid_gif_analysis(self, mock_open, mock_exists):
         """Test frame reduction analysis for valid GIF."""
         mock_exists.return_value = True
 
         # Mock PIL Image
         mock_img = MagicMock()
-        mock_img.format = 'GIF'
+        mock_img.format = "GIF"
         mock_img.n_frames = 3  # Explicitly set n_frames to an integer
-        mock_img.seek.side_effect = [None, None, EOFError()]  # 3 frames (2 seeks, then EOFError)
+        mock_img.seek.side_effect = [
+            None,
+            None,
+            EOFError(),
+        ]  # 3 frames (2 seeks, then EOFError)
         mock_img.tell.return_value = 0
         mock_open.return_value.__enter__.return_value = mock_img
 
@@ -229,7 +233,7 @@ class TestGetFrameReductionInfo:
         assert "frame_indices" in info
         assert abs(info["reduction_percent"] - 20.0) < 1e-10
 
-    @patch('pathlib.Path.exists')
+    @patch("pathlib.Path.exists")
     def test_missing_file(self, mock_exists):
         """Test error when input file doesn't exist."""
         mock_exists.return_value = False
@@ -242,21 +246,21 @@ class TestGetFrameReductionInfo:
         with pytest.raises(ValueError, match="not in supported ratios"):
             get_frame_reduction_info(Path("test.gif"), 0.33)
 
-    @patch('pathlib.Path.exists')
-    @patch('PIL.Image.open')
+    @patch("pathlib.Path.exists")
+    @patch("PIL.Image.open")
     def test_non_gif_file(self, mock_open, mock_exists):
         """Test error when file is not a GIF."""
         mock_exists.return_value = True
 
         mock_img = MagicMock()
-        mock_img.format = 'PNG'  # Not a GIF
+        mock_img.format = "PNG"  # Not a GIF
         mock_open.return_value.__enter__.return_value = mock_img
 
         with pytest.raises(ValueError, match="File is not a GIF"):
             get_frame_reduction_info(Path("test.png"), 0.8)
 
-    @patch('pathlib.Path.exists')
-    @patch('PIL.Image.open')
+    @patch("pathlib.Path.exists")
+    @patch("PIL.Image.open")
     def test_pil_error_handling(self, mock_open, mock_exists):
         """Test handling of PIL errors."""
         mock_exists.return_value = True
@@ -265,14 +269,14 @@ class TestGetFrameReductionInfo:
         with pytest.raises(IOError, match="Error reading GIF"):
             get_frame_reduction_info(Path("test.gif"), 0.8)
 
-    @patch('pathlib.Path.exists')
-    @patch('PIL.Image.open')
+    @patch("pathlib.Path.exists")
+    @patch("PIL.Image.open")
     def test_single_frame_gif(self, mock_open, mock_exists):
         """Test analysis of single frame GIF."""
         mock_exists.return_value = True
 
         mock_img = MagicMock()
-        mock_img.format = 'GIF'
+        mock_img.format = "GIF"
         mock_img.n_frames = 1  # Explicitly set n_frames to 1
         mock_img.seek.side_effect = [EOFError()]  # Only 1 frame
         mock_img.tell.return_value = 0

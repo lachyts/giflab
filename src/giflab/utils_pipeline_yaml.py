@@ -3,9 +3,14 @@ from __future__ import annotations
 """YAML helpers for persisting selected pipeline identifiers."""
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from types import ModuleType
+
+yaml: ModuleType | None
 try:
-    import yaml  # type: ignore
+    import yaml
 except ImportError:  # pragma: no cover
     yaml = None  # PyYAML is optional for core runtime
 
@@ -20,6 +25,7 @@ def _require_yaml() -> None:
 def read_pipelines_yaml(path: Path) -> list[str]:
     """Return list of pipeline identifiers from YAML file."""
     _require_yaml()
+    assert yaml is not None  # Type guard after _require_yaml check
     data = yaml.safe_load(path.read_text())
     if (
         not isinstance(data, dict)
@@ -35,5 +41,6 @@ def read_pipelines_yaml(path: Path) -> list[str]:
 def write_pipelines_yaml(path: Path, pipelines: list[str]) -> None:
     """Write list of identifiers to YAML."""
     _require_yaml()
+    assert yaml is not None  # Type guard after _require_yaml check
     content = {"pipelines": sorted(set(pipelines))}
     path.write_text(yaml.safe_dump(content, sort_keys=False))

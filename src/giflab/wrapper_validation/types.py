@@ -7,41 +7,45 @@ from typing import Any, Optional
 # Timing validation exception hierarchy
 class TimingValidationError(Exception):
     """Base exception for timing validation errors."""
+
     pass
 
 
 class TimingImportError(TimingValidationError):
     """Exception raised when timing validation modules cannot be imported."""
+
     pass
 
 
 class TimingCalculationError(TimingValidationError):
     """Exception raised when timing calculations fail."""
+
     pass
 
 
 class TimingFileError(TimingValidationError):
     """Exception raised when timing validation cannot access GIF files."""
+
     pass
 
 
 @dataclass
 class ValidationResult:
     """Result of wrapper output validation.
-    
+
     Provides structured information about validation success/failure with
     detailed context for debugging and analysis.
     """
-    
+
     is_valid: bool
-    validation_type: str  # "frame_count", "color_count", "timing", "quality", "integrity", 
-                         # "timing_grid_validation", "timing_drift", "frame_delay_consistency", 
-                         # "timing_validation_error"
+    validation_type: str  # "frame_count", "color_count", "timing", "quality", "integrity",
+    # "timing_grid_validation", "timing_drift", "frame_delay_consistency",
+    # "timing_validation_error"
     expected: Any
     actual: Any
     error_message: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self) -> None:
         """Validate required fields and set default error message."""
         if not self.is_valid and not self.error_message:
@@ -55,7 +59,7 @@ Timing-specific validation types and their expected data structures:
 timing_grid_validation:
     expected: {
         "max_drift_ms": int,           # Maximum acceptable timing drift
-        "duration_diff_threshold": int, # Maximum total duration difference  
+        "duration_diff_threshold": int, # Maximum total duration difference
         "alignment_accuracy_min": float, # Minimum alignment accuracy (0.0-1.0)
         "grid_ms": int                 # Grid size used for alignment
     }
@@ -77,12 +81,10 @@ timing_grid_validation:
 
 timing_validation_error:
     expected: "successful_timing_validation"
-    actual: "validation_exception" 
+    actual: "validation_exception"
     details: {
         "exception": str,         # Exception message
         "original_gif": str,      # Path to original GIF
         "compressed_gif": str     # Path to compressed GIF
     }
 """
-
-

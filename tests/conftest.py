@@ -9,7 +9,9 @@ import pytest
 from PIL import Image as _PILImage
 
 
-def _create_dummy_gif(path: _P, frames: int = 1, colors: int = 2) -> None:  # noqa: WPS110
+def _create_dummy_gif(
+    path: _P, frames: int = 1, colors: int = 2
+) -> None:  # noqa: WPS110
     """Create a small dummy GIF at *path* with *frames* and *colors*.
 
     Uses solid-color 10×10 frames; fast (<1 ms) and keeps repo slim.
@@ -292,7 +294,9 @@ def fast_compress(monkeypatch):
     import shutil
     from pathlib import Path as _Path
 
-    def _noop_copy(input_path: _Path, output_path: _Path, *args, **kwargs):  # noqa: D401
+    def _noop_copy(
+        input_path: _Path, output_path: _Path, *args, **kwargs
+    ):  # noqa: D401
         output_path = _Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(input_path, output_path)

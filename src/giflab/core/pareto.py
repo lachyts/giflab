@@ -13,7 +13,7 @@ import pandas as pd
 class ParetoAnalyzer:
     """Advanced Pareto frontier analysis for pipeline efficiency comparison."""
 
-    def __init__(self, results_df: pd.DataFrame, logger: Optional[logging.Logger] = None):
+    def __init__(self, results_df: pd.DataFrame, logger: logging.Logger | None = None):
         """Initialize the Pareto analyzer.
 
         Args:

@@ -223,7 +223,9 @@ def discover_tool(tool_key: str, engine_config: EngineConfig | None = None) -> T
     return ToolInfo(name=fallback_name, available=False, version=None)
 
 
-def verify_required_tools(engine_config: EngineConfig | None = None) -> dict[str, ToolInfo]:
+def verify_required_tools(
+    engine_config: EngineConfig | None = None,
+) -> dict[str, ToolInfo]:
     """Ensure all configured binaries are available – raise on failure.
 
     Args:
@@ -242,7 +244,9 @@ def verify_required_tools(engine_config: EngineConfig | None = None) -> dict[str
     return results
 
 
-def get_available_tools(engine_config: EngineConfig | None = None) -> dict[str, ToolInfo]:
+def get_available_tools(
+    engine_config: EngineConfig | None = None,
+) -> dict[str, ToolInfo]:
     """Get availability status for all supported tools without requiring them.
 
     Args:
