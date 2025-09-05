@@ -4,9 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from giflab import (
-    tools_for_variable,
-)
+from giflab import tools_for_variable
 from giflab.dynamic_pipeline import generate_all_pipelines
 
 # ---------------------------------------------------------------------------

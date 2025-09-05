@@ -34,9 +34,7 @@ from .config import DEFAULT_ENGINE_CONFIG
 # External engine imports - centralized at top level for consistency
 from .external_engines.ffmpeg import frame_reduce as ffmpeg_frame_reduce
 from .external_engines.ffmpeg import lossy_compress as ffmpeg_lossy_compress
-from .external_engines.ffmpeg_enhanced import (
-    FFmpegDitheringMethod,
-)
+from .external_engines.ffmpeg_enhanced import FFmpegDitheringMethod
 from .external_engines.ffmpeg_enhanced import (
     color_reduce_with_dithering as ffmpeg_color_reduce_with_dithering,
 )

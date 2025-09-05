@@ -3,8 +3,9 @@
 import json
 import tempfile
 from pathlib import Path
-from click.testing import CliRunner
+
 import pytest
+from click.testing import CliRunner
 
 from giflab.cli import main
 

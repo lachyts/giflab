@@ -22,7 +22,7 @@ Usage:
     # Access presets via global registry
     from giflab.core.targeted_presets import PRESET_REGISTRY
     preset = PRESET_REGISTRY.get("frame-focus")
-    
+
     # Or use via CLI
     poetry run python -m giflab run --preset frame-focus
 """

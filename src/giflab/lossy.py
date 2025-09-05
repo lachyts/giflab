@@ -50,7 +50,7 @@ from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
 from shutil import rmtree, which
-from typing import Any, Optional
+from typing import Any
 
 RUN_TIMEOUT = int(os.getenv("GIFLAB_RUN_TIMEOUT", "10"))
 

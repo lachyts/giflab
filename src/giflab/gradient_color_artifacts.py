@@ -1,0 +1,634 @@
+"""
+Gradient and color artifact detection for GIF compression validation.
+
+This module implements advanced gradient and color artifact detection metrics designed
+specifically for debugging compression failures, including:
+- Banding detection for gradient posterization using histogram analysis
+- Perceptual color validation using CIEDE2000 color differences
+- Smart patch sampling for efficient analysis
+"""
+
+import logging
+
+import cv2
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+try:
+    from skimage import color as skcolor
+
+    SKIMAGE_AVAILABLE = True
+except ImportError:
+    logger.warning(
+        "scikit-image not available. Color space conversion will use fallback methods."
+    )
+    SKIMAGE_AVAILABLE = False
+
+
+class GradientBandingDetector:
+    """Detects banding artifacts in gradients caused by posterization."""
+
+    def __init__(self, patch_size: int = 64, variance_threshold: float = 100.0):
+        """Initialize gradient banding detector.
+
+        Args:
+            patch_size: Size of analysis patches in pixels
+            variance_threshold: Variance threshold for identifying smooth regions
+        """
+        # Validate and set patch size
+        if patch_size <= 0:
+            raise ValueError(f"patch_size must be positive, got {patch_size}")
+        self.patch_size = max(8, patch_size)  # Minimum size for meaningful analysis
+
+        # Validate variance threshold
+        if variance_threshold < 0:
+            raise ValueError(
+                f"variance_threshold must be non-negative, got {variance_threshold}"
+            )
+        self.variance_threshold = variance_threshold
+
+    def detect_gradient_regions(
+        self, frame: np.ndarray, step_size: int | None = None
+    ) -> list[tuple[int, int, int, int]]:
+        """Identify smooth gradient regions in a frame.
+
+        Args:
+            frame: RGB frame as numpy array [H, W, 3]
+            step_size: Step size for sliding window (defaults to patch_size // 2)
+
+        Returns:
+            List of (x, y, width, height) tuples for gradient regions
+        """
+        if step_size is None:
+            step_size = self.patch_size // 2
+
+        # Ensure proper data type for OpenCV
+        if frame.dtype not in [np.uint8, np.uint16, np.float32]:
+            if frame.dtype in [np.int32, np.int64]:
+                # Convert integer types to uint8, clipping to valid range
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
+            else:
+                # Convert other types to float32
+                frame = frame.astype(np.float32)
+
+        # Convert to grayscale for gradient analysis
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        h, w = gray.shape
+
+        gradient_regions = []
+
+        for y in range(0, h - self.patch_size, step_size):
+            for x in range(0, w - self.patch_size, step_size):
+                patch = gray[y : y + self.patch_size, x : x + self.patch_size]
+
+                # Check if patch has gradient characteristics
+                if self._is_gradient_patch(patch):
+                    gradient_regions.append((x, y, self.patch_size, self.patch_size))
+
+        return self._merge_overlapping_regions(gradient_regions)
+
+    def _is_gradient_patch(self, patch: np.ndarray) -> bool:
+        """Check if a patch contains gradient characteristics."""
+        # Calculate gradients using Sobel operators
+        grad_x = cv2.Sobel(patch, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(patch, cv2.CV_64F, 0, 1, ksize=3)
+
+        # Calculate gradient magnitude
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+
+        # Check for smooth gradient characteristics:
+        # 1. Low variance (smooth region)
+        # 2. Consistent gradient direction
+        # 3. Non-zero gradient (not completely flat)
+
+        variance = float(np.var(patch))
+        grad_mean = float(np.mean(gradient_magnitude))
+        grad_std = float(np.std(gradient_magnitude))
+
+        # Smooth region with consistent gradients
+        is_smooth = variance < self.variance_threshold
+        has_gradient = grad_mean > 1.0  # Minimum gradient strength
+        is_consistent = grad_std / max(grad_mean, 1.0) < 0.8  # Consistent gradient
+
+        return is_smooth and has_gradient and is_consistent
+
+    def calculate_gradient_magnitude_histogram(
+        self, patch: np.ndarray, bins: int = 32
+    ) -> np.ndarray:
+        """Calculate gradient magnitude histogram for posterization analysis.
+
+        Args:
+            patch: Grayscale patch as numpy array
+            bins: Number of histogram bins
+
+        Returns:
+            Normalized histogram of gradient magnitudes (sums to 1.0)
+        """
+        # Calculate gradients
+        grad_x = cv2.Sobel(patch.astype(np.float32), cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(patch.astype(np.float32), cv2.CV_64F, 0, 1, ksize=3)
+
+        # Calculate gradient magnitude
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+
+        # Create histogram and manually normalize to sum to 1.0
+        hist, _ = np.histogram(gradient_magnitude.flatten(), bins=bins)
+        hist = hist.astype(np.float32)
+        hist_sum = np.sum(hist)
+        if hist_sum > 0:
+            hist = hist / hist_sum
+        else:
+            # Handle case where all gradients are zero (uniform patch)
+            hist = np.zeros(bins, dtype=np.float32)
+
+        return hist
+
+    def detect_contours_in_patches(self, patch: np.ndarray) -> int:
+        """Detect false contours in patch caused by posterization.
+
+        Args:
+            patch: Grayscale patch as numpy array
+
+        Returns:
+            Number of detected false contours
+        """
+        # Use edge detection to find contours
+        edges = cv2.Canny(patch.astype(np.uint8), 30, 100)
+
+        # Find contours
+        contours, _ = cv2.findContours(
+            edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        # Count significant contours (filter out noise)
+        significant_contours = 0
+        for contour in contours:
+            if cv2.contourArea(contour) > 10:  # Minimum area threshold
+                significant_contours += 1
+
+        return significant_contours
+
+    def calculate_banding_severity(
+        self, original_patch: np.ndarray, compressed_patch: np.ndarray
+    ) -> float:
+        """Calculate banding severity score for a patch pair.
+
+        Args:
+            original_patch: Original grayscale patch
+            compressed_patch: Compressed grayscale patch
+
+        Returns:
+            Banding severity score (0-100)
+        """
+        # Calculate gradient histograms
+        original_hist = self.calculate_gradient_magnitude_histogram(original_patch)
+        compressed_hist = self.calculate_gradient_magnitude_histogram(compressed_patch)
+
+        # Compare histograms using chi-squared distance
+        # Posterization creates spikes in gradient histogram
+        hist_diff = np.sum(
+            (original_hist - compressed_hist) ** 2
+            / (original_hist + compressed_hist + 1e-10)
+        )
+
+        # Count false contours in compressed version
+        original_contours = self.detect_contours_in_patches(original_patch)
+        compressed_contours = self.detect_contours_in_patches(compressed_patch)
+
+        # More contours in compressed = more false edges = more banding
+        contour_excess = max(0, compressed_contours - original_contours)
+
+        # Combine metrics into 0-100 severity score
+        # Weight histogram difference and contour excess
+        severity = (hist_diff * 30.0) + (contour_excess * 10.0)
+
+        # Clamp to 0-100 range
+        return float(min(100.0, max(0.0, severity)))
+
+    def detect_banding_artifacts(
+        self, original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+    ) -> dict[str, float]:
+        """Detect banding artifacts across frame pairs.
+
+        Args:
+            original_frames: List of original RGB frames
+            compressed_frames: List of compressed RGB frames
+
+        Returns:
+            Dictionary with banding detection metrics
+        """
+        if not original_frames or not compressed_frames:
+            return {
+                "banding_score_mean": 0.0,
+                "banding_score_p95": 0.0,
+                "banding_patch_count": 0,
+                "gradient_region_count": 0,
+            }
+
+        min_frame_count = min(len(original_frames), len(compressed_frames))
+        banding_scores = []
+        total_patches = 0
+        total_gradient_regions = 0
+
+        for i in range(min_frame_count):
+            original_frame = original_frames[i]
+            compressed_frame = compressed_frames[i]
+
+            # Ensure frames have the same shape
+            h, w = min(original_frame.shape[:2]), min(compressed_frame.shape[:2])
+            original_frame = original_frame[:h, :w]
+            compressed_frame = compressed_frame[:h, :w]
+
+            # Find gradient regions in original frame
+            gradient_regions = self.detect_gradient_regions(original_frame)
+            total_gradient_regions += len(gradient_regions)
+
+            # Analyze each gradient region
+            for x, y, patch_w, patch_h in gradient_regions:
+                # Extract patches
+                orig_patch = cv2.cvtColor(
+                    original_frame[y : y + patch_h, x : x + patch_w], cv2.COLOR_RGB2GRAY
+                )
+                comp_patch = cv2.cvtColor(
+                    compressed_frame[y : y + patch_h, x : x + patch_w],
+                    cv2.COLOR_RGB2GRAY,
+                )
+
+                # Calculate banding severity
+                severity = self.calculate_banding_severity(orig_patch, comp_patch)
+                banding_scores.append(severity)
+                total_patches += 1
+
+        if not banding_scores:
+            return {
+                "banding_score_mean": 0.0,
+                "banding_score_p95": 0.0,
+                "banding_patch_count": 0,
+                "gradient_region_count": total_gradient_regions,
+            }
+
+        return {
+            "banding_score_mean": float(np.mean(banding_scores)),
+            "banding_score_p95": float(np.percentile(banding_scores, 95)),
+            "banding_patch_count": total_patches,
+            "gradient_region_count": total_gradient_regions,
+        }
+
+    def _merge_overlapping_regions(
+        self, regions: list[tuple[int, int, int, int]]
+    ) -> list[tuple[int, int, int, int]]:
+        """Merge overlapping rectangular regions."""
+        if not regions:
+            return []
+
+        # Simple merge: combine regions that overlap significantly
+        merged = [regions[0]]
+
+        for region in regions[1:]:
+            x, y, w, h = region
+            merged_with_existing = False
+
+            for i, existing in enumerate(merged):
+                ex, ey, ew, eh = existing
+
+                # Check for overlap
+                overlap_x = max(0, min(x + w, ex + ew) - max(x, ex))
+                overlap_y = max(0, min(y + h, ey + eh) - max(y, ey))
+                overlap_area = overlap_x * overlap_y
+
+                region_area = w * h
+                existing_area = ew * eh
+
+                # Merge if overlap is significant
+                if overlap_area > 0.3 * min(region_area, existing_area):
+                    new_x = min(x, ex)
+                    new_y = min(y, ey)
+                    new_w = max(x + w, ex + ew) - new_x
+                    new_h = max(y + h, ey + eh) - new_y
+                    merged[i] = (new_x, new_y, new_w, new_h)
+                    merged_with_existing = True
+                    break
+
+            if not merged_with_existing:
+                merged.append(region)
+
+        return merged
+
+
+class PerceptualColorValidator:
+    """Validates color fidelity using perceptual color difference metrics."""
+
+    def __init__(self, patch_size: int = 64, jnd_thresholds: list[float] | None = None):
+        """Initialize perceptual color validator.
+
+        Args:
+            patch_size: Size of analysis patches in pixels
+            jnd_thresholds: Just Noticeable Difference thresholds for ΔE00
+        """
+        self.patch_size = patch_size
+        self.jnd_thresholds = jnd_thresholds or [1.0, 2.0, 3.0, 5.0]
+
+    def rgb_to_lab(self, rgb_image: np.ndarray) -> np.ndarray:
+        """Convert RGB image to CIELAB color space.
+
+        Args:
+            rgb_image: RGB image as numpy array [H, W, 3] with values 0-255
+
+        Returns:
+            Lab image as numpy array [H, W, 3]
+        """
+        if not SKIMAGE_AVAILABLE:
+            # Fallback: simple RGB approximation (not accurate but functional)
+            logger.warning(
+                "Using RGB approximation for Lab conversion - results may be inaccurate"
+            )
+            return rgb_image.astype(np.float32)
+
+        # Ensure proper data type and range
+        if rgb_image.dtype == np.uint8:
+            rgb_normalized = rgb_image.astype(np.float32) / 255.0
+        else:
+            rgb_normalized = rgb_image.astype(np.float32)
+            if rgb_normalized.max() > 1.0:
+                rgb_normalized /= 255.0
+
+        # Convert to Lab using scikit-image
+        try:
+            lab_image = skcolor.rgb2lab(rgb_normalized)
+            return np.asarray(lab_image, dtype=np.float32)
+        except Exception as e:
+            logger.error(f"Failed to convert RGB to Lab: {e}")
+            # Return RGB as fallback
+            return rgb_image.astype(np.float32)
+
+    def calculate_deltae2000(self, lab1: np.ndarray, lab2: np.ndarray) -> np.ndarray:
+        """Calculate CIEDE2000 color difference.
+
+        Args:
+            lab1: First Lab color array [..., 3]
+            lab2: Second Lab color array [..., 3]
+
+        Returns:
+            ΔE00 values with same shape as input (minus last dimension)
+        """
+        # This is a simplified implementation of CIEDE2000
+        # For production use, consider using colormath library or full implementation
+
+        # Extract L*, a*, b* components
+        L1, a1, b1 = lab1[..., 0], lab1[..., 1], lab1[..., 2]
+        L2, a2, b2 = lab2[..., 0], lab2[..., 1], lab2[..., 2]
+
+        # Calculate differences
+        delta_L = L2 - L1
+        delta_a = a2 - a1
+        delta_b = b2 - b1
+
+        # Calculate chroma and hue
+        C1 = np.sqrt(a1**2 + b1**2)
+        C2 = np.sqrt(a2**2 + b2**2)
+        delta_C = C2 - C1
+
+        delta_H_squared = delta_a**2 + delta_b**2 - delta_C**2
+        delta_H_squared = np.maximum(0, delta_H_squared)  # Avoid negative values
+        delta_H = np.sqrt(delta_H_squared)
+
+        # Simplified CIEDE2000 approximation
+        # This omits the complex weighting functions for simplicity
+        # For high accuracy, implement full CIEDE2000 formula
+
+        # Average chroma
+        C_avg = (C1 + C2) / 2.0
+
+        # Lightness weighting
+        L_avg = (L1 + L2) / 2.0
+        SL = 1.0 + (0.015 * (L_avg - 50) ** 2) / np.sqrt(20 + (L_avg - 50) ** 2)
+
+        # Chroma weighting
+        SC = 1.0 + 0.045 * C_avg
+
+        # Hue weighting (simplified)
+        SH = 1.0 + 0.015 * C_avg
+
+        # Calculate ΔE00 (simplified)
+        delta_E00 = np.sqrt(
+            (delta_L / SL) ** 2 + (delta_C / SC) ** 2 + (delta_H / SH) ** 2
+        )
+
+        return np.asarray(delta_E00, dtype=np.float32)
+
+    def sample_color_patches(
+        self, frame: np.ndarray, num_samples: int = 16
+    ) -> list[tuple[int, int, int, int]]:
+        """Smart sampling of color patches from frame.
+
+        Args:
+            frame: RGB frame as numpy array
+            num_samples: Target number of patches to sample
+
+        Returns:
+            List of (x, y, width, height) tuples for sampled patches
+        """
+        h, w = frame.shape[:2]
+
+        # Ensure we can fit the patches
+        max_patches_x = max(1, w // self.patch_size)
+        max_patches_y = max(1, h // self.patch_size)
+        max_patches = max_patches_x * max_patches_y
+
+        actual_samples = min(num_samples, max_patches)
+
+        patches: list[tuple[int, int, int, int]] = []
+
+        if actual_samples <= max_patches_x * max_patches_y:
+            # Grid sampling with some randomness
+            step_x = max(1, max_patches_x // int(np.sqrt(actual_samples)))
+            step_y = max(1, max_patches_y // int(np.sqrt(actual_samples)))
+
+            for y in range(0, max_patches_y, step_y):
+                for x in range(0, max_patches_x, step_x):
+                    if len(patches) >= actual_samples:
+                        break
+
+                    # Convert grid position to pixel coordinates
+                    px = x * self.patch_size
+                    py = y * self.patch_size
+
+                    # Ensure patch fits within frame
+                    if px + self.patch_size <= w and py + self.patch_size <= h:
+                        patches.append((px, py, self.patch_size, self.patch_size))
+
+                if len(patches) >= actual_samples:
+                    break
+
+        return patches[:actual_samples]
+
+    def calculate_color_difference_metrics(
+        self, original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+    ) -> dict[str, float]:
+        """Calculate perceptual color difference metrics.
+
+        Args:
+            original_frames: List of original RGB frames
+            compressed_frames: List of compressed RGB frames
+
+        Returns:
+            Dictionary with color difference metrics
+        """
+        if not original_frames or not compressed_frames:
+            return {
+                "deltae_mean": 0.0,
+                "deltae_p95": 0.0,
+                "deltae_max": 0.0,
+                "deltae_pct_gt1": 0.0,
+                "deltae_pct_gt2": 0.0,
+                "deltae_pct_gt3": 0.0,
+                "deltae_pct_gt5": 0.0,
+                "color_patch_count": 0,
+            }
+
+        min_frame_count = min(len(original_frames), len(compressed_frames))
+        deltae_values = []
+        total_patches = 0
+
+        for i in range(min_frame_count):
+            original_frame = original_frames[i]
+            compressed_frame = compressed_frames[i]
+
+            # Ensure frames have the same shape
+            h, w = min(original_frame.shape[:2]), min(compressed_frame.shape[:2])
+            original_frame = original_frame[:h, :w]
+            compressed_frame = compressed_frame[:h, :w]
+
+            # Sample color patches
+            patches = self.sample_color_patches(original_frame)
+
+            for x, y, patch_w, patch_h in patches:
+                # Extract patches
+                orig_patch = original_frame[y : y + patch_h, x : x + patch_w]
+                comp_patch = compressed_frame[y : y + patch_h, x : x + patch_w]
+
+                # Convert to Lab color space
+                orig_lab = self.rgb_to_lab(orig_patch)
+                comp_lab = self.rgb_to_lab(comp_patch)
+
+                # Calculate ΔE00 for patch
+                patch_deltae = self.calculate_deltae2000(orig_lab, comp_lab)
+
+                # Use mean ΔE for this patch
+                mean_deltae = float(np.mean(patch_deltae))
+                deltae_values.append(mean_deltae)
+                total_patches += 1
+
+        if not deltae_values:
+            return {
+                "deltae_mean": 0.0,
+                "deltae_p95": 0.0,
+                "deltae_max": 0.0,
+                "deltae_pct_gt1": 0.0,
+                "deltae_pct_gt2": 0.0,
+                "deltae_pct_gt3": 0.0,
+                "deltae_pct_gt5": 0.0,
+                "color_patch_count": total_patches,
+            }
+
+        deltae_array = np.array(deltae_values)
+
+        # Calculate threshold percentages
+        pct_gt1 = float(np.mean(deltae_array > 1.0) * 100)
+        pct_gt2 = float(np.mean(deltae_array > 2.0) * 100)
+        pct_gt3 = float(np.mean(deltae_array > 3.0) * 100)
+        pct_gt5 = float(np.mean(deltae_array > 5.0) * 100)
+
+        return {
+            "deltae_mean": float(np.mean(deltae_array)),
+            "deltae_p95": float(np.percentile(deltae_array, 95)),
+            "deltae_max": float(np.max(deltae_array)),
+            "deltae_pct_gt1": pct_gt1,
+            "deltae_pct_gt2": pct_gt2,
+            "deltae_pct_gt3": pct_gt3,
+            "deltae_pct_gt5": pct_gt5,
+            "color_patch_count": total_patches,
+        }
+
+
+# Main entry points for external use
+
+
+def calculate_banding_metrics(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> dict[str, float]:
+    """Main entry point for banding detection.
+
+    Args:
+        original_frames: List of original RGB frames
+        compressed_frames: List of compressed RGB frames
+
+    Returns:
+        Dictionary with banding detection metrics
+    """
+    detector = GradientBandingDetector()
+    return detector.detect_banding_artifacts(original_frames, compressed_frames)
+
+
+def calculate_perceptual_color_metrics(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> dict[str, float]:
+    """Main entry point for perceptual color validation.
+
+    Args:
+        original_frames: List of original RGB frames
+        compressed_frames: List of compressed RGB frames
+
+    Returns:
+        Dictionary with perceptual color difference metrics
+    """
+    validator = PerceptualColorValidator()
+    return validator.calculate_color_difference_metrics(
+        original_frames, compressed_frames
+    )
+
+
+def calculate_gradient_color_metrics(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> dict[str, float]:
+    """Combined entry point for all gradient and color metrics.
+
+    Args:
+        original_frames: List of original RGB frames
+        compressed_frames: List of compressed RGB frames
+
+    Returns:
+        Dictionary with all gradient and color artifact metrics
+    """
+    try:
+        banding_metrics = calculate_banding_metrics(original_frames, compressed_frames)
+        color_metrics = calculate_perceptual_color_metrics(
+            original_frames, compressed_frames
+        )
+
+        # Combine metrics
+        combined_metrics = {**banding_metrics, **color_metrics}
+
+        logger.debug(
+            f"Calculated gradient and color metrics: {len(combined_metrics)} metrics"
+        )
+        return combined_metrics
+
+    except Exception as e:
+        logger.error(f"Failed to calculate gradient and color metrics: {e}")
+        # Return empty metrics on failure
+        return {
+            "banding_score_mean": 0.0,
+            "banding_score_p95": 0.0,
+            "banding_patch_count": 0,
+            "gradient_region_count": 0,
+            "deltae_mean": 0.0,
+            "deltae_p95": 0.0,
+            "deltae_max": 0.0,
+            "deltae_pct_gt1": 0.0,
+            "deltae_pct_gt2": 0.0,
+            "deltae_pct_gt3": 0.0,
+            "deltae_pct_gt5": 0.0,
+            "color_patch_count": 0,
+        }

@@ -11,7 +11,7 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from .elimination_errors import ErrorTypes
 

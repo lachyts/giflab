@@ -1,21 +1,21 @@
 """Tests for external engine helper functions."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from giflab.external_engines.common import run_command
+import pytest
+
 from giflab.external_engines import (
-    imagemagick_color_reduce,
-    imagemagick_frame_reduce,
-    imagemagick_lossy_compress,
     ffmpeg_color_reduce,
     ffmpeg_frame_reduce,
     ffmpeg_lossy_compress,
     gifski_lossy_compress,
+    imagemagick_color_reduce,
+    imagemagick_frame_reduce,
+    imagemagick_lossy_compress,
 )
-
+from giflab.external_engines.common import run_command
 
 # ---------------------------------------------------------------------------
 # Fixtures

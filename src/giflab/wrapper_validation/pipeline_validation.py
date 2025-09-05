@@ -7,13 +7,13 @@ involve intermediate PNG sequences or multiple compression stages.
 
 import logging
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from PIL import Image
 
 from ..meta import extract_gif_metadata
 from .core import WrapperOutputValidator
-from .timing_validation import TimingGridValidator, validate_frame_timing_for_operation
+from .timing_validation import TimingGridValidator
 from .types import ValidationResult
 
 logger = logging.getLogger(__name__)

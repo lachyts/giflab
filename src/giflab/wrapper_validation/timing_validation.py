@@ -10,10 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 from PIL import Image
 
-from ..meta import extract_gif_metadata
 from .types import ValidationResult
 
 if TYPE_CHECKING:
@@ -52,10 +50,10 @@ class TimingGridValidator:
             config: ValidationConfig instance, or None to use default config
         """
         from ..config import DEFAULT_VALIDATION_CONFIG
-        
+
         # Use provided config or default
         cfg = config or DEFAULT_VALIDATION_CONFIG
-        
+
         self.grid_ms = cfg.TIMING_GRID_MS
         self.timing_thresholds = {
             "max_drift_ms": cfg.TIMING_MAX_DRIFT_MS,

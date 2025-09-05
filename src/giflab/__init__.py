@@ -125,9 +125,9 @@ except ModuleNotFoundError:  # Minimal fallback to avoid optional build deps
 # small, dependency-free symbols.
 
 from .analysis_tools import performance_matrix, pipeline_to_mermaid, recommend_tools
-from .capability_registry import all_single_variable_strategies
 
 # Capability registry --------------------------------------------------------
+from .capability_registry import all_single_variable_strategies
 from .capability_registry import tools_for as tools_for_variable
 from .system_tools import ToolInfo, verify_required_tools
 from .tool_interfaces import (
@@ -138,13 +138,12 @@ from .tool_interfaces import (
 )
 
 # Stage-2: capability wrappers ------------------------------------------------
-from .tool_wrappers import (
+from .tool_wrappers import (  # All Bayer scale variations for systematic elimination testing; Dithering-specific wrappers (research-based)
     AnimatelyAdvancedLossyCompressor,
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
     AnimatelyLossyCompressor,
     FFmpegColorReducer,
-    # All Bayer scale variations for systematic elimination testing
     FFmpegColorReducerBayerScale0,
     FFmpegColorReducerBayerScale1,
     FFmpegColorReducerBayerScale2,
@@ -163,7 +162,6 @@ from .tool_wrappers import (
     ImageMagickColorReducer,
     ImageMagickColorReducerFloydSteinberg,
     ImageMagickColorReducerNone,
-    # Dithering-specific wrappers (research-based)
     ImageMagickColorReducerRiemersma,
     ImageMagickFrameReducer,
     ImageMagickLossyCompressor,

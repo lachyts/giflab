@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 import pandas as pd
@@ -132,7 +132,9 @@ def validate_results(csv_file: Path, output: Path | None, content_type: str) -> 
                     # Run validation
                     quality_metrics = compressed_info["quality_metrics"]
                     if not isinstance(quality_metrics, dict):
-                        raise ValueError(f"Expected dict for quality_metrics, got {type(quality_metrics)}")
+                        raise ValueError(
+                            f"Expected dict for quality_metrics, got {type(quality_metrics)}"
+                        )
                     validation_result = validator.validate_compression_result(
                         original_metadata=metadata,
                         compression_metrics=quality_metrics,
@@ -278,7 +280,9 @@ def filter_results(
 
         if len(filtered_df) > 0:
             # Show validation status distribution
-            validation_counts = filtered_df["validation_status"].value_counts().to_dict()
+            validation_counts = (
+                filtered_df["validation_status"].value_counts().to_dict()
+            )
             click.echo("📈 Validation status distribution:")
             for status_val, count in validation_counts.items():
                 status_str = str(status_val)  # Ensure string type for dict lookup
@@ -373,7 +377,7 @@ def generate_report(csv_file: Path, format: str, output: Path | None) -> None:
         if format.lower() == "json":
             output_content = json.dumps(report_data, indent=2)
         else:  # text format
-            summary_data: dict[str, Any] = report_data['summary']  # type: ignore[assignment]
+            summary_data: dict[str, Any] = report_data["summary"]  # type: ignore[assignment]
             output_content = f"""🔍 Validation Analysis Report
 Generated from: {csv_file}
 Analysis Date: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -384,7 +388,9 @@ Validation Pass Rate: {summary_data['validation_pass_rate']}%
 
 📈 VALIDATION STATUS DISTRIBUTION
 """
-            validation_status_dist: dict[str, Any] = summary_data["validation_status_distribution"]
+            validation_status_dist: dict[str, Any] = summary_data[
+                "validation_status_distribution"
+            ]
             for status, count in validation_status_dist.items():
                 status_str = str(status)  # Ensure string type
                 status_emoji = {
@@ -404,7 +410,9 @@ Validation Pass Rate: {summary_data['validation_pass_rate']}%
 
             output_content += "\n⚙️ PIPELINE ANALYSIS\n"
             thresholds_analysis: dict[str, Any] = report_data["thresholds_analysis"]  # type: ignore[assignment]
-            most_failed_pipelines: dict[str, Any] = thresholds_analysis["most_failed_pipelines"]
+            most_failed_pipelines: dict[str, Any] = thresholds_analysis[
+                "most_failed_pipelines"
+            ]
             if most_failed_pipelines:
                 output_content += "Most Failed Pipelines:\n"
                 for pipeline, count in list(most_failed_pipelines.items())[:3]:

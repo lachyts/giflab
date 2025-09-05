@@ -4,12 +4,13 @@ Tests all new frame generation methods, targeted expansion strategy,
 and bug fixes added for the expanded synthetic dataset.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from giflab.core import GifLabRunner, SyntheticGifSpec, AnalysisResult
+import pytest
+
+from giflab.core import AnalysisResult, GifLabRunner, SyntheticGifSpec
 
 
 class TestNewFrameGenerationMethods:

@@ -3,7 +3,7 @@ from __future__ import annotations
 """YAML helpers for persisting selected pipeline identifiers."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from types import ModuleType

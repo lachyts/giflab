@@ -6,7 +6,7 @@ catastrophic quality failures while allowing normal compression degradation.
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..config import DEFAULT_METRICS_CONFIG
 from ..enhanced_metrics import calculate_composite_quality

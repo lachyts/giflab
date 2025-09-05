@@ -6,7 +6,7 @@ apply() methods and pipeline execution without disrupting their current function
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Import will be done locally to avoid circular imports
 from .core import WrapperOutputValidator

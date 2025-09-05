@@ -20,10 +20,8 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-import numpy as np
 from PIL import Image
 
 from .synthetic_gifs import SyntheticFrameGenerator, SyntheticGifSpec

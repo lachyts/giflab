@@ -1556,6 +1556,50 @@ def calculate_comprehensive_metrics(
                 "frame_count": len(compressed_frames),
             }
 
+        # Calculate enhanced gradient and color artifact metrics (Task 1.3 & 1.4)
+        gradient_color_metrics = {}
+        
+        # Default fallback metrics
+        default_gradient_metrics = {
+            "banding_score_mean": 0.0,
+            "banding_score_p95": 0.0,
+            "banding_patch_count": 0,
+            "gradient_region_count": 0,
+            "deltae_mean": 0.0,
+            "deltae_p95": 0.0,
+            "deltae_max": 0.0,
+            "deltae_pct_gt1": 0.0,
+            "deltae_pct_gt2": 0.0,
+            "deltae_pct_gt3": 0.0,
+            "deltae_pct_gt5": 0.0,
+            "color_patch_count": 0,
+        }
+        
+        try:
+            from .gradient_color_artifacts import calculate_gradient_color_metrics
+            logger.debug("Successfully imported gradient_color_artifacts module")
+            
+            gradient_color_metrics = calculate_gradient_color_metrics(
+                original_frames, compressed_frames
+            )
+            logger.debug("Successfully calculated gradient and color artifact metrics")
+            
+        except ImportError as e:
+            logger.info(f"Gradient and color artifacts module not available: {e}. Using fallback values.")
+            gradient_color_metrics = default_gradient_metrics
+            
+        except AttributeError as e:
+            logger.warning(f"Gradient and color artifacts function not found: {e}. Module may be incomplete.")
+            gradient_color_metrics = default_gradient_metrics
+            
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.error(f"Error calculating gradient and color artifacts: {e}. Using fallback values.")
+            gradient_color_metrics = default_gradient_metrics
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in gradient and color artifacts calculation: {e}. Using fallback values.")
+            gradient_color_metrics = default_gradient_metrics
+
         # Extract frame count information
         try:
             from .meta import extract_gif_metadata
@@ -1653,6 +1697,14 @@ def calculate_comprehensive_metrics(
 
         # Add enhanced temporal artifact metrics (Task 1.2)
         for metric_key, metric_value in enhanced_temporal_metrics.items():
+            result[metric_key] = (
+                float(metric_value)
+                if isinstance(metric_value, int | float)
+                else metric_value
+            )
+
+        # Add enhanced gradient and color artifact metrics (Task 1.3 & 1.4)
+        for metric_key, metric_value in gradient_color_metrics.items():
             result[metric_key] = (
                 float(metric_value)
                 if isinstance(metric_value, int | float)

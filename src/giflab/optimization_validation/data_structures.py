@@ -7,7 +7,7 @@ Defines the core data types used for validation results, statuses, and configura
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class ValidationStatus(Enum):

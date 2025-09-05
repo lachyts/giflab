@@ -1,34 +1,32 @@
 """Integration tests for updated tool wrappers."""
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from giflab.tool_wrappers import (
-    ImageMagickColorReducer,
-    ImageMagickFrameReducer,
-    ImageMagickLossyCompressor,
+import pytest
+
+from giflab.meta import extract_gif_metadata
+from giflab.tool_wrappers import (  # Dithering-specific wrappers; All Bayer scale variations
     FFmpegColorReducer,
-    FFmpegFrameReducer,
-    FFmpegLossyCompressor,
-    GifskiLossyCompressor,
-    # Dithering-specific wrappers
-    ImageMagickColorReducerRiemersma,
-    ImageMagickColorReducerFloydSteinberg,
-    ImageMagickColorReducerNone,
-    FFmpegColorReducerSierra2,
-    FFmpegColorReducerFloydSteinberg,
-    # All Bayer scale variations
     FFmpegColorReducerBayerScale0,
     FFmpegColorReducerBayerScale1,
     FFmpegColorReducerBayerScale2,
     FFmpegColorReducerBayerScale3,
     FFmpegColorReducerBayerScale4,
     FFmpegColorReducerBayerScale5,
+    FFmpegColorReducerFloydSteinberg,
     FFmpegColorReducerNone,
+    FFmpegColorReducerSierra2,
+    FFmpegFrameReducer,
+    FFmpegLossyCompressor,
+    GifskiLossyCompressor,
+    ImageMagickColorReducer,
+    ImageMagickColorReducerFloydSteinberg,
+    ImageMagickColorReducerNone,
+    ImageMagickColorReducerRiemersma,
+    ImageMagickFrameReducer,
+    ImageMagickLossyCompressor,
 )
-from giflab.meta import extract_gif_metadata
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

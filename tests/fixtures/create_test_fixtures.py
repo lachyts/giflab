@@ -4,10 +4,8 @@ This script creates GIFs with precisely known characteristics (frame counts,
 color counts, timing) that can be used to validate wrapper behavior.
 """
 
-import tempfile
 from pathlib import Path
 
-import numpy as np
 from PIL import Image, ImageDraw
 
 

@@ -4,7 +4,7 @@ This module provides the main interface for accessing experiment presets,
 acting as a central point for preset retrieval and management.
 """
 
-from .builtin_presets import TARGETED_PRESETS, register_builtin_presets
+from .builtin_presets import TARGETED_PRESETS
 from .targeted_presets import PRESET_REGISTRY, ExperimentPreset, SlotConfiguration
 
 # Re-export important classes and constants

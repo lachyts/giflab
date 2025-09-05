@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import glob
 import logging
-import subprocess
 import tempfile
 from collections import Counter
 from pathlib import Path

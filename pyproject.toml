@@ -118,6 +118,14 @@ markers = [
     "unit: marks tests as unit tests (fast)",
     "external_tools: tests that require external tools to be installed",
     "performance: performance benchmark tests",
+    "benchmark: performance benchmark tests",
+    "gradient_color_artifacts: tests for gradient color artifact detection",
+    "gradient_color_fixtures: tests for gradient color fixture generation",
+    "gradient_color_config: tests for gradient color configuration",
+    "gradient_color_integration: tests for gradient color integration",
+    "gradient_color_regression: tests for gradient color regression detection",
+    "gradient_color_extended: extended gradient color artifact tests",
+    "gradient_color_e2e: end-to-end gradient color tests",
 ]
 # Performance optimizations
 filterwarnings = [

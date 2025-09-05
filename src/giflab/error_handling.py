@@ -11,7 +11,7 @@ import traceback
 from collections.abc import Callable
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any
 
 
 class ErrorLevel(Enum):

@@ -6,23 +6,19 @@ systematic testing and analysis of pipeline combinations.
 
 from __future__ import annotations
 
-import atexit
 import json
 import logging
-import signal
-import sqlite3
-import sys
 import traceback
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from shutil import copy, rmtree
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from PIL import Image, ImageDraw
+from PIL import Image
 
 try:
     import cv2
@@ -248,8 +244,10 @@ class GifLabRunner:
     def _update_experiment_description(self, description: str) -> None:
         """Update the experiment description after we know what type of experiment we're running."""
         if self.output_dir is None:
-            raise RuntimeError("Cannot update experiment description: output directory not initialized")
-        
+            raise RuntimeError(
+                "Cannot update experiment description: output directory not initialized"
+            )
+
         # Generate new name with proper description
         run_number = int(self.output_dir.name.split("-")[0])
         timestamp = datetime.now().strftime("%d-%m-%y")
@@ -291,7 +289,6 @@ class GifLabRunner:
             ValueError: If preset_id is not found or invalid
         """
         # Import builtin presets to ensure they're registered
-        from . import builtin_presets
         from .targeted_generator import TargetedPipelineGenerator
         from .targeted_presets import PRESET_REGISTRY
 
@@ -335,7 +332,6 @@ class GifLabRunner:
             AnalysisResult with targeted testing results
         """
         # Import builtin presets to ensure they're registered
-        from . import builtin_presets
         from .targeted_presets import PRESET_REGISTRY
 
         # Get the preset for parameter override
@@ -395,7 +391,6 @@ class GifLabRunner:
             Dictionary mapping preset IDs to descriptions
         """
         # Import builtin presets to ensure they're registered
-        from . import builtin_presets
         from .targeted_presets import PRESET_REGISTRY
 
         return PRESET_REGISTRY.list_presets()
@@ -463,7 +458,9 @@ class GifLabRunner:
     def _require_output_dir(self) -> Path:
         """Ensure output directory is initialized and return it."""
         if self.output_dir is None:
-            raise RuntimeError("Output directory not initialized. Call _initialize_experiment_directory() first.")
+            raise RuntimeError(
+                "Output directory not initialized. Call _initialize_experiment_directory() first."
+            )
         return self.output_dir
 
     def _log_run_metadata(self) -> None:
@@ -483,7 +480,9 @@ class GifLabRunner:
 
         output_dir = self._require_output_dir()
         if self.synthetic_specs is None:
-            raise RuntimeError("Synthetic specs not initialized after _initialize_experiment_directory()")
+            raise RuntimeError(
+                "Synthetic specs not initialized after _initialize_experiment_directory()"
+            )
 
         self.logger.info(f"Generating {len(self.synthetic_specs)} synthetic test GIFs")
 
@@ -613,10 +612,7 @@ class GifLabRunner:
     ) -> pd.DataFrame:
         """Run comprehensive testing of all pipeline combinations with streaming results to disk."""
         import csv
-        import tempfile
         import time
-
-        from ..metrics import DEFAULT_METRICS_CONFIG, calculate_comprehensive_metrics
 
         try:
             from tqdm import tqdm as TqdmProgressCounter
@@ -662,7 +658,9 @@ class GifLabRunner:
 
         # Create results CSV with streaming capability
         if self.output_dir is None:
-            raise RuntimeError("Output directory not initialized. Call _initialize_experiment_directory first.")
+            raise RuntimeError(
+                "Output directory not initialized. Call _initialize_experiment_directory first."
+            )
         csv_path = self._require_output_dir() / "streaming_results.csv"
         results_buffer: list[dict[str, Any]] = []
         buffer_size = 10  # Flush every N results to balance memory and I/O
@@ -3890,7 +3888,9 @@ class GifLabRunner:
 
             if frontier_points:
                 frontier_df = pd.DataFrame(frontier_points)
-                frontier_path = self._require_output_dir() / "pareto_frontier_global.csv"
+                frontier_path = (
+                    self._require_output_dir() / "pareto_frontier_global.csv"
+                )
                 frontier_df.to_csv(frontier_path, index=False)
                 self.logger.info(f"Saved global Pareto frontier to: {frontier_path}")
 
@@ -3901,7 +3901,8 @@ class GifLabRunner:
                 if points:
                     frontier_df = pd.DataFrame(points)
                     frontier_path = (
-                        self._require_output_dir() / f"pareto_frontier_{content_type}.csv"
+                        self._require_output_dir()
+                        / f"pareto_frontier_{content_type}.csv"
                     )
                     frontier_df.to_csv(frontier_path, index=False)
                     self.logger.info(
@@ -3926,7 +3927,9 @@ class GifLabRunner:
 
                 if rankings_data:
                     rankings_df = pd.DataFrame(rankings_data)
-                    rankings_path = self._require_output_dir() / "quality_aligned_rankings.csv"
+                    rankings_path = (
+                        self._require_output_dir() / "quality_aligned_rankings.csv"
+                    )
                     rankings_df.to_csv(rankings_path, index=False)
                     self.logger.info(
                         f"Saved quality-aligned rankings to: {rankings_path}"
@@ -3937,7 +3940,9 @@ class GifLabRunner:
             if dominated:
                 dominated_df = pd.DataFrame(list(dominated), columns=["pipeline_id"])
                 dominated_df["elimination_reason"] = "Pareto dominated"
-                dominated_path = self._require_output_dir() / "pareto_dominated_pipelines.csv"
+                dominated_path = (
+                    self._require_output_dir() / "pareto_dominated_pipelines.csv"
+                )
                 dominated_df.to_csv(dominated_path, index=False)
                 self.logger.info(f"Saved dominated pipelines to: {dominated_path}")
 
@@ -4123,32 +4128,37 @@ class GifLabRunner:
 
 class ComprehensiveGifAnalyzer:
     """Comprehensive GIF analyzer that wraps existing functionality for temporal artifact detection."""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         """Initialize the comprehensive analyzer."""
         pass
-    
-    def analyze_gif(self, gif_path, output_dir, include_temporal_artifacts=False):
+
+    def analyze_gif(
+        self, gif_path: str, output_dir: str, include_temporal_artifacts: bool = False
+    ) -> dict[str, Any]:
         """Analyze a GIF file comprehensively.
-        
+
         Args:
             gif_path: Path to the GIF file to analyze
             output_dir: Directory for output files
             include_temporal_artifacts: Whether to include temporal artifact analysis
-            
+
         Returns:
             Dictionary containing analysis results, potentially including:
             - temporal_artifacts: Dict with temporal metrics if include_temporal_artifacts=True
         """
         from pathlib import Path
-        from giflab.temporal_artifacts import calculate_enhanced_temporal_metrics_from_paths
-        
-        results = {}
-        
-        gif_path = Path(gif_path)
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        from giflab.temporal_artifacts import (
+            calculate_enhanced_temporal_metrics_from_paths,
+        )
+
+        results: dict[str, Any] = {}
+
+        gif_path_obj = Path(gif_path)
+        output_dir_obj = Path(output_dir)
+        output_dir_obj.mkdir(parents=True, exist_ok=True)
+
         # For now, just analyze temporal artifacts if requested
         # This can be extended with more comprehensive analysis in the future
         if include_temporal_artifacts:
@@ -4156,12 +4166,18 @@ class ComprehensiveGifAnalyzer:
                 # Create a simple copy for comparison (since temporal analysis needs original vs processed)
                 # For now, we'll analyze the same file against itself as a basic implementation
                 temporal_metrics = calculate_enhanced_temporal_metrics_from_paths(
-                    str(gif_path), str(gif_path)
+                    str(gif_path_obj), str(gif_path_obj)
                 )
                 results["temporal_artifacts"] = temporal_metrics
             except Exception as e:
                 # If temporal analysis fails, include a note but don't fail the whole analysis
                 results["temporal_artifacts_error"] = str(e)
-                results["temporal_artifacts"] = {}
-        
+                results["temporal_artifacts"] = {
+                    "flicker_excess": 0.0,
+                    "flat_flicker_ratio": 0.0,
+                    "temporal_pumping_score": 0.0,
+                    "lpips_t_mean": 0.0,
+                    "lpips_t_p95": 0.0,
+                }
+
         return results

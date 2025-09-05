@@ -8,7 +8,7 @@ configurable thresholds, and multi-metric validation combinations.
 import logging
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from ..meta import GifMetadata
 from .config import load_validation_config

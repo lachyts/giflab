@@ -189,8 +189,6 @@ def test_bayer_scale_performance(
     """
     import tempfile
 
-    from ..metrics import calculate_comprehensive_metrics  # Use available function
-
     results = {}
     bayer_methods = [
         method for method in FFMPEG_DITHERING_METHODS if method.startswith("bayer")

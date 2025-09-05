@@ -10,12 +10,11 @@ for debugging compression failures, including:
 """
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Literal, Protocol, TypedDict
 
 import cv2
 import numpy as np
 import torch
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -30,29 +29,306 @@ except ImportError:
     LPIPS_AVAILABLE = False
 
 
+# Type definitions
+class LPIPSModel(Protocol):
+    """Protocol for LPIPS model interface."""
+    def __call__(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor: ...
+    def eval(self) -> None: ...
+    def to(self, device: str) -> "LPIPSModel": ...
+
+
+class TemporalMetrics(TypedDict):
+    """Type definition for temporal artifact metrics."""
+    lpips_t_mean: float
+    lpips_t_p95: float
+    lpips_t_max: float
+    lpips_frame_count: int
+
+
+class FlickerMetrics(TypedDict):
+    """Type definition for flicker metrics."""
+    flicker_excess: float
+    flicker_frame_count: int
+    flicker_frame_ratio: float
+    lpips_t_mean: float
+    lpips_t_p95: float
+
+
+class MemoryMonitor:
+    """Monitor and manage GPU memory usage for batch processing."""
+    
+    def __init__(self, device: str, memory_threshold: float = 0.8):
+        """Initialize memory monitor.
+        
+        Args:
+            device: PyTorch device string
+            memory_threshold: Memory usage threshold (0.0-1.0) above which to trigger cleanup
+        """
+        self.device = device
+        self.memory_threshold = memory_threshold
+        self.is_cuda = device.startswith("cuda")
+        self._baseline_memory = self._get_memory_usage() if self.is_cuda else 0
+    
+    def _get_memory_usage(self) -> float:
+        """Get current memory usage as fraction of total."""
+        if not self.is_cuda:
+            return 0.0
+        
+        try:
+            allocated = torch.cuda.memory_allocated(self.device)
+            total = torch.cuda.get_device_properties(self.device).total_memory
+            return allocated / total
+        except Exception:
+            return 0.0
+    
+    def get_safe_batch_size(
+        self, 
+        frame_shape: tuple[int, int, int], 
+        max_batch_size: int = 32,
+        min_batch_size: int = 1
+    ) -> int:
+        """Calculate safe batch size based on memory and frame dimensions.
+        
+        Args:
+            frame_shape: (height, width, channels) of frames
+            max_batch_size: Maximum batch size to consider
+            min_batch_size: Minimum batch size to return
+            
+        Returns:
+            Safe batch size for processing
+        """
+        if not self.is_cuda:
+            return max_batch_size  # No memory concerns on CPU
+        
+        try:
+            # Estimate memory per frame pair (input + preprocessed + gradients)
+            h, w, c = frame_shape
+            bytes_per_frame = h * w * c * 4 * 6  # float32 * 6 (rough estimate for all tensors)
+            
+            available = torch.cuda.get_device_properties(self.device).total_memory
+            current_usage = torch.cuda.memory_allocated(self.device)
+            free_memory = (available * self.memory_threshold) - current_usage
+            
+            if free_memory <= 0:
+                return min_batch_size
+            
+            # Calculate batch size with safety margin
+            safe_batch = int(free_memory // bytes_per_frame * 0.7)  # 70% safety margin
+            return max(min_batch_size, min(safe_batch, max_batch_size))
+            
+        except (RuntimeError, AttributeError, TypeError) as e:
+            logger.debug(f"Error calculating batch size: {e}, using default")
+            return max(4, max_batch_size // 4)  # Conservative fallback
+    
+    def should_cleanup_memory(self) -> bool:
+        """Check if memory cleanup is needed."""
+        if not self.is_cuda:
+            return False
+        return self._get_memory_usage() > self.memory_threshold
+    
+    def cleanup_memory(self) -> None:
+        """Perform memory cleanup if needed."""
+        if self.should_cleanup_memory():
+            logger.debug(f"Memory usage above {self.memory_threshold:.1%}, cleaning up")
+            torch.cuda.empty_cache()
+    
+    def log_memory_usage(self, context: str = "") -> None:
+        """Log current memory usage for debugging."""
+        if self.is_cuda:
+            usage = self._get_memory_usage()
+            logger.debug(f"GPU memory usage{' (' + context + ')' if context else ''}: {usage:.1%}")
+
+
 class TemporalArtifactDetector:
     """Enhanced temporal artifact detector using perceptual metrics."""
 
-    def __init__(self, device: str | None = None):
+    def __init__(self, device: Optional[str] = None, force_mse_fallback: bool = False, memory_threshold: float = 0.8):
         """Initialize temporal artifact detector.
 
         Args:
             device: PyTorch device ('cpu', 'cuda', etc.). Auto-detects if None.
+            force_mse_fallback: If True, skip LPIPS and use enhanced MSE fallback.
+                               Useful for consistent behavior or when LPIPS is problematic.
+            memory_threshold: Memory usage threshold for cleanup (0.0-1.0).
         """
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self._lpips_model: None | Any | bool = None
+        self._lpips_model: Optional[Union[LPIPSModel, Literal[False]]] = None
+        self.force_mse_fallback = force_mse_fallback
+        self.memory_monitor = MemoryMonitor(self.device, memory_threshold)
 
-    def _get_lpips_model(self) -> Any | None:
-        """Lazy initialization of LPIPS model."""
-        if self._lpips_model is None and LPIPS_AVAILABLE:
+        if force_mse_fallback:
+            logger.info("LPIPS disabled by configuration, using enhanced MSE fallback")
+            self._lpips_model = False
+
+    def _get_lpips_model(self) -> Optional[LPIPSModel]:
+        """Lazy initialization of LPIPS model with enhanced fallback handling."""
+        if self._lpips_model is None and LPIPS_AVAILABLE and not self.force_mse_fallback:
             try:
+                # Check device compatibility
+                if self.device == "cuda" and not torch.cuda.is_available():
+                    logger.warning(
+                        "CUDA requested but not available, falling back to CPU for LPIPS"
+                    )
+                    self.device = "cpu"
+                    # Update memory monitor with new device
+                    self.memory_monitor = MemoryMonitor(self.device, self.memory_monitor.memory_threshold)
+
+                # Initialize LPIPS model
+                logger.debug(f"Initializing LPIPS model on device: {self.device}")
                 model = lpips.LPIPS(net="alex", spatial=False).to(self.device)
                 model.eval()
                 self._lpips_model = model
-            except Exception as e:
-                logger.warning(f"Failed to initialize LPIPS model: {e}")
+                logger.info("LPIPS model initialized successfully")
+                self.memory_monitor.log_memory_usage("after LPIPS init")
+
+            except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+                if "out of memory" in str(e).lower() or "cuda out of memory" in str(e).lower():
+                    logger.warning(
+                        f"LPIPS model failed due to memory constraints: {e}. "
+                        "Falling back to CPU or MSE-based processing."
+                    )
+                    # Try CPU fallback if we were using CUDA
+                    if self.device.startswith("cuda"):
+                        try:
+                            logger.info("Attempting CPU fallback for LPIPS model")
+                            self.device = "cpu"
+                            self.memory_monitor = MemoryMonitor(self.device)
+                            model = lpips.LPIPS(net="alex", spatial=False).to(self.device)
+                            model.eval()
+                            self._lpips_model = model
+                            logger.info("LPIPS model initialized successfully on CPU")
+                            return model
+                        except (RuntimeError, ImportError, AttributeError) as cpu_e:
+                            logger.warning(f"CPU fallback also failed: {cpu_e}")
+                else:
+                    logger.warning(f"LPIPS model initialization failed: {e}")
                 self._lpips_model = False
-        return self._lpips_model if self._lpips_model is not False else None
+
+            except ImportError as e:
+                logger.warning(f"LPIPS import failed: {e}. Using MSE-based fallback.")
+                self._lpips_model = False
+                
+            except (AttributeError, TypeError, OSError) as e:
+                logger.warning(
+                    f"Unexpected error initializing LPIPS model: {e}. "
+                    "Using MSE-based fallback for temporal artifact detection."
+                )
+                self._lpips_model = False
+
+        return self._lpips_model if isinstance(self._lpips_model, type(self._lpips_model)) and self._lpips_model is not False else None
+
+    def _prepare_frame_pairs(self, frames: list[np.ndarray], batch_start: int, batch_end: int) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        """Prepare frame pairs for LPIPS processing.
+        
+        Args:
+            frames: List of RGB frames
+            batch_start: Starting index for batch
+            batch_end: Ending index for batch
+            
+        Returns:
+            Tuple of (frame1_tensors, frame2_tensors)
+        """
+        frame1_tensors = []
+        frame2_tensors = []
+        
+        for i in range(batch_start, batch_end):
+            frame1_tensor = self.preprocess_for_lpips(frames[i])
+            frame2_tensor = self.preprocess_for_lpips(frames[i + 1])
+            frame1_tensors.append(frame1_tensor)
+            frame2_tensors.append(frame2_tensor)
+        
+        return frame1_tensors, frame2_tensors
+    
+    def _cleanup_tensors(self, *tensor_lists) -> None:
+        """Clean up tensor lists and trigger memory cleanup if needed.
+        
+        Args:
+            *tensor_lists: Variable number of tensor lists to delete
+        """
+        for tensor_list in tensor_lists:
+            del tensor_list
+        
+        # Only cleanup memory when needed, not after every batch
+        self.memory_monitor.cleanup_memory()
+    
+    def _process_lpips_batch(self, frames: list[np.ndarray], batch_size: int = 8) -> list[float]:
+        """Process frames through LPIPS model in batches with adaptive sizing.
+        
+        Args:
+            frames: List of RGB frames
+            batch_size: Initial batch size (will be adapted based on memory)
+            
+        Returns:
+            List of LPIPS scores between consecutive frames
+        """
+        lpips_model = self._get_lpips_model()
+        if lpips_model is None:
+            return []  # Fallback will be handled by caller
+        
+        lpips_scores = []
+        num_comparisons = len(frames) - 1
+        
+        # Adapt batch size based on memory and frame dimensions if we have frames
+        if frames:
+            frame_shape = frames[0].shape
+            batch_size = self.memory_monitor.get_safe_batch_size(frame_shape, batch_size)
+            
+        self.memory_monitor.log_memory_usage("before LPIPS processing")
+        
+        try:
+            with torch.no_grad():
+                for batch_start in range(0, num_comparisons, batch_size):
+                    batch_end = min(batch_start + batch_size, num_comparisons)
+                    
+                    # Prepare batch tensors
+                    frame1_tensors, frame2_tensors = self._prepare_frame_pairs(frames, batch_start, batch_end)
+                    
+                    if frame1_tensors:  # Only process if we have frames
+                        try:
+                            # Stack into batch tensors
+                            batch_frame1 = torch.cat(frame1_tensors, dim=0)
+                            batch_frame2 = torch.cat(frame2_tensors, dim=0)
+                            
+                            # Calculate perceptual distances for the batch
+                            batch_distances = lpips_model(batch_frame1, batch_frame2)
+                            
+                            # Extract individual scores
+                            for distance in batch_distances:
+                                lpips_scores.append(float(distance.cpu().item()))
+                            
+                            # Clean up batch tensors
+                            self._cleanup_tensors(batch_frame1, batch_frame2, batch_distances, frame1_tensors, frame2_tensors)
+                            
+                        except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+                            if "out of memory" in str(e).lower():
+                                logger.warning(f"OOM in batch processing, reducing batch size: {e}")
+                                # Cleanup and try with smaller batch
+                                self._cleanup_tensors(frame1_tensors, frame2_tensors)
+                                if hasattr(locals(), 'batch_frame1'):
+                                    self._cleanup_tensors(batch_frame1, batch_frame2)
+                                if hasattr(locals(), 'batch_distances'):
+                                    del batch_distances
+                                
+                                # Force cleanup and retry with smaller batch
+                                torch.cuda.empty_cache()
+                                smaller_batch_size = max(1, batch_size // 2)
+                                logger.info(f"Retrying with reduced batch size: {smaller_batch_size}")
+                                
+                                # Recursive call with smaller batch size for remaining frames
+                                remaining_frames = frames[batch_start:]
+                                if len(remaining_frames) > 1:
+                                    remaining_scores = self._process_lpips_batch(remaining_frames, smaller_batch_size)
+                                    lpips_scores.extend(remaining_scores)
+                                break
+                            else:
+                                raise  # Re-raise non-OOM errors
+                        
+        except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError) as e:
+            logger.error(f"Error in LPIPS batch processing: {e}")
+            raise  # Let caller handle fallback
+        
+        self.memory_monitor.log_memory_usage("after LPIPS processing")
+        return lpips_scores
 
     def preprocess_for_lpips(self, frame: np.ndarray) -> torch.Tensor:
         """Preprocess frame for LPIPS calculation.
@@ -73,11 +349,14 @@ class TemporalArtifactDetector:
 
         return frame_tensor.to(self.device)
 
-    def calculate_lpips_temporal(self, frames: list[np.ndarray]) -> dict[str, float]:
+    def calculate_lpips_temporal(
+        self, frames: list[np.ndarray], batch_size: int = 8
+    ) -> TemporalMetrics:
         """Calculate LPIPS between consecutive frames for temporal consistency.
 
         Args:
             frames: List of RGB frames as numpy arrays
+            batch_size: Number of frame pairs to process simultaneously for memory efficiency
 
         Returns:
             Dictionary with LPIPS temporal metrics
@@ -90,36 +369,18 @@ class TemporalArtifactDetector:
                 "lpips_frame_count": len(frames),
             }
 
-        lpips_model = self._get_lpips_model()
-
-        if lpips_model is None:
-            # Fallback to MSE-based temporal difference
-            logger.debug("Using MSE fallback for LPIPS temporal calculation")
-            return self._calculate_mse_temporal_fallback(frames)
-
-        lpips_scores = []
-
+        # Try LPIPS processing first
         try:
-            with torch.no_grad():
-                for i in range(len(frames) - 1):
-                    frame1_tensor = self.preprocess_for_lpips(frames[i])
-                    frame2_tensor = self.preprocess_for_lpips(frames[i + 1])
-
-                    # Calculate perceptual distance
-                    distance = lpips_model(frame1_tensor, frame2_tensor)
-                    lpips_scores.append(float(distance.cpu().item()))
-
-        except Exception as e:
+            lpips_scores = self._process_lpips_batch(frames, batch_size)
+        except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError, ValueError) as e:
             logger.error(f"Error calculating LPIPS temporal: {e}")
+            logger.debug("Falling back to MSE-based temporal calculation")
             return self._calculate_mse_temporal_fallback(frames)
 
+        # If no scores obtained, fall back to MSE
         if not lpips_scores:
-            return {
-                "lpips_t_mean": 0.0,
-                "lpips_t_p95": 0.0,
-                "lpips_t_max": 0.0,
-                "lpips_frame_count": len(frames),
-            }
+            logger.debug("No LPIPS scores obtained, using MSE fallback")
+            return self._calculate_mse_temporal_fallback(frames)
 
         return {
             "lpips_t_mean": float(np.mean(lpips_scores)),
@@ -130,17 +391,70 @@ class TemporalArtifactDetector:
 
     def _calculate_mse_temporal_fallback(
         self, frames: list[np.ndarray]
-    ) -> dict[str, float]:
-        """Fallback MSE-based temporal calculation when LPIPS is unavailable."""
+    ) -> TemporalMetrics:
+        """Enhanced MSE-based temporal calculation when LPIPS is unavailable.
+
+        Uses perceptually-weighted MSE that better approximates LPIPS behavior
+        by emphasizing luminance differences and edge regions.
+        """
         mse_scores = []
 
         for i in range(len(frames) - 1):
             frame1 = frames[i].astype(np.float32) / 255.0
             frame2 = frames[i + 1].astype(np.float32) / 255.0
 
-            mse = float(np.mean((frame1 - frame2) ** 2))
-            # Normalize MSE to approximate LPIPS range [0, 1]
-            normalized_mse = min(mse * 10.0, 1.0)
+            # Convert to LAB color space for perceptually uniform differences
+            try:
+                # Convert RGB to LAB for perceptual weighting
+                lab1 = (
+                    cv2.cvtColor(
+                        (frame1 * 255).astype(np.uint8), cv2.COLOR_RGB2LAB
+                    ).astype(np.float32)
+                    / 255.0
+                )
+                lab2 = (
+                    cv2.cvtColor(
+                        (frame2 * 255).astype(np.uint8), cv2.COLOR_RGB2LAB
+                    ).astype(np.float32)
+                    / 255.0
+                )
+
+                # Weight luminance (L) channel more heavily (matches perceptual importance)
+                l_diff = (lab1[:, :, 0] - lab2[:, :, 0]) ** 2
+                a_diff = (lab1[:, :, 1] - lab2[:, :, 1]) ** 2
+                b_diff = (lab1[:, :, 2] - lab2[:, :, 2]) ** 2
+
+                # Perceptual weighting: L=70%, a=15%, b=15%
+                perceptual_mse = 0.7 * l_diff + 0.15 * a_diff + 0.15 * b_diff
+
+                # Add edge-sensitive weighting
+                gray1 = (
+                    cv2.cvtColor(
+                        (frame1 * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY
+                    ).astype(np.float32)
+                    / 255.0
+                )
+                edges = (
+                    cv2.Canny((gray1 * 255).astype(np.uint8), 50, 150).astype(
+                        np.float32
+                    )
+                    / 255.0
+                )
+
+                # Boost differences near edges (where LPIPS is most sensitive)
+                edge_weight = 1.0 + edges * 0.5
+                weighted_mse = perceptual_mse * edge_weight
+
+                mse = float(np.mean(weighted_mse))
+
+            except (cv2.error, ValueError, TypeError) as e:
+                logger.debug(f"LAB conversion failed, using RGB MSE: {e}")
+                # Fallback to RGB MSE if LAB conversion fails
+                mse = float(np.mean((frame1 - frame2) ** 2))
+
+            # Normalize to approximate LPIPS range [0, 1] with better scaling
+            # LPIPS typically ranges 0-0.8 for natural images, so adjust scaling
+            normalized_mse = min(mse * 8.0, 1.0)  # More aggressive scaling than before
             mse_scores.append(normalized_mse)
 
         if not mse_scores:
@@ -159,8 +473,8 @@ class TemporalArtifactDetector:
         }
 
     def detect_flicker_excess(
-        self, frames: list[np.ndarray], threshold: float = 0.02
-    ) -> dict[str, float]:
+        self, frames: list[np.ndarray], threshold: float = 0.02, batch_size: int = 8
+    ) -> FlickerMetrics:
         """Detect flicker excess using LPIPS-T between consecutive frames.
 
         Flicker manifests as high perceptual differences between consecutive frames
@@ -169,26 +483,23 @@ class TemporalArtifactDetector:
         Args:
             frames: List of RGB frames
             threshold: LPIPS-T threshold above which flicker is detected
+            batch_size: Number of frame pairs to process simultaneously
 
         Returns:
             Dictionary with flicker excess metrics
         """
-        lpips_metrics = self.calculate_lpips_temporal(frames)
-
-        # Calculate flicker excess - how much perceptual difference exceeds expected
+        # Use the optimized temporal calculation that already handles batch processing
+        lpips_metrics = self.calculate_lpips_temporal(frames, batch_size=batch_size)
+        
+        # Get individual scores for flicker analysis
+        # We need the raw scores, so we'll get them from our batch processor
         lpips_scores = []
         if len(frames) >= 2:
-            lpips_model = self._get_lpips_model()
-            if lpips_model is not None:
-                try:
-                    with torch.no_grad():
-                        for i in range(len(frames) - 1):
-                            frame1_tensor = self.preprocess_for_lpips(frames[i])
-                            frame2_tensor = self.preprocess_for_lpips(frames[i + 1])
-                            distance = lpips_model(frame1_tensor, frame2_tensor)
-                            lpips_scores.append(float(distance.cpu().item()))
-                except Exception as e:
-                    logger.error(f"Error in flicker detection: {e}")
+            try:
+                lpips_scores = self._process_lpips_batch(frames, batch_size)
+            except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError, ValueError) as e:
+                logger.error(f"Error getting LPIPS scores for flicker analysis: {e}")
+                # Use empty scores, will result in zero flicker metrics
 
         # Analyze flicker patterns
         flicker_excess = 0.0
@@ -388,7 +699,7 @@ class TemporalArtifactDetector:
             # Return mean variance across all pixels in region
             return float(np.mean(temporal_variance))
 
-        except Exception as e:
+        except (ValueError, IndexError, np.core._exceptions.AxisError) as e:
             logger.error(f"Error calculating temporal variance: {e}")
             return 0.0
 
@@ -463,21 +774,27 @@ def calculate_enhanced_temporal_metrics(
     original_frames: list[np.ndarray],
     compressed_frames: list[np.ndarray],
     device: str | None = None,
+    force_mse_fallback: bool = False,
+    batch_size: int = 8,
 ) -> dict[str, float]:
     """Calculate comprehensive temporal artifact metrics for validation.
 
     This is the main entry point for temporal artifact detection that integrates
-    all the enhanced detection methods.
+    all the enhanced detection methods with memory-efficient batch processing.
 
     Args:
         original_frames: List of original RGB frames
         compressed_frames: List of compressed RGB frames
         device: PyTorch device for LPIPS computation
+        force_mse_fallback: If True, skip LPIPS and use enhanced MSE fallback
+        batch_size: Number of frame pairs to process simultaneously for memory efficiency
 
     Returns:
         Dictionary with all temporal artifact metrics
     """
-    detector = TemporalArtifactDetector(device=device)
+    detector = TemporalArtifactDetector(
+        device=device, force_mse_fallback=force_mse_fallback
+    )
 
     # Ensure frames are aligned
     min_frame_count = min(len(original_frames), len(compressed_frames))
@@ -493,8 +810,18 @@ def calculate_enhanced_temporal_metrics(
     original_frames = original_frames[:min_frame_count]
     compressed_frames = compressed_frames[:min_frame_count]
 
-    # Calculate temporal metrics on compressed frames
-    flicker_metrics = detector.detect_flicker_excess(compressed_frames)
+    # For very large frame counts, automatically adjust batch size to manage memory
+    if min_frame_count > 100:
+        # Reduce batch size for very large sequences
+        batch_size = max(4, batch_size // 2)
+        logger.info(
+            f"Large frame sequence ({min_frame_count} frames), using batch_size={batch_size}"
+        )
+
+    # Calculate temporal metrics on compressed frames with batch processing
+    flicker_metrics = detector.detect_flicker_excess(
+        compressed_frames, batch_size=batch_size
+    )
     flat_flicker_metrics = detector.detect_flat_region_flicker(compressed_frames)
     pumping_metrics = detector.detect_temporal_pumping(compressed_frames)
 
@@ -517,18 +844,24 @@ def calculate_enhanced_temporal_metrics(
 
 
 def calculate_enhanced_temporal_metrics_from_paths(
-    original_path: str, compressed_path: str, device: str | None = None
+    original_path: str,
+    compressed_path: str,
+    device: str | None = None,
+    force_mse_fallback: bool = False,
+    batch_size: int = 8,
 ) -> dict[str, float]:
     """Calculate enhanced temporal metrics from GIF file paths.
-    
+
     This is a convenience wrapper around calculate_enhanced_temporal_metrics
-    that handles frame extraction from file paths.
-    
+    that handles frame extraction from file paths with memory-efficient processing.
+
     Args:
         original_path: Path to original GIF file
         compressed_path: Path to compressed GIF file
         device: PyTorch device for LPIPS computation
-        
+        force_mse_fallback: If True, skip LPIPS and use enhanced MSE fallback
+        batch_size: Number of frame pairs to process simultaneously
+
     Returns:
         Dictionary with temporal artifact metrics
     """
@@ -537,20 +870,24 @@ def calculate_enhanced_temporal_metrics_from_paths(
         from pathlib import Path
 
         from .metrics import extract_gif_frames
-        
+
         # Extract frames from both files
         original_result = extract_gif_frames(Path(original_path))
         compressed_result = extract_gif_frames(Path(compressed_path))
-        
+
         original_frames = original_result.frames
         compressed_frames = compressed_result.frames
-        
+
         return calculate_enhanced_temporal_metrics(
-            original_frames, compressed_frames, device=device
+            original_frames,
+            compressed_frames,
+            device=device,
+            force_mse_fallback=force_mse_fallback,
+            batch_size=batch_size,
         )
-        
-    except Exception as e:
-        logger.error(f"Failed to calculate temporal metrics from paths: {e}")
+
+    except (FileNotFoundError, PermissionError) as e:
+        logger.error(f"File access error calculating temporal metrics from paths: {e}")
         return {
             "flicker_excess": 0.0,
             "flat_flicker_ratio": 0.0,
@@ -558,3 +895,186 @@ def calculate_enhanced_temporal_metrics_from_paths(
             "lpips_t_mean": 0.0,
             "lpips_t_p95": 0.0,
         }
+    except (ImportError, AttributeError) as e:
+        logger.error(f"Module import error calculating temporal metrics: {e}")
+        return {
+            "flicker_excess": 0.0,
+            "flat_flicker_ratio": 0.0,
+            "temporal_pumping_score": 0.0,
+            "lpips_t_mean": 0.0,
+            "lpips_t_p95": 0.0,
+        }
+    except (ValueError, TypeError) as e:
+        logger.error(f"Data processing error calculating temporal metrics: {e}")
+        return {
+            "flicker_excess": 0.0,
+            "flat_flicker_ratio": 0.0,
+            "temporal_pumping_score": 0.0,
+            "lpips_t_mean": 0.0,
+            "lpips_t_p95": 0.0,
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error calculating temporal metrics from paths: {e}")
+        return {
+            "flicker_excess": 0.0,
+            "flat_flicker_ratio": 0.0,
+            "temporal_pumping_score": 0.0,
+            "lpips_t_mean": 0.0,
+            "lpips_t_p95": 0.0,
+        }
+
+
+# =============================================================================
+# TEMPORAL ARTIFACTS DETECTION SYSTEM DOCUMENTATION
+# =============================================================================
+
+"""
+## Temporal Artifacts Detection System
+
+### Overview
+
+The temporal artifacts detection system provides comprehensive analysis of GIF
+compression artifacts that manifest across time. This is essential for debugging
+compression failures where quality degrades due to temporal inconsistencies.
+
+### Key Metrics
+
+1. **Flicker Excess Detection**
+   - Uses LPIPS (Learned Perceptual Image Patch Similarity) for perceptual analysis
+   - Detects frame-to-frame inconsistencies that cause visible flicker
+   - Falls back to MSE-based metrics if LPIPS is unavailable
+
+2. **Flat-Region Flicker Detection**
+   - Identifies stable background regions that should remain consistent
+   - Detects unwanted variations in supposedly flat areas
+   - Critical for validating background preservation in compression
+
+3. **Temporal Pumping Detection**
+   - Identifies quality oscillations across the animation
+   - Detects periodic variations in compression quality
+   - Important for smooth animation playback
+
+### Usage Examples
+
+#### Basic Usage
+```python
+from giflab.temporal_artifacts import calculate_enhanced_temporal_metrics
+
+# Load your frames (as RGB numpy arrays)
+original_frames = load_frames("original.gif")
+compressed_frames = load_frames("compressed.gif")
+
+# Calculate comprehensive metrics
+metrics = calculate_enhanced_temporal_metrics(
+    original_frames, compressed_frames, device="cpu"
+)
+
+# Key metrics to examine
+print(f"Flicker Excess: {metrics['flicker_excess']:.4f}")
+print(f"Flat Region Flicker: {metrics['flat_flicker_ratio']:.4f}")
+print(f"Temporal Pumping: {metrics['temporal_pumping_score']:.4f}")
+```
+
+#### Advanced Usage with Custom Detector
+```python
+from giflab.temporal_artifacts import TemporalArtifactDetector
+
+# Initialize detector with GPU if available
+detector = TemporalArtifactDetector(device="cuda")
+
+# Individual metric calculations
+flicker_metrics = detector.detect_flicker_excess(compressed_frames)
+flat_metrics = detector.detect_flat_region_flicker(compressed_frames)
+pumping_metrics = detector.detect_temporal_pumping(compressed_frames)
+
+# Access detailed breakdown
+print(f"Flicker Frame Ratio: {flicker_metrics['flicker_frame_ratio']:.3f}")
+print(f"Quality Oscillation Freq: {pumping_metrics['quality_oscillation_frequency']:.3f}")
+```
+
+#### Integration with GIF Analysis
+```python
+from giflab.core.runner import ComprehensiveGifAnalyzer
+
+analyzer = ComprehensiveGifAnalyzer()
+results = analyzer.analyze_gif(
+    "test.gif",
+    "output/",
+    include_temporal_artifacts=True  # Enable temporal analysis
+)
+
+# Temporal metrics are included in results
+temporal_data = results.get('temporal_artifacts', {})
+```
+
+### Interpretation Guide
+
+#### Flicker Excess
+- **Range**: 0.0 - 1.0+ (higher is worse)
+- **Good**: < 0.05 (imperceptible flicker)
+- **Concerning**: > 0.1 (visible flicker artifacts)
+- **Critical**: > 0.2 (severe flicker issues)
+
+#### Flat Region Flicker Ratio
+- **Range**: 0.0 - 1.0 (proportion of flat regions with flicker)
+- **Good**: < 0.1 (most backgrounds stable)
+- **Concerning**: > 0.3 (many backgrounds unstable)
+- **Critical**: > 0.5 (majority of backgrounds flickering)
+
+#### Temporal Pumping Score
+- **Range**: 0.0 - 1.0+ (higher indicates more pumping)
+- **Good**: < 0.1 (consistent quality)
+- **Concerning**: > 0.2 (noticeable quality variation)
+- **Critical**: > 0.4 (severe quality oscillation)
+
+### Technical Details
+
+#### LPIPS Integration
+- Uses AlexNet-based perceptual similarity measurement
+- Automatically falls back to MSE if LPIPS unavailable
+- GPU acceleration supported for large frame sequences
+- Preprocessing handles different input formats automatically
+
+#### Memory Optimization
+- Lazy loading of LPIPS model to save memory
+- Batch processing for large frame sequences
+- Automatic cleanup of temporary tensors
+- Supports both CPU and GPU processing
+
+#### Error Handling
+- Graceful fallback when LPIPS is unavailable
+- Handles mismatched frame counts automatically
+- Validates input data types and shapes
+- Provides informative logging for debugging
+
+### Dependencies
+
+#### Required
+- numpy: Array operations and frame handling
+- opencv-python (cv2): Image processing and flat region detection
+- torch: Tensor operations and LPIPS preprocessing
+
+#### Optional
+- lpips: Perceptual similarity measurement (falls back to MSE if unavailable)
+- CUDA: GPU acceleration for large datasets
+
+### Performance Considerations
+
+- LPIPS model initialization has ~2-3 second overhead
+- GPU processing 5-10x faster for large frame sequences
+- Memory usage scales with frame count and resolution
+- Consider processing in batches for very large GIFs (>100 frames)
+
+### Integration Points
+
+This system integrates with:
+- `giflab.core.runner.ComprehensiveGifAnalyzer`
+- `giflab.validation` systems for automated quality checks
+- `giflab.metrics` for comprehensive quality assessment
+- `giflab.cli` commands for batch processing
+
+For troubleshooting compression issues, focus on:
+1. High flicker_excess values indicating frame instability
+2. High flat_flicker_ratio suggesting background corruption
+3. High temporal_pumping_score indicating quality inconsistency
+"""

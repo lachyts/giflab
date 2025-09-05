@@ -9,11 +9,7 @@ from PIL import Image, ImageDraw
 
 from giflab.color_keep import count_gif_colors
 from giflab.config import DEFAULT_ENGINE_CONFIG
-from giflab.lossy import (
-    LossyEngine,
-    compress_with_animately,
-    compress_with_gifsicle,
-)
+from giflab.lossy import LossyEngine, compress_with_animately, compress_with_gifsicle
 from giflab.metrics import extract_gif_frames
 
 # -------------------------

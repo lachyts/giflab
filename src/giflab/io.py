@@ -1,11 +1,9 @@
 """I/O utilities for atomic writes, CSV operations, and error logging."""
 
-import atexit
 import csv
 import json
 import logging
 import os
-import signal
 import sys
 import tempfile
 from collections.abc import Generator

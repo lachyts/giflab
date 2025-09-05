@@ -1,7 +1,7 @@
 """Validation type definitions and configuration."""
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 # Timing validation exception hierarchy

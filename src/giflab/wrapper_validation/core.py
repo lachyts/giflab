@@ -6,7 +6,7 @@ validation across different dimensions (frame count, color count, timing, etc.).
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from PIL import Image
 

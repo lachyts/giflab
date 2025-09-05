@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import itertools
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ..capability_registry import tools_for
 from ..dynamic_pipeline import Pipeline, PipelineStep

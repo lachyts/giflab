@@ -6,7 +6,6 @@ Provides default validation configurations and content-type specific adjustments
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
 
 import yaml
 

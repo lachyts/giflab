@@ -5,7 +5,7 @@ quality metrics instead of the traditional 4-metric approach. It also includes
 the user-requested efficiency metric calculation.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
