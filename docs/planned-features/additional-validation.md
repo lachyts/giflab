@@ -95,31 +95,52 @@ High-impact metrics that catch the most common compression failures.
 - Comprehensive JND threshold tracking (ΔE00 > 1, 2, 3, 5 units)
 - Integrated into main metrics via `calculate_gradient_color_metrics()`
 
-### Phase 2: Quality Refinement Metrics ⏳ IN PROGRESS
-**Progress:** 0% Complete  
-**Current Focus:** Additional quality metrics to enhance debugging precision
+### Phase 2: Quality Refinement Metrics ✅ COMPLETED
+**Progress:** 100% Complete (2/2 subtasks completed)
+**Current Focus:** All quality refinement metrics implemented and integrated
 
 Additional metrics that improve debugging precision and catch edge cases.
 
-#### Subtask 2.1: Dither Quality Index ⏳ PLANNED
-- [ ] Implement FFT-based high-frequency analysis in flat regions
-- [ ] Calculate high-freq/mid-band energy ratio
-- [ ] Detect over-dithering (too much noise) and under-dithering (banding)
-- [ ] Add context-aware thresholds based on content type
+#### Subtask 2.1: Dither Quality Index ✅ COMPLETED
+- [x] Implement FFT-based high-frequency analysis in flat regions
+- [x] Calculate high-freq/mid-band energy ratio
+- [x] Detect over-dithering (too much noise) and under-dithering (banding)
+- [x] Add context-aware thresholds based on content type
 
 **Debug Value:** Catches dithering quality issues in smooth gradients
 **When to Use:** For content with gradients, especially after lossy compression
 **Cost:** Medium - FFT computation on patches
 
-#### Subtask 2.2: Deep Perceptual Metric Integration ⏳ PLANNED
-- [ ] Choose between LPIPS and DISTS based on computational efficiency
-- [ ] Implement batch processing for GPU acceleration if available
-- [ ] Add downscaling to ~512px for performance
-- [ ] Integrate with existing composite quality calculation
+**Implementation Notes:**
+- Full `DitherQualityAnalyzer` class implemented in `src/giflab/gradient_color_artifacts.py`
+- Uses numpy's FFT for 2D frequency analysis on flat/smooth regions
+- Frequency bands: Low (0-10%), Mid (10-50%), High (50-100%) of spectrum radius
+- Dither ratio calculation: high_energy / mid_energy with quality scoring (0-100)
+- Integrated into main metrics via `calculate_gradient_color_metrics()`
+- Comprehensive test suite in `tests/unit/test_dither_quality_analyzer.py`
+- Performance optimized with patch-based analysis (no full-frame FFT)
+
+#### Subtask 2.2: Deep Perceptual Metric Integration ✅ COMPLETED
+- [x] Choose between LPIPS and DISTS based on computational efficiency (LPIPS chosen)
+- [x] Implement batch processing for GPU acceleration if available
+- [x] Add downscaling to ~512px for performance (configurable via lpips_downscale_size)
+- [x] Integrate with existing composite quality calculation (3% weight in enhanced composite)
 
 **Debug Value:** Catches perceptual issues that traditional metrics miss
-**When to Use:** As final validation check for borderline cases
-**Cost:** High - neural network inference required
+**When to Use:** Conditional triggering for borderline quality (0.3-0.7 range) and poor quality (<0.3) cases
+**Cost:** High - neural network inference required (optimized with downscaling and frame sampling)
+
+**Implementation Notes:**
+- Full `DeepPerceptualValidator` class implemented in `src/giflab/deep_perceptual_metrics.py`
+- LPIPS chosen over DISTS for better performance and wider adoption
+- Conditional triggering via `should_use_deep_perceptual()` to avoid unnecessary computation
+- Frame downscaling to configurable size (default 512px) for performance optimization
+- GPU acceleration with automatic CPU fallback when CUDA unavailable
+- Memory-efficient batch processing with adaptive batch sizing
+- Integrated into composite quality calculation with 3% weight (ENHANCED_LPIPS_WEIGHT)
+- Added thresholds: lpips_quality_threshold (0.3), lpips_quality_extreme_threshold (0.5), lpips_quality_max_threshold (0.7)
+- Comprehensive test suite in `tests/test_deep_perceptual_metrics.py` (24 tests, all passing)
+- Main integration in `calculate_comprehensive_metrics()` with conditional execution
 
 ### Phase 3: Conditional Content-Specific Metrics ⏳ PLANNED
 **Progress:** 0% Complete
@@ -178,7 +199,8 @@ Metrics triggered only for specific content types to control computational cost.
 | Frame timing drift | Timing grid validation | N/A | duration_diff > 100ms |
 | Color palette corruption | ΔE00 patches | Color histogram | deltae_pct_gt3 > 0.10 |
 | Gradient posterization | Banding detection | GMSD | banding_score > 60 |
-| Over/under dithering | Dither index (Phase 2) | Texture similarity | ratio outside [0.8, 1.3] |
+| Over/under dithering | Dither quality index (✅) | Texture similarity | ratio outside [0.8, 1.3] |
+| Perceptual degradation | LPIPS quality (✅) | Deep perceptual validation | lpips_quality_mean > 0.3 |
 | Text degradation | OCR confidence delta | MTF50 acuity | conf_delta < -0.05 |
 
 ### Conditional Triggering Logic
@@ -191,13 +213,13 @@ def determine_validation_metrics(content_analysis, operation_type):
         metrics.append("timing_validation")
         
     if content_analysis.has_gradients:
-        metrics.append("dither_index")
+        metrics.append("dither_quality")  # ✅ IMPLEMENTED
         
     if content_analysis.has_text_ui:
         metrics.extend(["ocr_confidence", "mtf50"])
         
     if composite_quality < threshold:  # Borderline cases
-        metrics.append("deep_perceptual")
+        metrics.append("deep_perceptual")  # ✅ IMPLEMENTED
         
     return metrics
 ```
@@ -279,11 +301,14 @@ temporal_pumping_score, quality_oscillation_frequency, lpips_t_mean, lpips_t_p95
 # Color and gradient quality (✅ IMPLEMENTED)
 deltae_mean, deltae_p95, deltae_max, deltae_pct_gt1, deltae_pct_gt2, deltae_pct_gt3, deltae_pct_gt5, color_patch_count,
 banding_score_mean, banding_score_p95, banding_patch_count, gradient_region_count,
-# dither_ratio_mean, dither_ratio_p95, (PLANNED - Phase 2)
+dither_ratio_mean, dither_ratio_p95, dither_quality_score, flat_region_count, (✅ IMPLEMENTED - Phase 2.1)
+
+# Deep perceptual metrics (✅ IMPLEMENTED - Phase 2.2)
+lpips_quality_mean, lpips_quality_p95, lpips_quality_max, deep_perceptual_frame_count, deep_perceptual_downscaled, deep_perceptual_device,
 
 # Conditional metrics (when applicable)
 ocr_conf_delta_mean, mtf50_ratio_mean,
-deep_perceptual_score, ssimulacra2_mean
+ssimulacra2_mean
 ```
 
 ## Success Criteria

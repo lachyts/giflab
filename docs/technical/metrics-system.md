@@ -404,7 +404,7 @@ clip_outliers(values, method="iqr", factor=1.5)
 
 GifLab calculates an **efficiency metric** that combines compression performance with quality preservation using a balanced 50/50 weighting approach.
 
-#### 12.1.1 Efficiency Formula
+#### 13.1.1 Efficiency Formula
 
 ```python
 def calculate_efficiency_metric(compression_ratio: float, composite_quality: float) -> float:
@@ -426,7 +426,7 @@ def calculate_efficiency_metric(compression_ratio: float, composite_quality: flo
     return efficiency
 ```
 
-#### 12.1.2 Key Design Principles
+#### 13.1.2 Key Design Principles
 
 **Equal Weighting (50/50):**
 - Quality preservation: 50% weight
@@ -444,7 +444,7 @@ def calculate_efficiency_metric(compression_ratio: float, composite_quality: flo
 - Requires both quality AND compression to achieve high efficiency
 - More balanced than arithmetic mean for multiplicative relationships
 
-#### 12.1.3 Efficiency Scale Interpretation
+#### 13.1.3 Efficiency Scale Interpretation
 
 | Efficiency Range | Rating | Interpretation |
 |------------------|---------|----------------|
@@ -454,7 +454,7 @@ def calculate_efficiency_metric(compression_ratio: float, composite_quality: flo
 | 0.50 - 0.59 | **FAIR** | Moderate performance, room for improvement |
 | 0.00 - 0.49 | **POOR** | Significant issues with quality or compression |
 
-#### 12.1.4 Algorithm Performance Examples
+#### 13.1.4 Algorithm Performance Examples
 
 Based on frame-focus experiment results:
 
@@ -466,7 +466,7 @@ animately-frame   : 0.609 efficiency (GOOD) - Quality: 0.735, Compression: 5.2x
 ffmpeg-frame      : 0.569 efficiency (FAIR) - Quality: 0.947, Compression: 1.9x
 ```
 
-#### 12.1.5 Benefits vs Previous Approaches
+#### 13.1.5 Benefits vs Previous Approaches
 
 **Before (Simple Multiplication):**
 - Unbounded scale: 0.079 - 60.054
@@ -481,13 +481,13 @@ ffmpeg-frame      : 0.569 efficiency (FAIR) - Quality: 0.947, Compression: 1.9x
 
 ---
 
-## 13. Frame Sampling Improvements
+## 14. Frame Sampling Improvements
 
-### 13.1 Even Frame Distribution
+### 14.1 Even Frame Distribution
 
 GifLab uses **even frame sampling** across the entire animation timeline to ensure quality assessment covers the full GIF content.
 
-#### 13.1.1 Sampling Strategy
+#### 14.1.1 Sampling Strategy
 
 **Previous (Consecutive Sampling):**
 ```python
@@ -506,7 +506,7 @@ else:
     frame_indices = np.linspace(0, total_frames - 1, frames_to_extract, dtype=int)
 ```
 
-#### 13.1.2 Why Even Distribution Matters
+#### 14.1.2 Why Even Distribution Matters
 
 **Quality Issues Often Appear Later:**
 - Compression artifacts accumulate over time
@@ -518,7 +518,7 @@ else:
 - Eliminates false perfect quality scores from incomplete sampling
 - More accurate quality differentiation between algorithms
 
-#### 13.1.3 Impact on Results
+#### 14.1.3 Impact on Results
 
 **Quality Assessment Accuracy:**
 - Before: 37.6% perfect scores (some potentially false positives)
@@ -542,9 +542,9 @@ def extract_gif_frames(gif_path: Path, max_frames: int = 30) -> FrameExtractResu
 
 ---
 
-## 14. Production Deployment
+## 15. Production Deployment
 
-### 14.1 Current Status ✅
+### 15.1 Current Status ✅
 
 **All implementation stages completed** (December 2024):
 - 8 new metrics + aggregation descriptors
@@ -553,14 +553,14 @@ def extract_gif_frames(gif_path: Path, max_frames: int = 30) -> FrameExtractResu
 - Automated EDA generation
 - 356 passing unit tests
 
-### 14.2 Performance Characteristics
+### 15.2 Performance Characteristics
 
 - **Metric computation**: 70+ values per GIF comparison
 - **Processing overhead**: ~7% increase from baseline
 - **Memory efficiency**: Optimized frame alignment
 - **Error handling**: Comprehensive try-catch coverage
 
-### 14.3 Integration Points
+### 15.3 Integration Points
 
 ```python
 # Main API
@@ -578,9 +578,9 @@ artifacts = generate_eda(csv_path, output_dir)
 
 ---
 
-## 15. Context-Aware Disposal Artifact Detection
+## 16. Context-Aware Disposal Artifact Detection
 
-### 15.1 The Disposal Artifact vs Frame Reduction Problem
+### 16.1 The Disposal Artifact vs Frame Reduction Problem
 
 **Critical Discovery**: The disposal artifact detection system was incorrectly flagging legitimate frame reduction operations as disposal method artifacts, leading to false test failures and inaccurate quality assessments.
 

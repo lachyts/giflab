@@ -42,6 +42,22 @@ After building you have a binary called **`animately`**.  All parameters are **o
 
 **Current version:** 1.1.20.0
 
+### 🚨 **CRITICAL: Flag-Based Arguments Required**
+
+Animately **requires explicit flag-based arguments** for all operations. Positional arguments will cause silent failures.
+
+#### ❌ **WRONG** - Will fail silently (exit code 1/2):
+```bash
+animately input.gif output.gif --lossy 60
+animately source.gif compressed.gif
+```
+
+#### ✅ **CORRECT** - Always use flags:
+```bash
+animately --input input.gif --output output.gif --lossy 60
+animately --input source.gif --output compressed.gif
+```
+
 | Flag | Short | Value type | Description |
 |------|-------|-----------|-------------|
 | `--input` | `-i` | file path | Path to input gif file |
@@ -76,6 +92,7 @@ The `--advanced-lossy` (or `-a`) flag allows for more sophisticated compression 
 
 **Usage:**
 ```bash
+animately --input source.gif --output compressed.gif --advanced-lossy config.json
 ```
 
 **JSON Configuration Format:**
@@ -159,6 +176,40 @@ const AnimatelyGif = require('./animately_gif');
 | Variable | Description |
 |----------|-------------|
 | `GIFLAB_ANIMATELY_PATH` | Override auto-detected path to `animately` launcher. |
+
+### Common Usage Examples
+
+```bash
+# Basic compression
+animately --input source.gif --output compressed.gif
+
+# Lossy compression with quality setting
+animately --input source.gif --output lossy.gif --lossy 60
+
+# Color palette reduction
+animately --input source.gif --output reduced.gif --colors 64
+
+# Scaling and cropping
+animately --input source.gif --output processed.gif --scale 0.5 --crop "10,10,200,200"
+
+# Combined operations
+animately --input source.gif --output final.gif --lossy 50 --colors 128 --scale 0.8
+```
+
+### Troubleshooting
+
+**Silent failures (exit code 1/2):**
+- **Cause**: Using positional arguments instead of flags
+- **Solution**: Always use `--input` and `--output` flags
+
+**"No input file path provided":**
+- **Cause**: Missing `--input` flag  
+- **Solution**: Use `animately --input file.gif --output out.gif`
+
+**Version management:**
+- Multiple versions available in `/Users/lachlants/bin/`
+- Recommended: `1.1.20.0` (Sep 2025) with enhanced logging
+- Check version: `animately --help` (--version not available in older versions)
 
 ---
 For in-depth details see the source tree and README inside the Animately repository. 

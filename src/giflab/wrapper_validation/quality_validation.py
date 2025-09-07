@@ -83,8 +83,10 @@ class QualityThresholdValidator:
 
             # Calculate composite quality scores
             if self.metrics_config.USE_ENHANCED_COMPOSITE_QUALITY:
+                # Filter metrics to only numeric values for composite quality calculation
+                numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, int | float)}
                 composite_quality = calculate_composite_quality(
-                    metrics, self.metrics_config
+                    numeric_metrics, self.metrics_config
                 )
                 quality_type = "enhanced_composite"
 
@@ -180,7 +182,7 @@ class QualityThresholdValidator:
                 details={"exception": str(e)},
             )
 
-    def _calculate_legacy_composite_quality(self, metrics: dict[str, float]) -> float:
+    def _calculate_legacy_composite_quality(self, metrics: dict[str, float | str]) -> float:
         """Calculate legacy 4-metric composite quality score.
 
         This is a fallback for when enhanced composite quality is disabled.
@@ -199,6 +201,10 @@ class QualityThresholdValidator:
         for metric_name, weight in weights.items():
             if metric_name in metrics:
                 value = metrics[metric_name]
+                
+                # Skip non-numeric values
+                if not isinstance(value, int | float):
+                    continue
 
                 # Normalize metrics to 0-1 scale
                 if metric_name == "psnr_mean":
@@ -220,7 +226,7 @@ class QualityThresholdValidator:
         return composite_quality / total_weight if total_weight > 0 else 0.0
 
     def _check_metric_outliers(
-        self, metrics: dict[str, float], frame_reduction_context: bool = False
+        self, metrics: dict[str, float | str], frame_reduction_context: bool = False
     ) -> dict[str, dict[str, Any]]:
         """Check for severe outliers in individual metrics.
 
@@ -231,32 +237,45 @@ class QualityThresholdValidator:
         # SSIM check
         if "ssim_mean" in metrics:
             ssim_value = metrics["ssim_mean"]
+            # Only compare if value is numeric
+            is_acceptable = (
+                isinstance(ssim_value, int | float)
+                and ssim_value >= self.catastrophic_thresholds["min_ssim_mean"]
+            )
             checks["ssim"] = {
                 "value": ssim_value,
                 "threshold": self.catastrophic_thresholds["min_ssim_mean"],
-                "acceptable": ssim_value
-                >= self.catastrophic_thresholds["min_ssim_mean"],
+                "acceptable": is_acceptable,
                 "description": "Structural similarity",
             }
 
         # MSE check (higher is worse)
         if "mse_mean" in metrics:
             mse_value = metrics["mse_mean"]
+            # Only compare if value is numeric
+            is_acceptable = (
+                isinstance(mse_value, int | float)
+                and mse_value <= self.catastrophic_thresholds["max_mse_mean"]
+            )
             checks["mse"] = {
                 "value": mse_value,
                 "threshold": self.catastrophic_thresholds["max_mse_mean"],
-                "acceptable": mse_value <= self.catastrophic_thresholds["max_mse_mean"],
+                "acceptable": is_acceptable,
                 "description": "Mean squared error",
             }
 
         # PSNR check
         if "psnr_mean" in metrics:
             psnr_value = metrics["psnr_mean"]
+            # Only compare if value is numeric
+            is_acceptable = (
+                isinstance(psnr_value, int | float)
+                and psnr_value >= self.catastrophic_thresholds["min_psnr_mean"]
+            )
             checks["psnr"] = {
                 "value": psnr_value,
                 "threshold": self.catastrophic_thresholds["min_psnr_mean"],
-                "acceptable": psnr_value
-                >= self.catastrophic_thresholds["min_psnr_mean"],
+                "acceptable": is_acceptable,
                 "description": "Peak signal-to-noise ratio",
             }
 
@@ -276,10 +295,15 @@ class QualityThresholdValidator:
                     "min_temporal_consistency"
                 ]
 
+            # Only compare if value is numeric
+            is_acceptable = (
+                isinstance(temporal_value, int | float)
+                and temporal_value >= temporal_threshold
+            )
             checks["temporal"] = {
                 "value": temporal_value,
                 "threshold": temporal_threshold,
-                "acceptable": temporal_value >= temporal_threshold,
+                "acceptable": is_acceptable,
                 "description": "Temporal consistency",
             }
 
@@ -308,12 +332,16 @@ class QualityThresholdValidator:
                 variance_key = f"{metric_name}_positional_variance"
                 if variance_key in metrics:
                     variance = metrics[variance_key]
+                    # Only compare if value is numeric
+                    is_acceptable = (
+                        isinstance(variance, int | float)
+                        and variance <= self.catastrophic_thresholds["max_quality_variance"]
+                    )
                     variance_indicators.append(
                         {
                             "metric": metric_name,
                             "variance": variance,
-                            "acceptable": variance
-                            <= self.catastrophic_thresholds["max_quality_variance"],
+                            "acceptable": is_acceptable,
                         }
                     )
 

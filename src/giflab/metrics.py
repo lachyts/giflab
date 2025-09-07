@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -929,7 +929,8 @@ def calculate_ssim(original_path: Path, compressed_path: Path) -> float:
     """
     try:
         metrics = calculate_comprehensive_metrics(original_path, compressed_path)
-        return metrics["ssim"]
+        ssim_value = metrics["ssim"]
+        return float(ssim_value) if isinstance(ssim_value, int | float) else 0.0
     except Exception as e:
         logger.error(f"SSIM calculation failed: {e}")
         return 0.0
@@ -1332,7 +1333,7 @@ def calculate_comprehensive_metrics(
     compressed_path: Path,
     config: MetricsConfig | None = None,
     frame_reduction_context: bool = False,
-) -> dict[str, float]:
+) -> dict[str, float | str]:
     """Calculate comprehensive quality metrics between original and compressed GIFs.
 
     This is the main function that addresses the frame alignment problem and provides
@@ -1600,6 +1601,69 @@ def calculate_comprehensive_metrics(
             logger.error(f"Unexpected error in gradient and color artifacts calculation: {e}. Using fallback values.")
             gradient_color_metrics = default_gradient_metrics
 
+        # Calculate deep perceptual metrics (Task 2.2)
+        deep_perceptual_metrics: dict[str, float | str] = {}
+        
+        # Default fallback metrics
+        default_deep_perceptual_metrics: dict[str, float | str] = {
+            "lpips_quality_mean": 0.5,
+            "lpips_quality_p95": 0.5,
+            "lpips_quality_max": 0.5,
+            "deep_perceptual_frame_count": float(len(compressed_frames)),
+            "deep_perceptual_downscaled": 0.0,
+            "deep_perceptual_device": "fallback",
+        }
+        
+        # Check if deep perceptual metrics should be calculated
+        # We'll calculate conditional logic after we have the initial composite quality
+        should_calculate_deep_perceptual = True  # Initially calculate for all
+        
+        if should_calculate_deep_perceptual:
+            try:
+                from .deep_perceptual_metrics import (
+                    calculate_deep_perceptual_quality_metrics,
+                    should_use_deep_perceptual,
+                )
+                logger.debug("Successfully imported deep_perceptual_metrics module")
+                
+                # Prepare configuration for deep perceptual metrics
+                deep_config = {
+                    "device": getattr(config, "DEEP_PERCEPTUAL_DEVICE", "auto"),
+                    "lpips_downscale_size": getattr(config, "LPIPS_DOWNSCALE_SIZE", 512),
+                    "lpips_max_frames": getattr(config, "LPIPS_MAX_FRAMES", 100),
+                    "disable_deep_perceptual": not getattr(config, "ENABLE_DEEP_PERCEPTUAL", True),
+                }
+                
+                # For now, always calculate since we need composite quality first
+                # In future iterations, this could be made conditional based on initial quality assessment
+                if should_use_deep_perceptual(None):  # No composite quality available yet
+                    deep_perceptual_metrics = calculate_deep_perceptual_quality_metrics(
+                        original_frames, compressed_frames, deep_config
+                    )
+                    logger.debug("Successfully calculated deep perceptual metrics")
+                else:
+                    logger.debug("Deep perceptual metrics skipped based on conditional logic")
+                    deep_perceptual_metrics = default_deep_perceptual_metrics
+                
+            except ImportError as e:
+                logger.info(f"Deep perceptual metrics module not available: {e}. Using fallback values.")
+                deep_perceptual_metrics = default_deep_perceptual_metrics
+                
+            except AttributeError as e:
+                logger.warning(f"Deep perceptual metrics function not found: {e}. Module may be incomplete.")
+                deep_perceptual_metrics = default_deep_perceptual_metrics
+                
+            except (ValueError, TypeError, RuntimeError) as e:
+                logger.error(f"Error calculating deep perceptual metrics: {e}. Using fallback values.")
+                deep_perceptual_metrics = default_deep_perceptual_metrics
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in deep perceptual metrics calculation: {e}. Using fallback values.")
+                deep_perceptual_metrics = default_deep_perceptual_metrics
+        else:
+            logger.debug("Deep perceptual metrics calculation skipped")
+            deep_perceptual_metrics = default_deep_perceptual_metrics
+
         # Extract frame count information
         try:
             from .meta import extract_gif_metadata
@@ -1668,7 +1732,7 @@ def calculate_comprehensive_metrics(
             }
 
         # Aggregate all metrics with descriptive statistics
-        result = {}
+        result: dict[str, float | str] = {}
 
         # Add aggregated metrics
         for metric_name, values in metric_values.items():
@@ -1710,6 +1774,13 @@ def calculate_comprehensive_metrics(
                 if isinstance(metric_value, int | float)
                 else metric_value
             )
+
+        # Add deep perceptual metrics (Task 2.2)
+        for deep_key, deep_value in deep_perceptual_metrics.items():
+            if isinstance(deep_value, int | float):
+                result[deep_key] = float(deep_value)
+            else:
+                result[deep_key] = str(deep_value)
 
         # Add frame count information
         result["frame_count"] = int(original_frame_count)

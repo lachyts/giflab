@@ -168,6 +168,15 @@ def calculate_composite_quality(
         composite_quality += config.ENHANCED_TEMPORAL_WEIGHT * normalized
         total_weight += config.ENHANCED_TEMPORAL_WEIGHT
 
+    # Deep perceptual metrics (3% total)
+    if "lpips_quality_mean" in metrics:
+        # LPIPS scores are inverted (lower = better), so we need to invert for quality
+        # Normalize LPIPS score: 0.0 (identical) -> 1.0, 1.0 (very different) -> 0.0
+        lpips_score = metrics["lpips_quality_mean"]
+        normalized_lpips = max(0.0, min(1.0, 1.0 - lpips_score))  # Invert: lower LPIPS = higher quality
+        composite_quality += config.ENHANCED_LPIPS_WEIGHT * normalized_lpips
+        total_weight += config.ENHANCED_LPIPS_WEIGHT
+
     # Normalize by actual weights used (handles missing metrics gracefully)
     raw_composite = composite_quality
     if total_weight > 0:
@@ -333,6 +342,10 @@ def get_enhanced_weights_info(config: MetricsConfig | None = None) -> dict[str, 
             "temporal_consistency": config.ENHANCED_TEMPORAL_WEIGHT,
             "total": config.ENHANCED_TEMPORAL_WEIGHT,
         },
+        "deep_perceptual": {
+            "lpips_mean": config.ENHANCED_LPIPS_WEIGHT,
+            "total": config.ENHANCED_LPIPS_WEIGHT,
+        },
         "grand_total": (
             config.ENHANCED_SSIM_WEIGHT
             + config.ENHANCED_MS_SSIM_WEIGHT
@@ -345,6 +358,7 @@ def get_enhanced_weights_info(config: MetricsConfig | None = None) -> dict[str, 
             + config.ENHANCED_SHARPNESS_WEIGHT
             + config.ENHANCED_TEXTURE_WEIGHT
             + config.ENHANCED_TEMPORAL_WEIGHT
+            + config.ENHANCED_LPIPS_WEIGHT
         ),
     }
 

@@ -551,6 +551,228 @@ class PerceptualColorValidator:
             "color_patch_count": total_patches,
         }
 
+class DitherQualityAnalyzer:
+    """Analyzes dithering quality using FFT-based frequency analysis.
+    
+    Detects over-dithering (excessive noise) and under-dithering (banding) by analyzing
+    the frequency spectrum of flat/gradient regions.
+    """
+
+    def __init__(self, patch_size: int = 64, flat_threshold: float = 50.0):
+        """Initialize dither quality analyzer.
+
+        Args:
+            patch_size: Size of analysis patches in pixels
+            flat_threshold: Variance threshold for identifying smooth regions suitable for dithering analysis
+        """
+        if patch_size <= 0 or patch_size < 16:
+            raise ValueError(f"patch_size must be >= 16, got {patch_size}")
+        self.patch_size = patch_size
+        
+        if flat_threshold < 0:
+            raise ValueError(f"flat_threshold must be non-negative, got {flat_threshold}")
+        self.flat_threshold = flat_threshold
+
+    def detect_flat_regions(self, frame: np.ndarray, step_size: int | None = None) -> list[tuple[int, int, int, int]]:
+        """Identify flat/smooth regions suitable for dithering analysis.
+
+        Args:
+            frame: RGB frame as numpy array [H, W, 3]
+            step_size: Step size for sliding window (defaults to patch_size // 2)
+
+        Returns:
+            List of (x, y, width, height) tuples for flat regions
+        """
+        if step_size is None:
+            step_size = self.patch_size // 2
+
+        # Convert to grayscale for analysis
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+        
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        h, w = gray.shape
+
+        flat_regions = []
+
+        for y in range(0, h - self.patch_size, step_size):
+            for x in range(0, w - self.patch_size, step_size):
+                patch = gray[y : y + self.patch_size, x : x + self.patch_size]
+                
+                # Check if patch is flat/smooth (low variance)
+                variance = np.var(patch)
+                if variance < self.flat_threshold:
+                    flat_regions.append((x, y, self.patch_size, self.patch_size))
+
+        return flat_regions
+
+    def compute_frequency_spectrum(self, patch: np.ndarray) -> np.ndarray:
+        """Apply 2D FFT to analyze frequency content of a patch.
+
+        Args:
+            patch: Grayscale patch as numpy array [H, W]
+
+        Returns:
+            2D magnitude spectrum (frequencies)
+        """
+        # Apply 2D FFT and compute magnitude spectrum
+        fft_result = np.fft.fft2(patch)
+        magnitude_spectrum = np.abs(fft_result)
+        
+        # Shift zero frequency to center for easier analysis
+        magnitude_spectrum = np.fft.fftshift(magnitude_spectrum)
+        
+        return magnitude_spectrum
+
+    def calculate_band_energies(self, spectrum: np.ndarray) -> tuple[float, float, float]:
+        """Divide frequency spectrum into bands and calculate energies.
+
+        Args:
+            spectrum: 2D magnitude spectrum from FFT
+
+        Returns:
+            Tuple of (low_energy, mid_energy, high_energy)
+        """
+        h, w = spectrum.shape
+        center_h, center_w = h // 2, w // 2
+        
+        # Create distance matrix from center (DC component)
+        y, x = np.ogrid[:h, :w]
+        dist_from_center = np.sqrt((x - center_w) ** 2 + (y - center_h) ** 2)
+        
+        # Normalize distance to [0, 1] where 1 is the maximum possible distance
+        max_dist = np.sqrt(center_h ** 2 + center_w ** 2)
+        normalized_dist = dist_from_center / max_dist
+        
+        # Define frequency bands (normalized distances)
+        # Low: 0-0.1 (DC + very low frequencies)
+        # Mid: 0.1-0.5 (ideal dithering frequencies)
+        # High: 0.5-1.0 (high frequencies, potential noise)
+        low_mask = normalized_dist <= 0.1
+        mid_mask = (normalized_dist > 0.1) & (normalized_dist <= 0.5)
+        high_mask = normalized_dist > 0.5
+        
+        # Calculate energy in each band (sum of squared magnitudes)
+        low_energy = np.sum(spectrum[low_mask] ** 2)
+        mid_energy = np.sum(spectrum[mid_mask] ** 2)
+        high_energy = np.sum(spectrum[high_mask] ** 2)
+        
+        return low_energy, mid_energy, high_energy
+
+    def compute_dither_ratio(self, high_energy: float, mid_energy: float) -> float:
+        """Calculate dithering quality ratio from frequency band energies.
+
+        Args:
+            high_energy: Energy in high frequency band
+            mid_energy: Energy in mid frequency band
+
+        Returns:
+            Dither ratio where:
+            - < 0.8: Under-dithered (too smooth, potential banding)
+            - 0.8-1.3: Well-dithered
+            - > 1.3: Over-dithered (excessive noise)
+        """
+        # Avoid division by zero
+        if mid_energy < 1e-10:
+            # If mid-energy is essentially zero, check high energy
+            return 10.0 if high_energy > 1e-10 else 0.0
+        
+        return high_energy / mid_energy
+
+    def analyze_dither_quality(
+        self,
+        original_frames: list[np.ndarray],
+        compressed_frames: list[np.ndarray]
+    ) -> dict[str, float]:
+        """Main entry point for dither quality analysis.
+
+        Args:
+            original_frames: List of original RGB frames
+            compressed_frames: List of compressed RGB frames
+
+        Returns:
+            Dictionary with dither quality metrics
+        """
+        if len(original_frames) != len(compressed_frames):
+            raise ValueError(
+                f"Frame count mismatch: {len(original_frames)} vs {len(compressed_frames)}"
+            )
+
+        all_ratios = []
+        total_flat_regions = 0
+        
+        try:
+            for orig_frame, comp_frame in zip(original_frames, compressed_frames, strict=True):
+                # Detect flat regions in original (these should benefit from good dithering)
+                flat_regions = self.detect_flat_regions(orig_frame)
+                total_flat_regions += len(flat_regions)
+                
+                # Convert compressed frame to grayscale for analysis
+                if comp_frame.dtype != np.uint8:
+                    comp_frame = np.clip(comp_frame, 0, 255).astype(np.uint8)
+                comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY).astype(np.float32)
+                
+                # Analyze each flat region in the compressed frame
+                for x, y, w, h in flat_regions:
+                    patch = comp_gray[y:y+h, x:x+w]
+                    
+                    # Compute frequency spectrum
+                    spectrum = self.compute_frequency_spectrum(patch)
+                    
+                    # Calculate band energies
+                    low_energy, mid_energy, high_energy = self.calculate_band_energies(spectrum)
+                    
+                    # Compute dither ratio
+                    ratio = self.compute_dither_ratio(high_energy, mid_energy)
+                    all_ratios.append(ratio)
+
+            # Calculate summary statistics
+            if not all_ratios:
+                return {
+                    "dither_ratio_mean": 0.0,
+                    "dither_ratio_p95": 0.0,
+                    "dither_quality_score": 0.0,
+                    "flat_region_count": 0,
+                }
+
+            ratios_array = np.array(all_ratios)
+            mean_ratio = float(np.mean(ratios_array))
+            p95_ratio = float(np.percentile(ratios_array, 95))
+            
+            # Calculate quality score (0-100, higher is better)
+            # Ideal ratio range is 0.8-1.3, score decreases as we move away from this range
+            quality_scores = []
+            for ratio in all_ratios:
+                if 0.8 <= ratio <= 1.3:
+                    # Well-dithered: score based on how close to 1.0 (perfect balance)
+                    distance_from_ideal = abs(ratio - 1.0)
+                    score = max(80, 100 - (distance_from_ideal * 40))
+                elif ratio < 0.8:
+                    # Under-dithered: score decreases with how far below 0.8
+                    score = max(0, 80 * (ratio / 0.8))
+                else:  # ratio > 1.3
+                    # Over-dithered: score decreases with how far above 1.3
+                    score = max(0, 80 * (2.0 - min(ratio, 2.0)) / 0.7)
+                quality_scores.append(score)
+            
+            mean_quality = float(np.mean(quality_scores))
+
+            return {
+                "dither_ratio_mean": mean_ratio,
+                "dither_ratio_p95": p95_ratio,
+                "dither_quality_score": mean_quality,
+                "flat_region_count": total_flat_regions,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to analyze dither quality: {e}")
+            return {
+                "dither_ratio_mean": 0.0,
+                "dither_ratio_p95": 0.0,
+                "dither_quality_score": 0.0,
+                "flat_region_count": 0,
+            }
+
 
 # Main entry points for external use
 
@@ -588,6 +810,21 @@ def calculate_perceptual_color_metrics(
         original_frames, compressed_frames
     )
 
+def calculate_dither_quality_metrics(
+    original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
+) -> dict[str, float]:
+    """Main entry point for dither quality analysis.
+
+    Args:
+        original_frames: List of original RGB frames
+        compressed_frames: List of compressed RGB frames
+
+    Returns:
+        Dictionary with dither quality metrics
+    """
+    analyzer = DitherQualityAnalyzer()
+    return analyzer.analyze_dither_quality(original_frames, compressed_frames)
+
 
 def calculate_gradient_color_metrics(
     original_frames: list[np.ndarray], compressed_frames: list[np.ndarray]
@@ -606,9 +843,12 @@ def calculate_gradient_color_metrics(
         color_metrics = calculate_perceptual_color_metrics(
             original_frames, compressed_frames
         )
+        dither_metrics = calculate_dither_quality_metrics(
+            original_frames, compressed_frames
+        )
 
-        # Combine metrics
-        combined_metrics = {**banding_metrics, **color_metrics}
+        # Combine all metrics
+        combined_metrics = {**banding_metrics, **color_metrics, **dither_metrics}
 
         logger.debug(
             f"Calculated gradient and color metrics: {len(combined_metrics)} metrics"
@@ -631,4 +871,8 @@ def calculate_gradient_color_metrics(
             "deltae_pct_gt3": 0.0,
             "deltae_pct_gt5": 0.0,
             "color_patch_count": 0,
+            "dither_ratio_mean": 0.0,
+            "dither_ratio_p95": 0.0,
+            "dither_quality_score": 0.0,
+            "flat_region_count": 0,
         }

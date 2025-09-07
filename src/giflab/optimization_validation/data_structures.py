@@ -78,6 +78,13 @@ class ValidationMetrics:
     lpips_t_mean: float | None = None
     lpips_t_p95: float | None = None
 
+    # Deep perceptual metrics (Task 2.2)
+    lpips_quality_mean: float | None = None
+    lpips_quality_p95: float | None = None
+    lpips_quality_max: float | None = None
+    deep_perceptual_frame_count: int | None = None
+    deep_perceptual_downscaled: float | None = None
+
     # Size metrics
     original_size_kb: float | None = None
     compressed_size_kb: float | None = None
@@ -215,6 +222,11 @@ class ValidationConfig:
     temporal_pumping_threshold: float = 0.15  # Maximum temporal quality oscillation
     lpips_t_threshold: float = 0.05  # LPIPS temporal threshold
 
+    # Deep perceptual quality thresholds (Task 2.2)
+    lpips_quality_threshold: float = 0.3  # LPIPS spatial quality threshold
+    lpips_quality_extreme_threshold: float = 0.5  # Extreme LPIPS P95 threshold
+    lpips_quality_max_threshold: float = 0.7  # Maximum LPIPS threshold
+
     # Content-type specific adjustments
     content_type_adjustments: dict[str, dict[str, float]] = field(default_factory=dict)
 
@@ -250,6 +262,10 @@ class ValidationConfig:
             "flat_flicker_ratio_threshold": self.flat_flicker_ratio_threshold,
             "temporal_pumping_threshold": self.temporal_pumping_threshold,
             "lpips_t_threshold": self.lpips_t_threshold,
+            # Deep perceptual quality thresholds (Task 2.2)
+            "lpips_quality_threshold": self.lpips_quality_threshold,
+            "lpips_quality_extreme_threshold": self.lpips_quality_extreme_threshold,
+            "lpips_quality_max_threshold": self.lpips_quality_max_threshold,
         }
 
         # Apply content-type specific adjustments

@@ -133,6 +133,9 @@ class ValidationChecker:
             self._validate_temporal_artifacts(
                 result, compression_metrics, effective_thresholds
             )
+            self._validate_deep_perceptual_metrics(
+                result, compression_metrics, effective_thresholds
+            )
 
             # Perform multi-metric combination validation
             self._validate_multi_metric_combinations(
@@ -243,6 +246,12 @@ class ValidationChecker:
             ),
             lpips_t_mean=compression_metrics.get("lpips_t_mean"),
             lpips_t_p95=compression_metrics.get("lpips_t_p95"),
+            # Deep perceptual metrics (Task 2.2)
+            lpips_quality_mean=compression_metrics.get("lpips_quality_mean"),
+            lpips_quality_p95=compression_metrics.get("lpips_quality_p95"),
+            lpips_quality_max=compression_metrics.get("lpips_quality_max"),
+            deep_perceptual_frame_count=compression_metrics.get("deep_perceptual_frame_count"),
+            deep_perceptual_downscaled=compression_metrics.get("deep_perceptual_downscaled"),
             # Size
             original_size_kb=original_metadata.orig_kilobytes,
             compressed_size_kb=compression_metrics.get("kilobytes"),
@@ -671,6 +680,95 @@ class ValidationChecker:
                     actual_value=lpips_t_mean,
                     threshold=lpips_threshold,
                     severity="WARNING",
+                )
+            )
+
+    def _validate_deep_perceptual_metrics(
+        self,
+        result: ValidationResult,
+        compression_metrics: dict[str, Any],
+        thresholds: dict[str, float],
+    ) -> None:
+        """Validate deep perceptual quality metrics from Task 2.2.
+        
+        This validates the new LPIPS-based spatial quality metrics that catch
+        perceptual issues traditional metrics miss.
+        """
+        # Check if deep perceptual metrics are available
+        lpips_quality_mean = compression_metrics.get("lpips_quality_mean")
+        lpips_quality_p95 = compression_metrics.get("lpips_quality_p95")
+        lpips_quality_max = compression_metrics.get("lpips_quality_max")
+        deep_perceptual_used = compression_metrics.get("deep_perceptual_device", "fallback") != "fallback"
+        
+        if not any([lpips_quality_mean, lpips_quality_p95, lpips_quality_max]) or not deep_perceptual_used:
+            # Only warn if deep perceptual was expected but unavailable
+            composite_quality = compression_metrics.get("composite_quality")
+            if composite_quality is not None and 0.3 <= composite_quality <= 0.7:  # Borderline quality
+                result.warnings.append(
+                    ValidationWarning(
+                        category="deep_perceptual_unavailable",
+                        message="Deep perceptual metrics unavailable for borderline quality case",
+                        recommendation="Consider investigating why LPIPS calculation failed",
+                    )
+                )
+            return
+        
+        # Validate LPIPS quality - higher scores indicate more perceptual difference (worse quality)
+        lpips_threshold = thresholds.get("lpips_quality_threshold", 0.3)
+        
+        if lpips_quality_mean is not None and lpips_quality_mean > lpips_threshold:
+            result.issues.append(
+                ValidationIssue(
+                    category="perceptual_quality_degradation",
+                    message=f"Poor perceptual quality detected: LPIPS {lpips_quality_mean:.4f} > {lpips_threshold:.4f} - significant visual differences detected",
+                    expected_value=lpips_threshold,
+                    actual_value=lpips_quality_mean,
+                    threshold=lpips_threshold,
+                    severity="WARNING",
+                )
+            )
+        
+        # Validate extreme cases with p95 metric
+        extreme_threshold = thresholds.get("lpips_quality_extreme_threshold", 0.5)
+        if lpips_quality_p95 is not None and lpips_quality_p95 > extreme_threshold:
+            result.issues.append(
+                ValidationIssue(
+                    category="extreme_perceptual_degradation",
+                    message=f"Extreme perceptual degradation in worst frames: LPIPS P95 {lpips_quality_p95:.4f} > {extreme_threshold:.4f}",
+                    expected_value=extreme_threshold,
+                    actual_value=lpips_quality_p95,
+                    threshold=extreme_threshold,
+                    severity="CRITICAL",
+                )
+            )
+        
+        # Check for very high maximum values that indicate severe artifacts
+        max_threshold = thresholds.get("lpips_quality_max_threshold", 0.7)
+        if lpips_quality_max is not None and lpips_quality_max > max_threshold:
+            result.warnings.append(
+                ValidationWarning(
+                    category="severe_perceptual_artifacts",
+                    message=f"Severe artifacts in worst frame: LPIPS max {lpips_quality_max:.4f} > {max_threshold:.4f}",
+                    expected_value=max_threshold,
+                    actual_value=lpips_quality_max,
+                    threshold=max_threshold,
+                    recommendation="Check for compression artifacts or frame corruption",
+                )
+            )
+        
+        # Combination check: Low composite quality + High LPIPS = Comprehensive quality degradation
+        composite_quality = compression_metrics.get("composite_quality")
+        if (
+            composite_quality is not None
+            and lpips_quality_mean is not None
+            and composite_quality < 0.6
+            and lpips_quality_mean > 0.2
+        ):
+            result.issues.append(
+                ValidationIssue(
+                    category="comprehensive_quality_failure",
+                    message=f"Both traditional and perceptual quality poor: Composite {composite_quality:.3f} + LPIPS {lpips_quality_mean:.3f}",
+                    severity="CRITICAL",
                 )
             )
 

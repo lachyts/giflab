@@ -10,7 +10,7 @@ for debugging compression failures, including:
 """
 
 import logging
-from typing import Any, Optional, Union, Literal, Protocol, TypedDict
+from typing import Any, Literal, Optional, Protocol, TypedDict, Union
 
 import cv2
 import numpy as np
@@ -82,8 +82,8 @@ class MemoryMonitor:
             return 0.0
     
     def get_safe_batch_size(
-        self, 
-        frame_shape: tuple[int, int, int], 
+        self,
+        frame_shape: tuple[int, int, int],
         max_batch_size: int = 32,
         min_batch_size: int = 1
     ) -> int:
@@ -142,7 +142,7 @@ class MemoryMonitor:
 class TemporalArtifactDetector:
     """Enhanced temporal artifact detector using perceptual metrics."""
 
-    def __init__(self, device: Optional[str] = None, force_mse_fallback: bool = False, memory_threshold: float = 0.8):
+    def __init__(self, device: str | None = None, force_mse_fallback: bool = False, memory_threshold: float = 0.8):
         """Initialize temporal artifact detector.
 
         Args:
@@ -151,8 +151,17 @@ class TemporalArtifactDetector:
                                Useful for consistent behavior or when LPIPS is problematic.
             memory_threshold: Memory usage threshold for cleanup (0.0-1.0).
         """
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self._lpips_model: Optional[Union[LPIPSModel, Literal[False]]] = None
+        # Auto-detect device if not specified
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            # Validate explicitly requested device
+            if device.startswith("cuda") and not torch.cuda.is_available():
+                logger.warning(f"CUDA device '{device}' requested but CUDA is not available, falling back to CPU")
+                self.device = "cpu"
+            else:
+                self.device = device
+        self._lpips_model: LPIPSModel | Literal[False] | None = None
         self.force_mse_fallback = force_mse_fallback
         self.memory_monitor = MemoryMonitor(self.device, memory_threshold)
 
@@ -160,7 +169,7 @@ class TemporalArtifactDetector:
             logger.info("LPIPS disabled by configuration, using enhanced MSE fallback")
             self._lpips_model = False
 
-    def _get_lpips_model(self) -> Optional[LPIPSModel]:
+    def _get_lpips_model(self) -> LPIPSModel | None:
         """Lazy initialization of LPIPS model with enhanced fallback handling."""
         if self._lpips_model is None and LPIPS_AVAILABLE and not self.force_mse_fallback:
             try:
@@ -181,7 +190,7 @@ class TemporalArtifactDetector:
                 logger.info("LPIPS model initialized successfully")
                 self.memory_monitor.log_memory_usage("after LPIPS init")
 
-            except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+            except RuntimeError as e:
                 if "out of memory" in str(e).lower() or "cuda out of memory" in str(e).lower():
                     logger.warning(
                         f"LPIPS model failed due to memory constraints: {e}. "
@@ -193,11 +202,11 @@ class TemporalArtifactDetector:
                             logger.info("Attempting CPU fallback for LPIPS model")
                             self.device = "cpu"
                             self.memory_monitor = MemoryMonitor(self.device)
-                            model = lpips.LPIPS(net="alex", spatial=False).to(self.device)
-                            model.eval()
-                            self._lpips_model = model
+                            cpu_model = lpips.LPIPS(net="alex", spatial=False).to(self.device)
+                            cpu_model.eval()
+                            self._lpips_model = cpu_model
                             logger.info("LPIPS model initialized successfully on CPU")
-                            return model
+                            return cpu_model  # type: ignore[no-any-return]
                         except (RuntimeError, ImportError, AttributeError) as cpu_e:
                             logger.warning(f"CPU fallback also failed: {cpu_e}")
                 else:
@@ -239,14 +248,21 @@ class TemporalArtifactDetector:
         
         return frame1_tensors, frame2_tensors
     
-    def _cleanup_tensors(self, *tensor_lists) -> None:
-        """Clean up tensor lists and trigger memory cleanup if needed.
+    def _cleanup_tensors(self, *tensor_args: torch.Tensor | list[torch.Tensor]) -> None:
+        """Clean up tensors and tensor lists, triggering memory cleanup if needed.
         
         Args:
-            *tensor_lists: Variable number of tensor lists to delete
+            *tensor_args: Variable number of tensors or tensor lists to delete
         """
-        for tensor_list in tensor_lists:
-            del tensor_list
+        for tensor_arg in tensor_args:
+            if isinstance(tensor_arg, list):
+                # Handle list of tensors
+                for tensor in tensor_arg:
+                    del tensor
+                del tensor_arg
+            else:
+                # Handle individual tensor
+                del tensor_arg
         
         # Only cleanup memory when needed, not after every batch
         self.memory_monitor.cleanup_memory()
@@ -271,7 +287,17 @@ class TemporalArtifactDetector:
         # Adapt batch size based on memory and frame dimensions if we have frames
         if frames:
             frame_shape = frames[0].shape
-            batch_size = self.memory_monitor.get_safe_batch_size(frame_shape, batch_size)
+            # Ensure we have a 3D shape (H, W, C) for batch size calculation
+            if len(frame_shape) == 2:
+                # Grayscale image - add channel dimension
+                normalized_shape = (frame_shape[0], frame_shape[1], 1)
+            elif len(frame_shape) == 3:
+                # RGB image - use as is
+                normalized_shape = frame_shape
+            else:
+                # Unexpected shape - use a reasonable default
+                normalized_shape = (256, 256, 3)
+            batch_size = self.memory_monitor.get_safe_batch_size(normalized_shape, batch_size)
             
         self.memory_monitor.log_memory_usage("before LPIPS processing")
         
@@ -299,7 +325,7 @@ class TemporalArtifactDetector:
                             # Clean up batch tensors
                             self._cleanup_tensors(batch_frame1, batch_frame2, batch_distances, frame1_tensors, frame2_tensors)
                             
-                        except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+                        except RuntimeError as e:
                             if "out of memory" in str(e).lower():
                                 logger.warning(f"OOM in batch processing, reducing batch size: {e}")
                                 # Cleanup and try with smaller batch
@@ -323,7 +349,7 @@ class TemporalArtifactDetector:
                             else:
                                 raise  # Re-raise non-OOM errors
                         
-        except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError) as e:
+        except (RuntimeError, AttributeError, TypeError) as e:
             logger.error(f"Error in LPIPS batch processing: {e}")
             raise  # Let caller handle fallback
         
@@ -372,13 +398,13 @@ class TemporalArtifactDetector:
         # Try LPIPS processing first
         try:
             lpips_scores = self._process_lpips_batch(frames, batch_size)
-        except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError, ValueError) as e:
+        except (RuntimeError, AttributeError, TypeError, ValueError) as e:
             logger.error(f"Error calculating LPIPS temporal: {e}")
             logger.debug("Falling back to MSE-based temporal calculation")
             return self._calculate_mse_temporal_fallback(frames)
 
         # If no scores obtained, fall back to MSE
-        if not lpips_scores:
+        if lpips_scores is None or len(lpips_scores) == 0:
             logger.debug("No LPIPS scores obtained, using MSE fallback")
             return self._calculate_mse_temporal_fallback(frames)
 
@@ -497,7 +523,7 @@ class TemporalArtifactDetector:
         if len(frames) >= 2:
             try:
                 lpips_scores = self._process_lpips_batch(frames, batch_size)
-            except (RuntimeError, torch.cuda.OutOfMemoryError, AttributeError, TypeError, ValueError) as e:
+            except (RuntimeError, AttributeError, TypeError, ValueError) as e:
                 logger.error(f"Error getting LPIPS scores for flicker analysis: {e}")
                 # Use empty scores, will result in zero flicker metrics
 
@@ -699,7 +725,7 @@ class TemporalArtifactDetector:
             # Return mean variance across all pixels in region
             return float(np.mean(temporal_variance))
 
-        except (ValueError, IndexError, np.core._exceptions.AxisError) as e:
+        except (ValueError, IndexError, np.AxisError) as e:
             logger.error(f"Error calculating temporal variance: {e}")
             return 0.0
 

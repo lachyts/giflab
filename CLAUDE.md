@@ -102,7 +102,52 @@ make data          # Run compression pipeline
 
 All Makefile targets internally use `poetry run` commands.
 
-## Troubleshooting
+## Animately CLI Tool Usage
+
+### 🎯 **Critical: Animately Requires Flag-Based Arguments**
+
+**Animately is an in-house CLI tool** with multiple versions in `/Users/lachlants/bin/`. 
+
+### ❌ **WRONG** - Positional arguments will FAIL silently:
+```bash
+animately input.gif output.gif --lossy 60
+```
+
+### ✅ **CORRECT** - Always use flag-based syntax:
+```bash
+animately --input input.gif --output output.gif --lossy 60
+```
+
+### Version Management
+- **Current recommended version**: `1.1.20.0` (Sep 4, 2025) - enhanced logging
+- **Location**: `/Users/lachlants/bin/animately` → symlinked to best version
+- **Available versions**: 
+  - `animately_1.1.6.0_experimental` (oldest, basic)
+  - `animately_1.1.18.0` (stable)
+  - `animately_1.1.20.0` (July 21) - basic logging
+  - `animately_1.1.20.0` (Sep 4) - **RECOMMENDED** - enhanced logging with timestamps
+
+### Common Usage Patterns
+```bash
+# Basic compression
+animately --input source.gif --output compressed.gif
+
+# Lossy compression  
+animately --input source.gif --output lossy.gif --lossy 60
+
+# Advanced lossy with color reduction
+animately --input source.gif --output advanced.gif --advanced-lossy 40 --colors 128
+
+# With scaling and cropping
+animately --input source.gif --output processed.gif --scale 0.5 --crop "100,100,200,200"
+```
+
+### Troubleshooting Animately
+- **Exit code 1/2 without error**: Check if using positional instead of flag arguments
+- **"No input file path provided"**: Missing `--input` flag
+- **Silent failure**: Verify flag syntax: `--input file.gif --output out.gif`
+
+## Python/Poetry Troubleshooting
 
 ### "ModuleNotFoundError: No module named 'click'"
 - **Cause**: Using `python -m` instead of `poetry run python -m`
@@ -116,13 +161,34 @@ All Makefile targets internally use `poetry run` commands.
 - **Cause**: Trying to use `giflab` directly instead of module syntax
 - **Fix**: Use `poetry run python -m giflab` or `poetry run giflab`
 
+## Test Suite Information
+
+### Intentionally Skipped Tests (Normal Behavior)
+These tests are **correctly skipped** during normal test runs:
+
+1. **Golden Results Test** - `tests/test_gradient_color_regression.py`
+   - **Skip reason**: "Use --update-golden to save new golden results"
+   - **How to run**: `poetry run pytest --update-golden tests/test_gradient_color_regression.py::*golden*`
+   - **Purpose**: Generates reference data for regression testing
+
+2. **Stress Tests** - `tests/test_gradient_color_performance.py`
+   - **Skip reason**: "Stress tests require GIFLAB_STRESS_TESTS=1"
+   - **How to run**: `GIFLAB_STRESS_TESTS=1 poetry run pytest tests/test_gradient_color_performance.py::TestStressTesting`
+   - **Purpose**: Performance testing with large images and many frames
+
+### Test Troubleshooting
+- **Skipped animately tests**: Check that animately uses `--input`/`--output` flags (not positional args)
+- **Missing `compress` method**: ExternalTool classes use `apply()` method, not `compress()`
+- **Test timeouts**: Use `-n auto` for parallel execution: `poetry run pytest -n auto`
+
 ## For AI Assistants: Key Reminders
 
 1. **ALWAYS** use `poetry run` for Python execution
-2. **NEVER** use bare `python`, `pip`, or `pytest` commands
-3. **CHECK** that you're prefixing commands with `poetry run`
-4. **TEST** commands with `poetry run` if unsure
-5. **REMEMBER** this is a Poetry project - dependencies require the virtual environment
+2. **NEVER** use bare `python`, `pip`, or `pytest` commands  
+3. **ANIMATELY**: Always use `--input file.gif --output out.gif` (never positional args)
+4. **CHECK** that you're prefixing commands with `poetry run`
+5. **TEST** commands with `poetry run` if unsure
+6. **REMEMBER** this is a Poetry project - dependencies require the virtual environment
 
 ---
 

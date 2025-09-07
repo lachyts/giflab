@@ -84,13 +84,22 @@ class MetricsConfig:
     # Perceptual quality metrics (10% total)
     ENHANCED_CHIST_WEIGHT: float = 0.04
     ENHANCED_SHARPNESS_WEIGHT: float = 0.03
-    ENHANCED_TEXTURE_WEIGHT: float = 0.03
+    ENHANCED_TEXTURE_WEIGHT: float = 0.00  # Reduced to make room for LPIPS
 
     # Temporal consistency (5% total)
     ENHANCED_TEMPORAL_WEIGHT: float = 0.05
 
+    # Deep perceptual metrics (3% total)
+    ENHANCED_LPIPS_WEIGHT: float = 0.03
+
     # Enable enhanced composite quality calculation
     USE_ENHANCED_COMPOSITE_QUALITY: bool = True
+
+    # Deep perceptual metrics configuration
+    ENABLE_DEEP_PERCEPTUAL: bool = True
+    DEEP_PERCEPTUAL_DEVICE: str = "auto"
+    LPIPS_DOWNSCALE_SIZE: int = 512
+    LPIPS_MAX_FRAMES: int = 100
 
     # PSNR normalisation upper bound (dB) – values ≥ this map to 1.0
     PSNR_MAX_DB: float = 50.0
@@ -126,6 +135,7 @@ class MetricsConfig:
             + self.ENHANCED_SHARPNESS_WEIGHT
             + self.ENHANCED_TEXTURE_WEIGHT
             + self.ENHANCED_TEMPORAL_WEIGHT
+            + self.ENHANCED_LPIPS_WEIGHT
         )
         if abs(enhanced_total - 1.0) > tolerance:
             raise ValueError(
@@ -151,6 +161,7 @@ class MetricsConfig:
             self.ENHANCED_SHARPNESS_WEIGHT,
             self.ENHANCED_TEXTURE_WEIGHT,
             self.ENHANCED_TEMPORAL_WEIGHT,
+            self.ENHANCED_LPIPS_WEIGHT,
         ]
         all_weights = legacy_weights + enhanced_weights
         if any(w < 0 for w in all_weights):
