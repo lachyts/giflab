@@ -12,10 +12,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from giflab.config import DEFAULT_VALIDATION_CONFIG
-from giflab.meta import GifMetadata
 from giflab.wrapper_validation import (
     ValidationConfig,
-    ValidationResult,
     WrapperOutputValidator,
 )
 from giflab.wrapper_validation.integration import (

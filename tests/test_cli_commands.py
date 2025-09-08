@@ -1,6 +1,5 @@
 """Tests for CLI commands using click.testing.CliRunner."""
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -56,7 +55,7 @@ class TestRunCommand:
         result = runner.invoke(run, ["--help"])
 
         assert result.exit_code == 0
-        assert "Run compression analysis on GIFs" in result.output
+        assert "Run comprehensive GIF compression analysis and optimization" in result.output
         assert "--workers" in result.output
         assert "--resume" in result.output
 
@@ -70,48 +69,50 @@ class TestRunCommand:
 
     @patch("giflab.core.runner.GifLabRunner")
     @patch("giflab.cli.utils.validate_and_get_raw_dir")
-    def test_run_dry_run_mode(self, mock_validate, mock_pipeline_class):
-        """Test run command in dry-run mode."""
+    def test_run_estimate_time_mode(self, mock_validate, mock_pipeline_class):
+        """Test run command in estimate-time mode."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_dir = Path(tmpdir)
 
             # Mock validation to pass
             mock_validate.return_value = test_dir
 
-            # Mock pipeline
-            mock_pipeline = MagicMock()
-            mock_pipeline_class.return_value = mock_pipeline
-            mock_pipeline.discover_gifs.return_value = []
-            mock_pipeline.generate_jobs.return_value = []
+            # Mock pipeline runner
+            mock_runner = MagicMock()
+            mock_pipeline_class.return_value = mock_runner
+            mock_runner.generate_synthetic_gifs.return_value = []
+            mock_runner._estimate_execution_time.return_value = "1 minute"
 
             runner = CliRunner()
-            result = runner.invoke(run, [str(test_dir), "--dry-run"])
+            result = runner.invoke(run, [str(test_dir), "--estimate-time"])
 
-            # Should succeed in dry-run mode
-            assert "🔍 DRY RUN MODE - Analysis only" in result.output
-            # Pipeline.run() should not be called in dry-run mode
-            mock_pipeline.run.assert_not_called()
+            # Should succeed in estimate-time mode
+            assert result.exit_code == 0
+            assert "Estimated time:" in result.output
+            # Analysis should not be called in estimate-time mode
+            mock_runner.run_analysis.assert_not_called()
 
+    @patch("giflab.cli.run_cmd.validate_and_get_worker_count")
     @patch("giflab.core.runner.GifLabRunner")
     @patch("giflab.cli.utils.validate_and_get_raw_dir")
-    def test_run_with_workers_option(self, mock_validate, mock_pipeline_class):
+    def test_run_with_workers_option(self, mock_validate, mock_runner_class, mock_worker_validate):
         """Test run command with workers option."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_dir = Path(tmpdir)
             mock_validate.return_value = test_dir
+            mock_worker_validate.return_value = 4
 
-            mock_pipeline = MagicMock()
-            mock_pipeline_class.return_value = mock_pipeline
-            mock_pipeline.discover_gifs.return_value = []
-            mock_pipeline.generate_jobs.return_value = []
+            mock_runner = MagicMock()
+            mock_runner_class.return_value = mock_runner
+            mock_runner.generate_synthetic_gifs.return_value = []
+            mock_runner._estimate_execution_time.return_value = "1 minute"
 
             runner = CliRunner()
-            result = runner.invoke(run, [str(test_dir), "--workers", "4", "--dry-run"])
+            result = runner.invoke(run, [str(test_dir), "--workers", "4", "--estimate-time"])
 
-            # Check that pipeline was created with correct workers
-            mock_pipeline_class.assert_called_once()
-            call_kwargs = mock_pipeline_class.call_args[1]
-            assert call_kwargs["workers"] == 4
+            # Check that worker validation was called with correct value
+            mock_worker_validate.assert_called_once_with(4)
+            assert result.exit_code == 0
 
 
 class TestTagCommand:
@@ -164,8 +165,8 @@ class TestTagCommand:
             mock_tagging_pipeline.assert_not_called()
 
 
-class TestRunCommand:
-    """Tests for run CLI command."""
+class TestRunCommandAdvanced:
+    """Tests for advanced run CLI command features."""
 
     def test_run_help(self):
         """Test run command help."""

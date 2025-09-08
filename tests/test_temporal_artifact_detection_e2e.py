@@ -97,7 +97,7 @@ class TestTemporalArtifactDetectionE2E:
                 str(input_gif), str(output_gif)
             )
 
-            print(f"Temporal metrics after Gifsicle lossy compression:")
+            print("Temporal metrics after Gifsicle lossy compression:")
             print(f"  Flicker excess: {temporal_metrics.get('flicker_excess', 'N/A')}")
             print(
                 f"  Flat flicker ratio: {temporal_metrics.get('flat_flicker_ratio', 'N/A')}"
@@ -141,7 +141,7 @@ class TestTemporalArtifactDetectionE2E:
         if not wrapper.available():
             pytest.skip("Gifsicle not available")
 
-        validator = ValidationChecker(validation_config)
+        ValidationChecker(validation_config)
 
         # Test with smooth animation - should maintain temporal stability
         input_gif = create_smooth_animation_gif()
@@ -160,7 +160,7 @@ class TestTemporalArtifactDetectionE2E:
                 str(input_gif), str(output_gif)
             )
 
-            print(f"Temporal metrics after color reduction:")
+            print("Temporal metrics after color reduction:")
             print(f"  Flicker excess: {temporal_metrics.get('flicker_excess', 'N/A')}")
             print(
                 f"  Flat flicker ratio: {temporal_metrics.get('flat_flicker_ratio', 'N/A')}"
@@ -215,12 +215,12 @@ class TestTemporalArtifactDetectionE2E:
                 str(input_gif), str(output_gif)
             )
 
-            print(f"Input temporal artifacts:")
+            print("Input temporal artifacts:")
             for metric, value in input_metrics.items():
                 if metric.startswith(("flicker_", "temporal_", "lpips_t")):
                     print(f"  {metric}: {value}")
 
-            print(f"Output temporal artifacts:")
+            print("Output temporal artifacts:")
             for metric, value in output_metrics.items():
                 if metric.startswith(("flicker_", "temporal_", "lpips_t")):
                     print(f"  {metric}: {value}")
@@ -245,7 +245,7 @@ class TestTemporalArtifactDetectionE2E:
                 gif_path=input_gif, output_dir=tmp_path, include_temporal_artifacts=True
             )
 
-            print(f"Comprehensive analysis results:")
+            print("Comprehensive analysis results:")
             for key, value in results.items():
                 if isinstance(value, dict):
                     print(f"  {key}:")
@@ -305,9 +305,9 @@ class TestTemporalArtifactDetectionE2E:
                     content_type="test",
                 )
 
-                print(f"Real-world GIF validation:")
+                print("Real-world GIF validation:")
                 print(f"  Valid: {result.is_acceptable()}")
-                print(f"  Temporal metrics:")
+                print("  Temporal metrics:")
                 if hasattr(result.metrics, "flicker_excess"):
                     print(f"    Flicker excess: {result.metrics.flicker_excess}")
                 if hasattr(result.metrics, "flat_flicker_ratio"):
@@ -368,7 +368,7 @@ class TestTemporalArtifactDetectionE2E:
                 print(f"Failed temporal analysis for {name}: {e}")
                 continue
 
-        print(f"\nTemporal artifact comparison across engines:")
+        print("\nTemporal artifact comparison across engines:")
         for engine, metrics in engine_results.items():
             print(f"  {engine}:")
             for metric, value in metrics.items():
@@ -418,7 +418,7 @@ class TestTemporalArtifactDetectionFallbacks:
                 str(input_gif), str(output_gif)
             )
 
-            print(f"Fallback temporal metrics (without LPIPS):")
+            print("Fallback temporal metrics (without LPIPS):")
             for metric, value in temporal_metrics.items():
                 print(f"  {metric}: {value}")
 
@@ -455,7 +455,7 @@ class TestTemporalArtifactDetectionFallbacks:
                     str(input_gif), str(output_gif)
                 )
 
-                print(f"Temporal metrics without PyTorch:")
+                print("Temporal metrics without PyTorch:")
                 for metric, value in temporal_metrics.items():
                     print(f"  {metric}: {value}")
 
@@ -478,7 +478,7 @@ class TestTemporalArtifactDetectionFallbacks:
                 str(input_gif), str(output_gif), device="cpu"  # Force CPU
             )
 
-            print(f"CPU-only temporal metrics:")
+            print("CPU-only temporal metrics:")
             for metric, value in temporal_metrics.items():
                 print(f"  {metric}: {value}")
 
@@ -511,7 +511,7 @@ class TestTemporalArtifactPerformance:
             end_time = __import__("time").time()
             duration = end_time - start_time
 
-            print(f"Temporal detection performance:")
+            print("Temporal detection performance:")
             print(f"  Duration: {duration:.2f} seconds")
             print(f"  Metrics calculated: {len(temporal_metrics)}")
 
@@ -547,7 +547,7 @@ class TestTemporalArtifactPerformance:
         end_time = __import__("time").time()
         duration = end_time - start_time
 
-        print(f"Batch temporal analysis performance:")
+        print("Batch temporal analysis performance:")
         print(f"  Total duration: {duration:.2f} seconds")
         print(f"  GIFs analyzed: {len(results)}")
         print(f"  Average per GIF: {duration / max(len(results), 1):.2f} seconds")

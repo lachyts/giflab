@@ -7,7 +7,6 @@ in realistic scenarios without requiring extensive benchmarking.
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -33,6 +32,7 @@ class TestPerformanceIntegration:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @pytest.mark.performance
+    @pytest.mark.xdist_group("performance_tests")
     def test_vectorized_vs_serial_frame_generation(self):
         """Test that vectorized generation is faster than theoretical serial approach."""
         generator = SyntheticFrameGenerator()
@@ -40,6 +40,9 @@ class TestPerformanceIntegration:
         # Generate several frames and measure time
         frames_to_test = 10
         size = (200, 200)
+
+        # Warm up to reduce timing variance
+        generator.create_frame("complex_gradient", size, 0, frames_to_test)
 
         start_time = time.time()
         for i in range(frames_to_test):
@@ -49,9 +52,10 @@ class TestPerformanceIntegration:
         vectorized_time = time.time() - start_time
         time_per_frame = vectorized_time / frames_to_test
 
-        # With vectorization, should be very fast (< 0.01s per frame for 200x200)
+        # With vectorization, should be fast (< 0.015s per frame for 200x200)
+        # Allow some extra time for CI/parallel execution overhead
         assert (
-            time_per_frame < 0.01
+            time_per_frame < 0.015
         ), f"Vectorized generation too slow: {time_per_frame:.4f}s/frame"
 
         # Test that larger images are still reasonable

@@ -3,12 +3,11 @@
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
 from giflab.core import GifLabRunner
-from giflab.dynamic_pipeline import Pipeline, PipelineStep
 
 
 class MockTool:

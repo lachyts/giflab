@@ -7,25 +7,15 @@ validation pipeline using actual compression engines and realistic GIF processin
 import subprocess
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
-import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
 from giflab.config import DEFAULT_ENGINE_CONFIG
-from giflab.gradient_color_artifacts import calculate_gradient_color_metrics
 from giflab.lossy import _is_executable
 from giflab.metrics import calculate_comprehensive_metrics
 from giflab.optimization_validation.data_structures import ValidationConfig
-from giflab.optimization_validation.validation_checker import ValidationChecker
-from giflab.tool_wrappers import GifsicleColorReducer, GifsicleLossyCompressor
-from tests.fixtures.generate_gradient_color_fixtures import (
-    create_banded_gradient_gif,
-    create_brand_color_test_gif,
-    create_color_shift_gif,
-    create_smooth_gradient_gif,
-)
+from giflab.tool_wrappers import GifsicleColorReducer
 
 
 @pytest.mark.external_tools

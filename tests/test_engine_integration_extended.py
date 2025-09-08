@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
-from PIL import Image
 
 from giflab.meta import extract_gif_metadata
 from giflab.metrics import calculate_comprehensive_metrics
@@ -656,7 +655,7 @@ class TestCrossEngineConsistency:
                 output_path = Path(tmp_dir) / f"output_{i}.gif"
 
                 # Use same color reduction operation across engines
-                result = reducer.apply(MANY_COLORS, output_path, params={"colors": 64})
+                reducer.apply(MANY_COLORS, output_path, params={"colors": 64})
 
                 file_size = output_path.stat().st_size
                 file_sizes.append((reducer_cls.NAME, file_size))
@@ -789,7 +788,7 @@ class TestPerformanceAndQuality:
             output_path = Path(tmp_dir) / "output.gif"
 
             # Test moderate color reduction
-            result = reducer.apply(MANY_COLORS, output_path, params={"colors": 128})
+            reducer.apply(MANY_COLORS, output_path, params={"colors": 128})
 
             # Validate output has reasonable properties
             assert output_path.exists(), "Output file was not created"
@@ -825,7 +824,7 @@ class TestQualityDegradation:
             output_path = Path(tmp_dir) / "output.gif"
 
             # Test moderate lossy compression
-            result = compressor.apply(
+            compressor.apply(
                 MANY_COLORS,
                 output_path,
                 params={"lossy_level": 40},  # Moderate compression
@@ -877,7 +876,7 @@ class TestQualityDegradation:
             output_path = Path(tmp_dir) / "output.gif"
 
             # Test moderate lossy compression
-            result = compressor.apply(
+            compressor.apply(
                 MANY_COLORS,
                 output_path,
                 params={"lossy_level": 60},  # Moderate compression
@@ -923,7 +922,7 @@ class TestQualityDegradation:
             for i, lossy_level in enumerate(lossy_levels):
                 output_path = Path(tmp_dir) / f"output_{i}.gif"
 
-                result = compressor.apply(
+                compressor.apply(
                     MANY_COLORS, output_path, params={"lossy_level": lossy_level}
                 )
 

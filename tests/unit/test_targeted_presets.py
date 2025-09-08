@@ -5,7 +5,6 @@ generate_all_pipelines() + sampling with targeted pipeline generation.
 """
 
 import sys
-from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -549,7 +548,6 @@ class TestBuiltinPresets:
     def test_builtin_presets_loaded(self):
         """Test that built-in presets are loaded."""
         # Import should trigger auto-registration
-        from giflab.core import builtin_presets
 
         presets = PRESET_REGISTRY.list_presets()
         assert len(presets) > 0
@@ -558,7 +556,6 @@ class TestBuiltinPresets:
 
     def test_all_builtin_presets_valid(self):
         """Test that all built-in presets are valid."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -573,7 +570,6 @@ class TestBuiltinPresets:
 
     def test_builtin_presets_generate_pipelines(self):
         """Test that built-in presets can generate pipelines."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -592,7 +588,6 @@ class TestBuiltinPresets:
 
     def test_frame_focus_preset_configuration(self):
         """Test frame-focus preset has correct configuration."""
-        from giflab.core import builtin_presets
 
         if "frame-focus" in PRESET_REGISTRY.list_presets():
             preset = PRESET_REGISTRY.get("frame-focus")
@@ -605,7 +600,6 @@ class TestBuiltinPresets:
 
     def test_color_optimization_preset_configuration(self):
         """Test color-optimization preset has correct configuration."""
-        from giflab.core import builtin_presets
 
         if "color-optimization" in PRESET_REGISTRY.list_presets():
             preset = PRESET_REGISTRY.get("color-optimization")
@@ -618,7 +612,6 @@ class TestBuiltinPresets:
 
     def test_tool_comparison_baseline_preset(self):
         """Test tool-comparison-baseline preset has multiple variables."""
-        from giflab.core import builtin_presets
 
         if "tool-comparison-baseline" in PRESET_REGISTRY.list_presets():
             preset = PRESET_REGISTRY.get("tool-comparison-baseline")
@@ -630,7 +623,6 @@ class TestBuiltinPresets:
 
     def test_preset_efficiency_gains(self):
         """Test that presets achieve expected efficiency gains."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
         baseline_pipelines = 935  # Typical generate_all_pipelines count
@@ -692,11 +684,11 @@ class TestErrorHandling:
 
     def test_registry_validation_catches_invalid_presets(self):
         """Test that preset validation catches invalid presets during construction."""
-        registry = PresetRegistry()
+        PresetRegistry()
 
         # Should raise during preset construction due to validation (all slots locked)
         with pytest.raises(ValueError, match="At least one slot must be variable"):
-            invalid_preset = ExperimentPreset(
+            ExperimentPreset(
                 name="Invalid",
                 description="Should fail",
                 frame_slot=SlotConfiguration(
@@ -728,7 +720,6 @@ class TestErrorHandling:
 
     def test_max_combinations_limit_applied(self):
         """Test that max_combinations limit is properly applied."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -751,7 +742,6 @@ class TestIntegrationWithExistingSystem:
 
     def test_pipeline_objects_have_correct_structure(self):
         """Test that generated pipelines have expected structure."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
         preset = PRESET_REGISTRY.get("frame-focus")
@@ -775,7 +765,6 @@ class TestIntegrationWithExistingSystem:
 
     def test_pipeline_identifiers_unique(self):
         """Test that pipeline identifiers are unique."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
         preset = PRESET_REGISTRY.get("color-optimization")
@@ -789,7 +778,6 @@ class TestIntegrationWithExistingSystem:
     def test_tool_name_validation_against_capability_registry(self):
         """Test that tool names used in presets exist in capability registry."""
         from giflab.capability_registry import tools_for
-        from giflab.core import builtin_presets
 
         # Get all available tools
         all_tools = {}

@@ -282,7 +282,7 @@ class TestPerformanceRegression:
         times = []
         for i in range(5):
             start = time.time()
-            img = generator.create_frame("gradient", size, i, 5)
+            generator.create_frame("gradient", size, i, 5)
             times.append(time.time() - start)
 
         avg_time = sum(times) / len(times)

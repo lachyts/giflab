@@ -8,7 +8,7 @@ improvements made to the temporal artifacts detection system.
 import numpy as np
 import pytest
 import torch
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 from giflab.temporal_artifacts import (
     TemporalArtifactDetector,

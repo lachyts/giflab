@@ -1,14 +1,12 @@
 """Tests for frame sampling improvements in GIF quality assessment."""
 
-from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
-import pytest
 from PIL import Image
 
-from giflab.metrics import FrameExtractResult, extract_gif_frames
+from giflab.metrics import extract_gif_frames
 
 
 class TestFrameSamplingDistribution:
@@ -134,7 +132,7 @@ class TestFrameSamplingDistribution:
         gif_path = self.create_test_gif(tmp_path, frame_count=20)
 
         # Extract with even sampling
-        result_even = extract_gif_frames(gif_path, max_frames=10)
+        extract_gif_frames(gif_path, max_frames=10)
 
         # Even sampling should give indices: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
         # Consecutive would give indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -170,7 +168,7 @@ class TestFrameSamplingDistribution:
         frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=100)
 
         # Sample 15 frames from 30
-        result = extract_gif_frames(gif_path, max_frames=15)
+        extract_gif_frames(gif_path, max_frames=15)
 
         expected_indices = np.linspace(0, 29, 15, dtype=int)
 
@@ -239,7 +237,7 @@ class TestFrameSamplingDistribution:
         """Regression test to ensure consecutive sampling is not used."""
         gif_path = self.create_test_gif(tmp_path, frame_count=40)
 
-        result = extract_gif_frames(gif_path, max_frames=20)
+        extract_gif_frames(gif_path, max_frames=20)
 
         # With consecutive sampling, max frame would be 19
         # With even sampling, max frame should be near 39

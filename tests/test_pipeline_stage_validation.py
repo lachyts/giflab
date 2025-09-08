@@ -7,12 +7,10 @@ overall pipeline integrity.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from giflab.config import DEFAULT_VALIDATION_CONFIG
-from giflab.dynamic_pipeline import Pipeline, PipelineStep
 from giflab.wrapper_validation import (
     PipelineStageValidator,
     ValidationResult,
@@ -25,7 +23,6 @@ from giflab.wrapper_validation.integration import (
     create_validation_report,
     validate_pipeline_execution_result,
 )
-from giflab.wrapper_validation.pipeline_validation import PipelineStageValidator
 
 
 class TestPipelineStageValidator:

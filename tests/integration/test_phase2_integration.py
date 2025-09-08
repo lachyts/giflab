@@ -12,14 +12,11 @@ Key Integration Points:
 - Memory management across temporal and spatial LPIPS usage
 """
 
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 import time
 
 import numpy as np
 import pytest
-from PIL import Image
 
 from giflab.deep_perceptual_metrics import (
     DeepPerceptualValidator,
@@ -62,7 +59,7 @@ class TestLPIPSInfrastructureSharing:
         
         # Initialize both detectors
         temporal_detector = TemporalArtifactDetector(device="cpu", force_mse_fallback=False)
-        spatial_validator = DeepPerceptualValidator(device="cpu", force_fallback=False)
+        DeepPerceptualValidator(device="cpu", force_fallback=False)
         
         # Test temporal LPIPS (consecutive frame comparison)
         temporal_metrics = temporal_detector.calculate_lpips_temporal(original_frames)
@@ -129,13 +126,13 @@ class TestLPIPSInfrastructureSharing:
         
         # Initialize with GPU
         temporal_detector = TemporalArtifactDetector(device="cuda", force_mse_fallback=False)
-        spatial_validator = DeepPerceptualValidator(device="cuda", force_fallback=False)
+        DeepPerceptualValidator(device="cuda", force_fallback=False)
         
         initial_memory = torch.cuda.memory_allocated()
         
         # Run temporal analysis
         temporal_metrics = temporal_detector.calculate_lpips_temporal(original_frames)
-        temporal_memory = torch.cuda.memory_allocated()
+        torch.cuda.memory_allocated()
         
         # Run spatial analysis
         spatial_config = {"device": "cuda", "disable_deep_perceptual": False}

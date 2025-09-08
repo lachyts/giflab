@@ -1,6 +1,5 @@
 """Integration tests for preset CLI functionality."""
 
-from pathlib import Path
 
 import pytest
 from click.testing import CliRunner

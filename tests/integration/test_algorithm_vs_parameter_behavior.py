@@ -1,11 +1,9 @@
 """Integration tests that verify actual experimental behavior for algorithm vs parameter distinction."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.giflab.core.runner import GifLabRunner
 from src.giflab.core.targeted_presets import PRESET_REGISTRY
 from src.giflab.dynamic_pipeline import Pipeline
 
@@ -52,12 +50,12 @@ class TestPresetExperimentOutcomes:
         if expected_type == "algorithm_comparison":
             # Algorithm comparison: multiple variable slots (comparing different algorithms)
             variable_slot_names = preset.get_variable_slots()
-            locked_slots = preset.get_locked_slots()
+            preset.get_locked_slots()
 
             # Should have at least one variable slot for algorithm comparison
             assert (
                 len(variable_slot_names) >= 1
-            ), f"Algorithm comparison should vary at least one dimension"
+            ), "Algorithm comparison should vary at least one dimension"
 
             # Variable slots should have multiple tools in scope (comparing algorithms)
             for slot_name in variable_slot_names:
@@ -76,7 +74,7 @@ class TestPresetExperimentOutcomes:
             # Should have exactly one variable slot for parameter sweep
             assert (
                 len(variable_slot_names) == 1
-            ), f"Parameter sweep should vary exactly one dimension"
+            ), "Parameter sweep should vary exactly one dimension"
 
             # Variable slot should be restricted to one algorithm (parameter sweep, not algorithm comparison)
             for slot_name in variable_slot_names:

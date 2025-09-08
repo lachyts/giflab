@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-from PIL import Image
 
 from src.giflab.config import ValidationConfig
 from src.giflab.wrapper_validation.timing_validation import (

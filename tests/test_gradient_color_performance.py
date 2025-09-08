@@ -21,9 +21,7 @@ from PIL import Image
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
-    calculate_banding_metrics,
     calculate_gradient_color_metrics,
-    calculate_perceptual_color_metrics,
 )
 from giflab.metrics import calculate_comprehensive_metrics
 
@@ -158,7 +156,7 @@ class TestPerformanceBenchmarks:
                 times = []
                 for _ in range(3):  # Fewer runs for larger tests
                     start_time = time.perf_counter()
-                    result = calculate_gradient_color_metrics(orig_frames, comp_frames)
+                    calculate_gradient_color_metrics(orig_frames, comp_frames)
                     end_time = time.perf_counter()
                     times.append(end_time - start_time)
 
@@ -231,7 +229,7 @@ class TestPerformanceBenchmarks:
         cpu_before = self.process.cpu_percent(interval=None)
 
         start_time = time.perf_counter()
-        result = calculate_gradient_color_metrics(frames, frames)
+        calculate_gradient_color_metrics(frames, frames)
         end_time = time.perf_counter()
 
         processing_time = end_time - start_time
@@ -255,7 +253,7 @@ class TestPerformanceBenchmarks:
         # Test sequential execution
         start_time = time.perf_counter()
         for _ in range(5):
-            result = calculate_gradient_color_metrics(frames, frames)
+            calculate_gradient_color_metrics(frames, frames)
         sequential_time = time.perf_counter() - start_time
 
         # Test concurrent execution
@@ -301,7 +299,7 @@ class TestPerformanceBenchmarks:
         times_with = []
         for _ in range(3):
             start_time = time.perf_counter()
-            result_with = calculate_comprehensive_metrics(original_gif, compressed_gif)
+            calculate_comprehensive_metrics(original_gif, compressed_gif)
             times_with.append(time.perf_counter() - start_time)
 
         avg_time_with = statistics.mean(times_with)
@@ -316,7 +314,7 @@ class TestPerformanceBenchmarks:
             times_without = []
             for _ in range(3):
                 start_time = time.perf_counter()
-                result_without = calculate_comprehensive_metrics(
+                calculate_comprehensive_metrics(
                     original_gif, compressed_gif
                 )
                 times_without.append(time.perf_counter() - start_time)
@@ -485,7 +483,7 @@ class TestScalingBenchmarks:
             frames = self._create_gradient_frames(image_size, frame_count)
 
             start_time = time.perf_counter()
-            result = calculate_gradient_color_metrics(frames, frames)
+            calculate_gradient_color_metrics(frames, frames)
             processing_time = time.perf_counter() - start_time
 
             results[frame_count] = {

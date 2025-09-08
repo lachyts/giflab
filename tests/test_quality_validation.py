@@ -269,7 +269,7 @@ class TestQualityValidationRealScenarios:
         if not wrapper.available():
             pytest.skip("Gifsicle not available")
 
-        validator = WrapperOutputValidator()
+        WrapperOutputValidator()
 
         with tempfile.NamedTemporaryFile(suffix=".gif") as tmp_file:
             output_path = Path(tmp_file.name)

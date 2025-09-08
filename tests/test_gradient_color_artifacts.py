@@ -5,13 +5,10 @@ validation systems, including edge cases, boundary conditions, and performance
 characteristics.
 """
 
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
 
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
@@ -279,8 +276,8 @@ class TestPerceptualColorValidator:
 
         assert isinstance(patches, list)
         assert len(patches) <= 9
-        for patch in patches:
-            x, y, w, h = patch
+        for color_patch in patches:
+            x, y, w, h = color_patch
             assert x >= 0 and y >= 0 and w > 0 and h > 0
             assert x + w <= 96 and y + h <= 96
 

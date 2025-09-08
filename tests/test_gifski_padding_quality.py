@@ -4,7 +4,6 @@ These tests verify that frame dimension normalization (padding) doesn't
 significantly degrade image quality as measured by SSIM.
 """
 import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest

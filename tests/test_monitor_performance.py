@@ -4,10 +4,7 @@ import json
 
 # Import the monitor class
 import sys
-import tempfile
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 

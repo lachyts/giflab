@@ -7,17 +7,15 @@ validation systems.
 
 import json
 import tempfile
-from dataclasses import asdict, dataclass
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
 
 from giflab.gradient_color_artifacts import (
-    GradientBandingDetector,
-    PerceptualColorValidator,
     calculate_gradient_color_metrics,
 )
 
@@ -231,7 +229,7 @@ class TestRegressionPrevention:
                     + "\n  ".join(case_failures)
                 )
             else:
-                print(f"  ✅ All metrics within tolerance")
+                print("  ✅ All metrics within tolerance")
 
         # Report all failures at once for better debugging
         if failures:
@@ -260,7 +258,7 @@ class TestRegressionPrevention:
                 if len(values) > 1:
                     mean_val = np.mean(values)
                     std_val = np.std(values)
-                    max_diff = max(values) - min(values)
+                    max(values) - min(values)
 
                     # For most metrics, should be very consistent (especially for identical frames)
                     relative_tolerance = (
@@ -278,7 +276,7 @@ class TestRegressionPrevention:
 
         if inconsistencies:
             pytest.fail(
-                f"Inconsistent results across runs:\n  " + "\n  ".join(inconsistencies)
+                "Inconsistent results across runs:\n  " + "\n  ".join(inconsistencies)
             )
 
     @pytest.mark.fast

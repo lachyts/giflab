@@ -6,7 +6,7 @@ and performance characteristics of the temporal artifact detection system.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -226,7 +226,7 @@ class TestTemporalArtifactEdgeCases:
         try:
             result = detector.detect_flicker_excess(corrupted_frames)
             assert isinstance(result, dict)
-        except Exception as e:
+        except Exception:
             # Acceptable to raise exception for corrupted data
             assert True
 
@@ -401,8 +401,8 @@ class TestTemporalArtifactPerformanceEdgeCases:
             initial_memory = process.memory_info().rss / 1024 / 1024  # MB
 
             # Run detection
-            flicker_result = detector.detect_flicker_excess(large_frames)
-            flat_result = detector.detect_flat_region_flicker(large_frames)
+            detector.detect_flicker_excess(large_frames)
+            detector.detect_flat_region_flicker(large_frames)
 
             peak_memory = process.memory_info().rss / 1024 / 1024  # MB
 

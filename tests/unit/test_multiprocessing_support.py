@@ -6,11 +6,7 @@ works correctly without heavy performance testing.
 
 import multiprocessing as mp
 import queue
-import tempfile
-import threading
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 

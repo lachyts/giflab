@@ -1,10 +1,8 @@
 """Test suite for GIF disposal method analysis functions."""
 
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import pytest
 
 from giflab.lossy import (
     _analyze_gif_disposal_complexity,

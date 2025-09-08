@@ -1,16 +1,13 @@
 """Integration tests for efficiency calculation with real experiment workflows."""
 
-import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 from PIL import Image
 
-from giflab.config import MetricsConfig
 from giflab.enhanced_metrics import (
     calculate_efficiency_metric,
     process_metrics_with_enhanced_quality,
@@ -313,7 +310,7 @@ class TestEfficiencyIntegrationWorkflows:
         # Time the efficiency calculations
         start_time = time.time()
         for compression_ratio, quality in test_cases:
-            efficiency = calculate_efficiency_metric(compression_ratio, quality)
+            calculate_efficiency_metric(compression_ratio, quality)
         end_time = time.time()
 
         total_time = end_time - start_time

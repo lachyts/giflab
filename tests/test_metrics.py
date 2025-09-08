@@ -190,7 +190,7 @@ class TestFrameExtraction:
         assert len(result.frames) == 10
 
         # With even sampling, should get frames at indices: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
-        expected_indices = np.linspace(0, 19, 10, dtype=int)
+        np.linspace(0, 19, 10, dtype=int)
 
         # Check that first and last frames are sampled
         first_frame_color = result.frames[0][0, 0, 0]  # Red channel

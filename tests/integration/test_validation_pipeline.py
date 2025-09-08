@@ -12,10 +12,7 @@ Key Testing Areas:
 - Regression prevention with golden reference comparisons
 """
 
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import json
+from unittest.mock import Mock
 import time
 
 import numpy as np
@@ -27,14 +24,7 @@ from giflab.optimization_validation import (
     ValidationResult, 
     ValidationStatus
 )
-from giflab.optimization_validation.data_structures import (
-    ValidationMetrics,
-    ValidationConfig
-)
-from giflab.metrics import calculate_comprehensive_metrics
-from giflab.enhanced_metrics import calculate_composite_quality
 from giflab.deep_perceptual_metrics import should_use_deep_perceptual
-from giflab.config import DEFAULT_METRICS_CONFIG
 
 
 class TestFullPipelineValidation:
@@ -161,8 +151,8 @@ class TestFullPipelineValidation:
         
         # Should detect quality issues from Phase 2 metrics
         # Deep perceptual LPIPS score of 0.35 should trigger warnings/issues
-        issue_categories = [issue.category for issue in result.issues]
-        warning_categories = [warning.category for warning in result.warnings]
+        [issue.category for issue in result.issues]
+        [warning.category for warning in result.warnings]
         
         # Should have some validation feedback (issues or warnings)
         assert len(result.issues) > 0 or len(result.warnings) > 0

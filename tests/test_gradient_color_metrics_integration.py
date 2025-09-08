@@ -8,20 +8,15 @@ import csv
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
-import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
 from giflab.config import MetricsConfig
-from giflab.gradient_color_artifacts import calculate_gradient_color_metrics
 from giflab.metrics import (
-    FrameExtractResult,
     calculate_comprehensive_metrics,
-    extract_gif_frames,
 )
-from tests.fixtures.create_test_fixtures import create_4_frame_gif
 
 
 class TestMetricsIntegration:
@@ -431,7 +426,7 @@ class TestPerformanceIntegration:
 
         # Measure time with new metrics
         start_time = time.time()
-        result_with_metrics = calculate_comprehensive_metrics(
+        calculate_comprehensive_metrics(
             original_path=original_gif, compressed_path=compressed_gif
         )
         time_with_metrics = time.time() - start_time
@@ -442,7 +437,7 @@ class TestPerformanceIntegration:
             return_value={},
         ):
             start_time = time.time()
-            result_without_metrics = calculate_comprehensive_metrics(
+            calculate_comprehensive_metrics(
                 original_path=original_gif, compressed_path=compressed_gif
             )
             time_without_metrics = time.time() - start_time

@@ -589,7 +589,7 @@ class TestDitheringComparison:
             riemersma_output = Path(tmp2.name)
 
             # Test basic wrapper with dithering_method parameter
-            basic_result = basic_wrapper.apply(
+            basic_wrapper.apply(
                 many_colors_gif,
                 basic_output,
                 params={"colors": 16, "dithering_method": "None"},

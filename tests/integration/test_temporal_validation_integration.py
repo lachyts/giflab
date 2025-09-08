@@ -5,16 +5,14 @@ and ValidationChecker systems, demonstrating both passing and failing scenarios
 for each temporal artifact metric.
 """
 
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from giflab.meta import GifMetadata
 from giflab.optimization_validation.data_structures import (
     ValidationConfig,
-    ValidationResult,
 )
 from giflab.optimization_validation.validation_checker import ValidationChecker
 from tests.fixtures.generate_temporal_artifact_fixtures import (

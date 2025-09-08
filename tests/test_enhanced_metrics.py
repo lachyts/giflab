@@ -3,10 +3,8 @@
 import math
 from unittest.mock import patch
 
-import numpy as np
-import pytest
 
-from giflab.config import DEFAULT_METRICS_CONFIG, MetricsConfig
+from giflab.config import MetricsConfig
 from giflab.enhanced_metrics import (
     calculate_composite_quality,
     calculate_efficiency_metric,
@@ -46,7 +44,7 @@ class TestEfficiencyMetricCalculation:
         )
 
         # Extract the normalized compression for 20x
-        normalized_20x = math.log(1 + 20.0) / math.log(1 + 20.0)  # = 1.0
+        math.log(1 + 20.0) / math.log(1 + 20.0)  # = 1.0
 
         # Calculate expected efficiencies
         expected1 = (1.0**0.5) * ((math.log(6) / math.log(21)) ** 0.5)
@@ -110,10 +108,10 @@ class TestEfficiencyMetricCalculation:
         balanced = calculate_efficiency_metric(
             5.0, 0.8
         )  # Good quality + good compression
-        extreme_quality = calculate_efficiency_metric(
+        calculate_efficiency_metric(
             1.5, 1.0
         )  # Perfect quality + poor compression
-        extreme_compression = calculate_efficiency_metric(
+        calculate_efficiency_metric(
             20.0, 0.6
         )  # Perfect compression + poor quality
 
@@ -402,7 +400,7 @@ class TestEfficiencyWeightingChanges:
             "ssim_mean": 0.9,
         }
 
-        processed = process_metrics_with_enhanced_quality(raw_metrics)
+        process_metrics_with_enhanced_quality(raw_metrics)
 
         # Verify efficiency calculation was called
         mock_efficiency.assert_called_once()

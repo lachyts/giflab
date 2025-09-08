@@ -4,20 +4,15 @@ This test suite covers unusual scenarios, boundary conditions, error handling,
 and performance characteristics that weren't covered in the basic unit tests.
 """
 
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
 
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
-    calculate_banding_metrics,
     calculate_gradient_color_metrics,
-    calculate_perceptual_color_metrics,
 )
 
 
@@ -510,7 +505,6 @@ class TestIntegrationEdgeCases:
     def test_thread_safety_simulation(self):
         """Test that functions are thread-safe by running concurrent calls."""
         import threading
-        import time
 
         frames = [
             np.random.randint(0, 255, (32, 32, 3), dtype=np.uint8) for _ in range(2)

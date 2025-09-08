@@ -7,9 +7,7 @@ perceptual issues traditional metrics miss.
 
 import numpy as np
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import logging
+from unittest.mock import Mock, patch
 
 from giflab.deep_perceptual_metrics import (
     DeepPerceptualValidator,
@@ -117,7 +115,7 @@ class TestDeepPerceptualValidator:
             mock_tensor.permute.return_value = mock_tensor
             mock_torch.from_numpy.return_value = mock_tensor
             
-            result = validator._preprocess_for_lpips(frame)
+            validator._preprocess_for_lpips(frame)
             
             # Verify the preprocessing chain was called
             mock_torch.from_numpy.assert_called_once()

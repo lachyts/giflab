@@ -3,7 +3,7 @@
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -263,7 +263,7 @@ class TestGPUFallbacks:
 
                     # The method should fall back to CPU metrics when GPU operations fail
                     try:
-                        result = (
+                        (
                             experimental_runner_gpu_enabled._calculate_cuda_metrics(
                                 orig_path, comp_path
                             )

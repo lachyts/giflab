@@ -3,7 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image, ImageDraw
@@ -195,7 +195,7 @@ class TestAnimatelyAdvancedLossyFunctionsFast:
             gif_path = Path(tmpdir) / "test.gif"
             create_test_gif(gif_path, frames=3)
 
-            png_dir = Path(tmpdir) / "png_sequence"
+            Path(tmpdir) / "png_sequence"
 
             with patch("giflab.lossy.export_png_sequence") as mock_export:
                 # Mock successful PNG export
@@ -380,7 +380,7 @@ class TestAnimatelyAdvancedErrorHandlingFast:
         """Test handling of ffmpeg extraction failure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             gif_path = Path(tmpdir) / "test.gif"
-            png_dir = Path(tmpdir) / "png_frames"
+            Path(tmpdir) / "png_frames"
 
             create_test_gif(gif_path)
 
@@ -430,10 +430,10 @@ class TestAnimatelyAdvancedErrorHandlingFast:
 
             with patch(
                 "tempfile.mkdtemp", return_value=str(test_temp_dir)
-            ) as mock_mkdtemp, patch("giflab.lossy.rmtree") as mock_rmtree:
+            ), patch("giflab.lossy.rmtree") as mock_rmtree:
                 # Simulate an error during the managed temp directory usage
                 with pytest.raises(RuntimeError, match="Test directory error"):
-                    with _managed_temp_directory() as temp_path:
+                    with _managed_temp_directory():
                         # This should trigger cleanup even on error
                         raise RuntimeError("Test directory error")
 

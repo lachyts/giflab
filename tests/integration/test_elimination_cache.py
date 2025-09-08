@@ -4,10 +4,8 @@ These tests verify the caching system works correctly with real pipeline
 data and handles edge cases properly.
 """
 
-import json
 import sqlite3
 import tempfile
-from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -58,7 +56,7 @@ class TestPipelineResultsCache:
 
     def test_cache_initialization(self, temp_cache_db):
         """Test cache database initialization creates proper schema."""
-        cache = PipelineResultsCache(temp_cache_db, git_commit="test_init")
+        PipelineResultsCache(temp_cache_db, git_commit="test_init")
 
         # Verify tables exist
         with sqlite3.connect(temp_cache_db) as conn:
@@ -369,7 +367,6 @@ class TestPipelineResultsCache:
     ):
         """Test that concurrent cache access is handled safely."""
         import threading
-        import time
 
         results = []
         errors = []
@@ -414,7 +411,7 @@ class TestPipelineResultsCache:
         assert len(results) == 3
 
         # Verify all data was stored
-        cache = PipelineResultsCache(temp_cache_db, git_commit="verify")
+        PipelineResultsCache(temp_cache_db, git_commit="verify")
         with sqlite3.connect(temp_cache_db) as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM pipeline_results")
             total_results = cursor.fetchone()[0]

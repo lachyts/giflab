@@ -3,7 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, mock_open, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -276,7 +276,7 @@ class TestPNGSequenceOptimization:
         from giflab.core import GifLabRunner
 
         # Create eliminator instance
-        eliminator = GifLabRunner()
+        GifLabRunner()
 
         # Test the PNG capability detection logic
         png_capable_tools = [

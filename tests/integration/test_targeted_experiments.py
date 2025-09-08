@@ -29,7 +29,6 @@ class TestEndToEndPresetExecution:
 
     def test_experimental_runner_preset_integration(self):
         """Test GifLabRunner integration with presets."""
-        from giflab.core import builtin_presets
 
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)
@@ -46,7 +45,6 @@ class TestEndToEndPresetExecution:
 
     def test_run_targeted_experiment_mock_execution(self):
         """Test targeted experiment execution with mocked pipeline runs."""
-        from giflab.core import builtin_presets
 
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)
@@ -73,7 +71,6 @@ class TestEndToEndPresetExecution:
 
     def test_all_builtin_presets_execution(self):
         """Test that all built-in presets can execute without errors."""
-        from giflab.core import builtin_presets
 
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = GifLabRunner(output_dir=Path(temp_dir), use_cache=False)
@@ -112,7 +109,6 @@ class TestPresetTypeValidation:
 
     def test_single_variable_presets(self):
         """Test presets that vary only one dimension."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -141,7 +137,6 @@ class TestPresetTypeValidation:
 
     def test_multi_variable_presets(self):
         """Test presets that vary multiple dimensions."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -172,7 +167,6 @@ class TestPresetTypeValidation:
 
     def test_specialized_presets(self):
         """Test specialized presets like dithering-focus."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -201,7 +195,6 @@ class TestPresetTypeValidation:
 
     def test_development_presets(self):
         """Test development/debug presets like quick-test."""
-        from giflab.core import builtin_presets
 
         generator = TargetedPipelineGenerator()
 
@@ -224,19 +217,18 @@ class TestPerformanceComparison:
 
     def test_generation_time_comparison(self):
         """Compare pipeline generation time between approaches."""
-        from giflab.core import builtin_presets
 
         runner = GifLabRunner(use_cache=False)
 
         # Time traditional approach
         start_time = time.time()
         all_pipelines = generate_all_pipelines()
-        sampled = runner.select_pipelines_intelligently(all_pipelines, "quick")
+        runner.select_pipelines_intelligently(all_pipelines, "quick")
         traditional_time = time.time() - start_time
 
         # Time targeted approach
         start_time = time.time()
-        targeted = runner.generate_targeted_pipelines("frame-focus")
+        runner.generate_targeted_pipelines("frame-focus")
         targeted_time = time.time() - start_time
 
         # Targeted should be faster (though this may vary by system)
@@ -250,7 +242,6 @@ class TestPerformanceComparison:
 
     def test_memory_usage_estimation(self):
         """Test memory usage estimation for different approaches."""
-        from giflab.core import builtin_presets
 
         runner = GifLabRunner(use_cache=False)
 
@@ -271,11 +262,10 @@ class TestPerformanceComparison:
 
     def test_efficiency_gains_across_presets(self):
         """Test efficiency gains across all built-in presets."""
-        from giflab.core import builtin_presets
 
         runner = GifLabRunner(use_cache=False)
         generator = TargetedPipelineGenerator()
-        baseline_count = len(generate_all_pipelines())
+        len(generate_all_pipelines())
 
         efficiency_gains = {}
 
@@ -295,7 +285,7 @@ class TestPerformanceComparison:
         ]
         assert (
             len(high_efficiency_presets) >= len(efficiency_gains) // 2
-        ), f"At least half of presets should have >80% efficiency gain"
+        ), "At least half of presets should have >80% efficiency gain"
 
         # Print results for inspection
         print("\nEfficiency gains by preset:")
@@ -357,7 +347,6 @@ class TestRegressionAndCompatibility:
 
     def test_pipeline_structure_compatibility(self):
         """Test that generated pipelines are compatible with existing systems."""
-        from giflab.core import builtin_presets
 
         runner = GifLabRunner(use_cache=False)
 

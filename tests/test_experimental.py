@@ -4,8 +4,6 @@ These tests validate the systematic experimental approach and verify
 research findings about redundant dithering methods.
 """
 
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -350,7 +348,7 @@ class TestIntegration:
 
         # Test workflow integration - use the mock instead of real object
         eliminator = mock_eliminator_class(tmp_path)
-        result = eliminator.run_analysis()
+        eliminator.run_analysis()
 
         # Should create eliminator instance
         mock_eliminator_class.assert_called_once_with(tmp_path)
