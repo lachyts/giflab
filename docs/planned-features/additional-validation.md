@@ -132,14 +132,15 @@ Additional metrics that improve debugging precision and catch edge cases.
 
 **Implementation Notes:**
 - Full `DeepPerceptualValidator` class implemented in `src/giflab/deep_perceptual_metrics.py`
-- LPIPS chosen over DISTS for better performance and wider adoption
+- **LPIPS Infrastructure Reuse**: Leverages existing LPIPS implementation from `temporal_artifacts.py` for consistency
+- **Spatial vs Temporal**: Uses LPIPS for spatial quality (original[i] vs compressed[i]) vs temporal (frame[i] vs frame[i+1])
 - Conditional triggering via `should_use_deep_perceptual()` to avoid unnecessary computation
 - Frame downscaling to configurable size (default 512px) for performance optimization
 - GPU acceleration with automatic CPU fallback when CUDA unavailable
 - Memory-efficient batch processing with adaptive batch sizing
 - Integrated into composite quality calculation with 3% weight (ENHANCED_LPIPS_WEIGHT)
 - Added thresholds: lpips_quality_threshold (0.3), lpips_quality_extreme_threshold (0.5), lpips_quality_max_threshold (0.7)
-- Comprehensive test suite in `tests/test_deep_perceptual_metrics.py` (24 tests, all passing)
+- **Test Suite Status**: Basic functionality implemented, comprehensive test suite pending
 - Main integration in `calculate_comprehensive_metrics()` with conditional execution
 
 ### Phase 3: Conditional Content-Specific Metrics ⏳ PLANNED

@@ -169,7 +169,6 @@ test-workspace/debug/*/
 
 # Root directory testing pollution (should not exist, but just in case)
 debug_*
-test_*
 final_*
 verification_*
 comprehensive_*
