@@ -10,14 +10,13 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from PIL import Image
-
 from giflab.optimization_validation.data_structures import ValidationConfig
 from giflab.optimization_validation.validation_checker import ValidationChecker
 from giflab.temporal_artifacts import (
     TemporalArtifactDetector,
     calculate_enhanced_temporal_metrics,
 )
+from PIL import Image
 
 
 class TestTemporalArtifactEdgeCases:
@@ -236,7 +235,7 @@ class TestTemporalArtifactEdgeCases:
 
         # Create a reasonable number of frames that would stress memory
         frames = []
-        for i in range(20):  # 20 frames of reasonable size
+        for _i in range(20):  # 20 frames of reasonable size
             frame = np.random.randint(0, 256, (128, 128, 3), dtype=np.uint8)
             frames.append(frame)
 
@@ -388,7 +387,7 @@ class TestTemporalArtifactPerformanceEdgeCases:
 
         # Create frames that might cause memory issues
         large_frames = []
-        for i in range(10):
+        for _i in range(10):
             frame = np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8)
             large_frames.append(frame)
 
@@ -474,7 +473,7 @@ class TestTemporalArtifactErrorHandling:
             ]  # May just accept the string
         except Exception as e:
             # If it does raise, should be appropriate exception type
-            assert isinstance(e, (ValueError, RuntimeError))
+            assert isinstance(e, ValueError | RuntimeError)
 
     def test_file_io_errors(self, tmp_path):
         """Test handling of file I/O errors during GIF processing."""
@@ -506,7 +505,7 @@ class TestTemporalArtifactErrorHandling:
             detector.preprocess_for_lpips(np.array([]))
         except Exception as e:
             assert isinstance(
-                e, (ValueError, TypeError, AttributeError, IndexError, RuntimeError)
+                e, ValueError | TypeError | AttributeError | IndexError | RuntimeError
             )
 
         try:
@@ -514,7 +513,7 @@ class TestTemporalArtifactErrorHandling:
             detector.preprocess_for_lpips(np.array([1, 2, 3]))
         except Exception as e:
             assert isinstance(
-                e, (ValueError, TypeError, AttributeError, IndexError, RuntimeError)
+                e, ValueError | TypeError | AttributeError | IndexError | RuntimeError
             )
 
     def test_calculation_numerical_errors(self):
@@ -548,7 +547,7 @@ class TestTemporalArtifactErrorHandling:
 
         except Exception as e:
             # Should fail gracefully with appropriate error
-            assert not isinstance(e, (FloatingPointError, OverflowError))
+            assert not isinstance(e, FloatingPointError | OverflowError)
 
 
 class TestTemporalValidationBoundaryConditions:

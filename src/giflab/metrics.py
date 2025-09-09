@@ -1328,35 +1328,35 @@ def _calculate_positional_samples(
         }
 
 
-def calculate_comprehensive_metrics(
-    original_path: Path,
-    compressed_path: Path,
+def calculate_comprehensive_metrics_from_frames(
+    original_frames: list[np.ndarray],
+    compressed_frames: list[np.ndarray],
     config: MetricsConfig | None = None,
     frame_reduction_context: bool = False,
+    file_metadata: dict[str, Any] | None = None,
 ) -> dict[str, float | str]:
-    """Calculate comprehensive quality metrics between original and compressed GIFs.
+    """Calculate comprehensive quality metrics between original and compressed frames.
 
-    This is the main function that addresses the frame alignment problem and provides
-    multi-metric quality assessment with all available metrics.
+    This function performs frame-based metric calculations without requiring file I/O.
+    It's the core metrics engine used by calculate_comprehensive_metrics and can be
+    called directly for testing or when frames are already available in memory.
 
     Args:
-        original_path: Path to original GIF file
-        compressed_path: Path to compressed GIF file
+        original_frames: List of original frames as numpy arrays
+        compressed_frames: List of compressed frames as numpy arrays
         config: Optional metrics configuration (uses default if None)
         frame_reduction_context: If True, adjusts disposal artifact detection for frame reduction
+        file_metadata: Optional dict with file-specific metadata (paths, sizes, frame counts)
+                      Keys: 'original_path', 'compressed_path', 'original_frame_count',
+                            'compressed_frame_count', 'original_size_bytes', 'compressed_size_bytes'
 
     Returns:
-        Dictionary with comprehensive metrics including:
-        - Traditional metrics: ssim, ms_ssim, psnr, temporal_consistency
-        - New metrics: mse, rmse, fsim, gmsd, chist, edge_similarity, texture_similarity, sharpness_similarity
-        - Aggregation descriptors: *_std, *_min, *_max for each metric
-        - Optional raw values: *_raw for each metric (if config.RAW_METRICS=True)
-        - System metrics: render_ms, kilobytes
-        - Composite quality score
+        Dictionary with comprehensive metrics including all frame-based metrics.
+        File-specific metrics (kilobytes, compression_ratio, timing validation) are only
+        included if file_metadata is provided.
 
     Raises:
-        IOError: If either GIF file cannot be read
-        ValueError: If GIFs are invalid or processing fails
+        ValueError: If frames are invalid or processing fails
     """
     if config is None:
         config = DEFAULT_METRICS_CONFIG
@@ -1364,17 +1364,14 @@ def calculate_comprehensive_metrics(
     start_time = time.perf_counter()
 
     try:
-        # Extract frames from both GIFs
-        original_result = extract_gif_frames(original_path, config.SSIM_MAX_FRAMES)
-        compressed_result = extract_gif_frames(compressed_path, config.SSIM_MAX_FRAMES)
-
         # Resize frames to common dimensions
-        original_frames, compressed_frames = resize_to_common_dimensions(
-            original_result.frames, compressed_result.frames
-        )
+        (
+            original_frames_resized,
+            compressed_frames_resized,
+        ) = resize_to_common_dimensions(original_frames, compressed_frames)
 
         # Align frames using content-based method (most robust)
-        aligned_pairs = align_frames(original_frames, compressed_frames)
+        aligned_pairs = align_frames(original_frames_resized, compressed_frames_resized)
 
         if not aligned_pairs:
             raise ValueError("No frame pairs could be aligned")
@@ -1504,21 +1501,21 @@ def calculate_comprehensive_metrics(
                 )
                 metric_values["sharpness_similarity"].append(0.0)
 
-        # Calculate temporal consistency for original and compressed GIFs
+        # Calculate temporal consistency for original and compressed frames
         temporal_pre = 0.0
         temporal_post = 0.0
         if config.TEMPORAL_CONSISTENCY_ENABLED:
-            temporal_pre = calculate_temporal_consistency(original_frames)
-            temporal_post = calculate_temporal_consistency(compressed_frames)
+            temporal_pre = calculate_temporal_consistency(original_frames_resized)
+            temporal_post = calculate_temporal_consistency(compressed_frames_resized)
 
         temporal_delta = abs(temporal_post - temporal_pre)
 
         # Calculate disposal artifact detection
         disposal_artifacts_pre = detect_disposal_artifacts(
-            original_frames, frame_reduction_context
+            original_frames_resized, frame_reduction_context
         )
         disposal_artifacts_post = detect_disposal_artifacts(
-            compressed_frames, frame_reduction_context
+            compressed_frames_resized, frame_reduction_context
         )
         disposal_artifacts_delta = abs(disposal_artifacts_post - disposal_artifacts_pre)
 
@@ -1528,7 +1525,7 @@ def calculate_comprehensive_metrics(
             from .temporal_artifacts import calculate_enhanced_temporal_metrics
 
             enhanced_temporal_metrics = calculate_enhanced_temporal_metrics(
-                original_frames, compressed_frames, device=None
+                original_frames_resized, compressed_frames_resized, device=None
             )
         except ImportError as e:
             logger.warning(f"Enhanced temporal artifacts module not available: {e}")
@@ -1541,7 +1538,7 @@ def calculate_comprehensive_metrics(
                 "quality_oscillation_frequency": 0.0,
                 "lpips_t_mean": 0.0,
                 "lpips_t_p95": 0.0,
-                "frame_count": len(compressed_frames),
+                "frame_count": len(compressed_frames_resized),
             }
         except Exception as e:
             logger.error(f"Enhanced temporal artifacts calculation failed: {e}")
@@ -1554,12 +1551,12 @@ def calculate_comprehensive_metrics(
                 "quality_oscillation_frequency": 0.0,
                 "lpips_t_mean": 0.0,
                 "lpips_t_p95": 0.0,
-                "frame_count": len(compressed_frames),
+                "frame_count": len(compressed_frames_resized),
             }
 
         # Calculate enhanced gradient and color artifact metrics (Task 1.3 & 1.4)
         gradient_color_metrics = {}
-        
+
         # Default fallback metrics
         default_gradient_metrics = {
             "banding_score_mean": 0.0,
@@ -1575,161 +1572,308 @@ def calculate_comprehensive_metrics(
             "deltae_pct_gt5": 0.0,
             "color_patch_count": 0,
         }
-        
+
         try:
             from .gradient_color_artifacts import calculate_gradient_color_metrics
+
             logger.debug("Successfully imported gradient_color_artifacts module")
-            
+
             gradient_color_metrics = calculate_gradient_color_metrics(
-                original_frames, compressed_frames
+                original_frames_resized, compressed_frames_resized
             )
             logger.debug("Successfully calculated gradient and color artifact metrics")
-            
+
         except ImportError as e:
-            logger.info(f"Gradient and color artifacts module not available: {e}. Using fallback values.")
+            logger.info(
+                f"Gradient and color artifacts module not available: {e}. Using fallback values."
+            )
             gradient_color_metrics = default_gradient_metrics
-            
+
         except AttributeError as e:
-            logger.warning(f"Gradient and color artifacts function not found: {e}. Module may be incomplete.")
+            logger.warning(
+                f"Gradient and color artifacts function not found: {e}. Module may be incomplete."
+            )
             gradient_color_metrics = default_gradient_metrics
-            
+
         except (ValueError, TypeError, RuntimeError) as e:
-            logger.error(f"Error calculating gradient and color artifacts: {e}. Using fallback values.")
+            logger.error(
+                f"Error calculating gradient and color artifacts: {e}. Using fallback values."
+            )
             gradient_color_metrics = default_gradient_metrics
-            
+
         except Exception as e:
-            logger.error(f"Unexpected error in gradient and color artifacts calculation: {e}. Using fallback values.")
+            logger.error(
+                f"Unexpected error in gradient and color artifacts calculation: {e}. Using fallback values."
+            )
             gradient_color_metrics = default_gradient_metrics
 
         # Calculate deep perceptual metrics (Task 2.2)
         deep_perceptual_metrics: dict[str, float | str] = {}
-        
+
         # Default fallback metrics
         default_deep_perceptual_metrics: dict[str, float | str] = {
             "lpips_quality_mean": 0.5,
             "lpips_quality_p95": 0.5,
             "lpips_quality_max": 0.5,
-            "deep_perceptual_frame_count": float(len(compressed_frames)),
+            "deep_perceptual_frame_count": float(len(compressed_frames_resized)),
             "deep_perceptual_downscaled": 0.0,
             "deep_perceptual_device": "fallback",
         }
-        
+
         # Check if deep perceptual metrics should be calculated
         # We'll calculate conditional logic after we have the initial composite quality
         should_calculate_deep_perceptual = True  # Initially calculate for all
-        
+
         if should_calculate_deep_perceptual:
             try:
                 from .deep_perceptual_metrics import (
                     calculate_deep_perceptual_quality_metrics,
                     should_use_deep_perceptual,
                 )
+
                 logger.debug("Successfully imported deep_perceptual_metrics module")
-                
+
                 # Prepare configuration for deep perceptual metrics
                 deep_config = {
                     "device": getattr(config, "DEEP_PERCEPTUAL_DEVICE", "auto"),
-                    "lpips_downscale_size": getattr(config, "LPIPS_DOWNSCALE_SIZE", 512),
+                    "lpips_downscale_size": getattr(
+                        config, "LPIPS_DOWNSCALE_SIZE", 512
+                    ),
                     "lpips_max_frames": getattr(config, "LPIPS_MAX_FRAMES", 100),
-                    "disable_deep_perceptual": not getattr(config, "ENABLE_DEEP_PERCEPTUAL", True),
+                    "disable_deep_perceptual": not getattr(
+                        config, "ENABLE_DEEP_PERCEPTUAL", True
+                    ),
                 }
-                
+
                 # For now, always calculate since we need composite quality first
                 # In future iterations, this could be made conditional based on initial quality assessment
-                if should_use_deep_perceptual(None):  # No composite quality available yet
+                if should_use_deep_perceptual(
+                    None
+                ):  # No composite quality available yet
                     deep_perceptual_metrics = calculate_deep_perceptual_quality_metrics(
-                        original_frames, compressed_frames, deep_config
+                        original_frames_resized, compressed_frames_resized, deep_config
                     )
                     logger.debug("Successfully calculated deep perceptual metrics")
                 else:
-                    logger.debug("Deep perceptual metrics skipped based on conditional logic")
+                    logger.debug(
+                        "Deep perceptual metrics skipped based on conditional logic"
+                    )
                     deep_perceptual_metrics = default_deep_perceptual_metrics
-                
+
             except ImportError as e:
-                logger.info(f"Deep perceptual metrics module not available: {e}. Using fallback values.")
+                logger.info(
+                    f"Deep perceptual metrics module not available: {e}. Using fallback values."
+                )
                 deep_perceptual_metrics = default_deep_perceptual_metrics
-                
+
             except AttributeError as e:
-                logger.warning(f"Deep perceptual metrics function not found: {e}. Module may be incomplete.")
+                logger.warning(
+                    f"Deep perceptual metrics function not found: {e}. Module may be incomplete."
+                )
                 deep_perceptual_metrics = default_deep_perceptual_metrics
-                
+
             except (ValueError, TypeError, RuntimeError) as e:
-                logger.error(f"Error calculating deep perceptual metrics: {e}. Using fallback values.")
+                logger.error(
+                    f"Error calculating deep perceptual metrics: {e}. Using fallback values."
+                )
                 deep_perceptual_metrics = default_deep_perceptual_metrics
-                
+
             except Exception as e:
-                logger.error(f"Unexpected error in deep perceptual metrics calculation: {e}. Using fallback values.")
+                logger.error(
+                    f"Unexpected error in deep perceptual metrics calculation: {e}. Using fallback values."
+                )
                 deep_perceptual_metrics = default_deep_perceptual_metrics
         else:
             logger.debug("Deep perceptual metrics calculation skipped")
             deep_perceptual_metrics = default_deep_perceptual_metrics
 
-        # Extract frame count information
-        try:
-            from .meta import extract_gif_metadata
+        # Calculate SSIMULACRA2 metrics (Phase 3.2)
+        ssimulacra2_metrics: dict[str, float | str] = {}
 
-            original_metadata = extract_gif_metadata(original_path)
-            compressed_metadata = extract_gif_metadata(compressed_path)
-            original_frame_count = original_metadata.orig_frames
-            compressed_frame_count = compressed_metadata.orig_frames
-        except Exception:
-            # Fallback to extracted frames count
+        # Default fallback metrics
+        default_ssimulacra2_metrics: dict[str, float | str] = {
+            "ssimulacra2_mean": 50.0,
+            "ssimulacra2_p95": 50.0,
+            "ssimulacra2_min": 50.0,
+            "ssimulacra2_frame_count": 0.0,
+            "ssimulacra2_triggered": 0.0,
+        }
+
+        # Check if SSIMULACRA2 metrics should be calculated
+        should_calculate_ssimulacra2 = getattr(config, "ENABLE_SSIMULACRA2", True)
+
+        if should_calculate_ssimulacra2:
+            try:
+                from .ssimulacra2_metrics import (
+                    calculate_ssimulacra2_quality_metrics,
+                    should_use_ssimulacra2,
+                )
+
+                logger.debug("Successfully imported ssimulacra2_metrics module")
+
+                # Use existing composite quality for conditional triggering
+                # For first calculation, we don't have composite quality yet, so calculate for all
+                if should_use_ssimulacra2(None):  # No composite quality available yet
+                    ssimulacra2_result = calculate_ssimulacra2_quality_metrics(
+                        original_frames_resized, compressed_frames_resized, config
+                    )
+                    # Update metrics dictionary (allows type widening)
+                    ssimulacra2_metrics.update(ssimulacra2_result)
+                    logger.debug("Successfully calculated SSIMULACRA2 metrics")
+                else:
+                    logger.debug(
+                        "SSIMULACRA2 metrics skipped based on conditional logic"
+                    )
+                    ssimulacra2_metrics = default_ssimulacra2_metrics
+
+            except ImportError as e:
+                logger.info(
+                    f"SSIMULACRA2 metrics module not available: {e}. Using fallback values."
+                )
+                ssimulacra2_metrics = default_ssimulacra2_metrics
+
+            except AttributeError as e:
+                logger.warning(
+                    f"SSIMULACRA2 metrics function not found: {e}. Module may be incomplete."
+                )
+                ssimulacra2_metrics = default_ssimulacra2_metrics
+
+            except (ValueError, TypeError, RuntimeError) as e:
+                logger.error(
+                    f"Error calculating SSIMULACRA2 metrics: {e}. Using fallback values."
+                )
+                ssimulacra2_metrics = default_ssimulacra2_metrics
+
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error in SSIMULACRA2 metrics calculation: {e}. Using fallback values."
+                )
+                ssimulacra2_metrics = default_ssimulacra2_metrics
+        else:
+            logger.debug("SSIMULACRA2 metrics calculation disabled")
+            ssimulacra2_metrics = default_ssimulacra2_metrics
+
+        # Calculate text/UI validation metrics (Phase 3.1)
+        text_ui_metrics: dict[str, float | str] = {}
+
+        # Default fallback metrics
+        default_text_ui_metrics: dict[str, float | str] = {
+            "has_text_ui_content": False,
+            "text_ui_edge_density": 0.0,
+            "text_ui_component_count": 0,
+            "ocr_regions_analyzed": 0,
+            "ocr_conf_delta_mean": 0.0,
+            "ocr_conf_delta_min": 0.0,
+            "mtf50_ratio_mean": 1.0,
+            "mtf50_ratio_min": 1.0,
+            "edge_sharpness_score": 100.0,
+        }
+
+        try:
+            from .text_ui_validation import calculate_text_ui_metrics
+
+            logger.debug("Successfully imported text_ui_validation module")
+
+            # Calculate text/UI validation metrics
+            text_ui_metrics = calculate_text_ui_metrics(
+                original_frames_resized, compressed_frames_resized, max_frames=5
+            )
+            logger.debug("Successfully calculated text/UI validation metrics")
+
+        except ImportError as e:
+            logger.info(
+                f"Text/UI validation module not available: {e}. Using fallback values."
+            )
+            text_ui_metrics = default_text_ui_metrics
+
+        except AttributeError as e:
+            logger.warning(
+                f"Text/UI validation function not found: {e}. Module may be incomplete."
+            )
+            text_ui_metrics = default_text_ui_metrics
+
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.error(
+                f"Error calculating text/UI validation metrics: {e}. Using fallback values."
+            )
+            text_ui_metrics = default_text_ui_metrics
+
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in text/UI validation calculation: {e}. Using fallback values."
+            )
+            text_ui_metrics = default_text_ui_metrics
+
+        # Extract frame count information
+        if file_metadata:
+            original_frame_count = file_metadata.get(
+                "original_frame_count", len(original_frames)
+            )
+            compressed_frame_count = file_metadata.get(
+                "compressed_frame_count", len(compressed_frames)
+            )
+        else:
             original_frame_count = len(original_frames)
             compressed_frame_count = len(compressed_frames)
 
-        # Add timing validation metrics
+        # Add timing validation metrics only if file paths are provided
         timing_metrics = {}
-        try:
-            from .wrapper_validation.timing_validation import (
-                TimingGridValidator,
-                extract_timing_metrics_for_csv,
-            )
+        if (
+            file_metadata
+            and "original_path" in file_metadata
+            and "compressed_path" in file_metadata
+        ):
+            try:
+                from .wrapper_validation.timing_validation import (
+                    TimingGridValidator,
+                    extract_timing_metrics_for_csv,
+                )
 
-            timing_validator = TimingGridValidator()
-            timing_result = timing_validator.validate_timing_integrity(
-                original_path, compressed_path
-            )
-            timing_metrics = extract_timing_metrics_for_csv(timing_result)
-            # Add success indicator
-            timing_metrics["timing_validation_status"] = "success"
-        except ImportError as e:
-            logger.error(f"Timing validation module not available: {e}")
-            # Provide failure-indicating timing metrics
-            timing_metrics = {
-                "timing_grid_ms": 10,
-                "grid_length": -1,  # -1 indicates failure
-                "duration_diff_ms": -1,
-                "timing_drift_score": -1.0,  # -1.0 indicates failure, not perfect score
-                "max_timing_drift_ms": -1,
-                "alignment_accuracy": -1.0,  # -1.0 indicates failure
-                "timing_validation_status": "import_failed",
-                "timing_validation_error": str(e),
-            }
-        except (ValueError, OSError) as e:
-            logger.error(f"Timing validation calculation failed: {e}")
-            timing_metrics = {
-                "timing_grid_ms": 10,
-                "grid_length": -1,
-                "duration_diff_ms": -1,
-                "timing_drift_score": -1.0,
-                "max_timing_drift_ms": -1,
-                "alignment_accuracy": -1.0,
-                "timing_validation_status": "calculation_failed",
-                "timing_validation_error": str(e),
-            }
-        except Exception as e:
-            # Log unexpected errors more severely and re-raise to avoid hiding bugs
-            logger.critical(f"Unexpected timing validation error: {e}")
-            timing_metrics = {
-                "timing_grid_ms": 10,
-                "grid_length": -1,
-                "duration_diff_ms": -1,
-                "timing_drift_score": -1.0,
-                "max_timing_drift_ms": -1,
-                "alignment_accuracy": -1.0,
-                "timing_validation_status": "unexpected_error",
-                "timing_validation_error": str(e),
-            }
+                timing_validator = TimingGridValidator()
+                timing_result = timing_validator.validate_timing_integrity(
+                    file_metadata["original_path"], file_metadata["compressed_path"]
+                )
+                timing_metrics = extract_timing_metrics_for_csv(timing_result)
+                # Add success indicator
+                timing_metrics["timing_validation_status"] = "success"
+            except ImportError as e:
+                logger.error(f"Timing validation module not available: {e}")
+                # Provide failure-indicating timing metrics
+                timing_metrics = {
+                    "timing_grid_ms": 10,
+                    "grid_length": -1,  # -1 indicates failure
+                    "duration_diff_ms": -1,
+                    "timing_drift_score": -1.0,  # -1.0 indicates failure, not perfect score
+                    "max_timing_drift_ms": -1,
+                    "alignment_accuracy": -1.0,  # -1.0 indicates failure
+                    "timing_validation_status": "import_failed",
+                    "timing_validation_error": str(e),
+                }
+            except (ValueError, OSError) as e:
+                logger.error(f"Timing validation calculation failed: {e}")
+                timing_metrics = {
+                    "timing_grid_ms": 10,
+                    "grid_length": -1,
+                    "duration_diff_ms": -1,
+                    "timing_drift_score": -1.0,
+                    "max_timing_drift_ms": -1,
+                    "alignment_accuracy": -1.0,
+                    "timing_validation_status": "calculation_failed",
+                    "timing_validation_error": str(e),
+                }
+            except Exception as e:
+                # Log unexpected errors more severely and re-raise to avoid hiding bugs
+                logger.critical(f"Unexpected timing validation error: {e}")
+                timing_metrics = {
+                    "timing_grid_ms": 10,
+                    "grid_length": -1,
+                    "duration_diff_ms": -1,
+                    "timing_drift_score": -1.0,
+                    "max_timing_drift_ms": -1,
+                    "alignment_accuracy": -1.0,
+                    "timing_validation_status": "unexpected_error",
+                    "timing_validation_error": str(e),
+                }
 
         # Aggregate all metrics with descriptive statistics
         result: dict[str, float | str] = {}
@@ -1782,29 +1926,56 @@ def calculate_comprehensive_metrics(
             else:
                 result[deep_key] = str(deep_value)
 
+        # Add SSIMULACRA2 metrics (Phase 3.2)
+        for ssim2_key, ssim2_value in ssimulacra2_metrics.items():
+            if isinstance(ssim2_value, int | float):
+                result[ssim2_key] = float(ssim2_value)
+            else:
+                result[ssim2_key] = str(ssim2_value)
+
+        # Add text/UI validation metrics (Phase 3.1)
+        for text_ui_key, text_ui_value in text_ui_metrics.items():
+            if isinstance(text_ui_value, int | float):
+                result[text_ui_key] = float(text_ui_value)
+            else:
+                result[text_ui_key] = str(text_ui_value)
+
         # Add frame count information
         result["frame_count"] = int(original_frame_count)
         result["compressed_frame_count"] = int(compressed_frame_count)
 
-        # Add timing validation metrics
+        # Add timing validation metrics if available
         for key, value in timing_metrics.items():
             result[key] = value
 
-        # Calculate composite quality using enhanced metrics system
-        from .enhanced_metrics import process_metrics_with_enhanced_quality
-
-        # Add compression ratio for efficiency calculation
-        result["compression_ratio"] = (
-            original_path.stat().st_size / compressed_path.stat().st_size
-            if compressed_path.stat().st_size > 0
-            else 1.0
-        )
+        # Calculate compression ratio for efficiency calculation (if file metadata provided)
+        if (
+            file_metadata
+            and "original_size_bytes" in file_metadata
+            and "compressed_size_bytes" in file_metadata
+        ):
+            result["compression_ratio"] = (
+                file_metadata["original_size_bytes"]
+                / file_metadata["compressed_size_bytes"]
+                if file_metadata["compressed_size_bytes"] > 0
+                else 1.0
+            )
+        else:
+            # Default compression ratio when no file metadata
+            result["compression_ratio"] = 1.0
 
         # Process with quality system (adds composite_quality and efficiency)
+        from .enhanced_metrics import process_metrics_with_enhanced_quality
+
         result = process_metrics_with_enhanced_quality(result, config)
 
-        # Add system metrics
-        result["kilobytes"] = float(calculate_file_size_kb(compressed_path))
+        # Add file-specific metrics if metadata provided
+        if file_metadata and "compressed_path" in file_metadata:
+            result["kilobytes"] = float(
+                calculate_file_size_kb(file_metadata["compressed_path"])
+            )
+        elif file_metadata and "compressed_size_bytes" in file_metadata:
+            result["kilobytes"] = float(file_metadata["compressed_size_bytes"] / 1024.0)
 
         # Calculate processing time
         end_time = time.perf_counter()
@@ -1885,6 +2056,83 @@ def calculate_comprehensive_metrics(
             result["temporal_consistency_delta_raw"] = result[
                 "temporal_consistency_delta"
             ]
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to calculate comprehensive metrics from frames: {e}")
+        raise ValueError(f"Metrics calculation failed: {e}") from e
+
+
+def calculate_comprehensive_metrics(
+    original_path: Path,
+    compressed_path: Path,
+    config: MetricsConfig | None = None,
+    frame_reduction_context: bool = False,
+) -> dict[str, float | str]:
+    """Calculate comprehensive quality metrics between original and compressed GIFs.
+
+    This is the main function that addresses the frame alignment problem and provides
+    multi-metric quality assessment with all available metrics.
+
+    Args:
+        original_path: Path to original GIF file
+        compressed_path: Path to compressed GIF file
+        config: Optional metrics configuration (uses default if None)
+        frame_reduction_context: If True, adjusts disposal artifact detection for frame reduction
+
+    Returns:
+        Dictionary with comprehensive metrics including:
+        - Traditional metrics: ssim, ms_ssim, psnr, temporal_consistency
+        - New metrics: mse, rmse, fsim, gmsd, chist, edge_similarity, texture_similarity, sharpness_similarity
+        - Aggregation descriptors: *_std, *_min, *_max for each metric
+        - Optional raw values: *_raw for each metric (if config.RAW_METRICS=True)
+        - System metrics: render_ms, kilobytes
+        - Composite quality score
+
+    Raises:
+        IOError: If either GIF file cannot be read
+        ValueError: If GIFs are invalid or processing fails
+    """
+    if config is None:
+        config = DEFAULT_METRICS_CONFIG
+
+    try:
+        # Extract frames from both GIFs
+        original_result = extract_gif_frames(original_path, config.SSIM_MAX_FRAMES)
+        compressed_result = extract_gif_frames(compressed_path, config.SSIM_MAX_FRAMES)
+
+        # Extract metadata for file-specific operations
+        try:
+            from .meta import extract_gif_metadata
+
+            original_metadata = extract_gif_metadata(original_path)
+            compressed_metadata = extract_gif_metadata(compressed_path)
+            original_frame_count = original_metadata.orig_frames
+            compressed_frame_count = compressed_metadata.orig_frames
+        except Exception:
+            # Fallback to extracted frames count
+            original_frame_count = len(original_result.frames)
+            compressed_frame_count = len(compressed_result.frames)
+
+        # Prepare file metadata for the frame-based function
+        file_metadata = {
+            "original_path": original_path,
+            "compressed_path": compressed_path,
+            "original_frame_count": original_frame_count,
+            "compressed_frame_count": compressed_frame_count,
+            "original_size_bytes": original_path.stat().st_size,
+            "compressed_size_bytes": compressed_path.stat().st_size,
+        }
+
+        # Delegate to frame-based function
+        result = calculate_comprehensive_metrics_from_frames(
+            original_result.frames,
+            compressed_result.frames,
+            config=config,
+            frame_reduction_context=frame_reduction_context,
+            file_metadata=file_metadata,
+        )
 
         return result
 

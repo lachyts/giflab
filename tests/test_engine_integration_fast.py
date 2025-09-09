@@ -5,14 +5,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from PIL import Image, ImageDraw
-
 from giflab.lossy import (
     LossyEngine,
     apply_lossy_compression,
     compress_with_animately,
     compress_with_gifsicle,
 )
+from PIL import Image, ImageDraw
 
 
 def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None:
@@ -501,5 +500,5 @@ class TestEngineUtilsFast:
         # Test frame keep ratio bounds
         valid_ratios = [0.1, 0.5, 0.8, 1.0]
         for ratio in valid_ratios:
-            assert isinstance(ratio, (int, float))
+            assert isinstance(ratio, int | float)
             assert 0.0 <= ratio <= 1.0

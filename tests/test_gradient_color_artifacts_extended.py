@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
@@ -28,7 +27,7 @@ class TestGradientBandingEdgeCases:
         """Test detection with images smaller than patch size."""
         # Create tiny images (smaller than patch size)
         tiny_frames = []
-        for i in range(3):
+        for _i in range(3):
             frame = np.random.randint(0, 255, (16, 16, 3), dtype=np.uint8)
             tiny_frames.append(frame)
 
@@ -77,7 +76,7 @@ class TestGradientBandingEdgeCases:
         """Test with extreme gradients (0-255 in minimal distance)."""
         extreme_frames = []
 
-        for i in range(3):
+        for _i in range(3):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
             # Create extremely sharp gradient (black to white in 2 pixels)
             frame[:, :2] = [0, 0, 0]  # Black
@@ -143,7 +142,7 @@ class TestGradientBandingEdgeCases:
 
         # Create large frames (but still reasonable)
         large_frames = []
-        for i in range(2):
+        for _i in range(2):
             frame = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
             large_frames.append(frame)
 
@@ -436,7 +435,7 @@ class TestIntegrationEdgeCases:
 
         # Should handle gracefully by using minimum frame count
         assert isinstance(result, dict)
-        assert all(isinstance(v, (int, float)) for v in result.values())
+        assert all(isinstance(v, int | float) for v in result.values())
 
     @pytest.mark.fast
     def test_none_frame_inputs(self):
@@ -625,7 +624,7 @@ def large_frames():
 def gradient_frames():
     """Fixture providing frames with known gradients."""
     frames = []
-    for i in range(3):
+    for _i in range(3):
         frame = np.zeros((64, 64, 3), dtype=np.uint8)
         # Linear horizontal gradient
         for x in range(64):

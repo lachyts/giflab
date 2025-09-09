@@ -9,13 +9,12 @@ import time
 from pathlib import Path
 
 import pytest
-from PIL import Image
-
 from giflab.multiprocessing_support import (
     ParallelFrameGenerator,
     get_optimal_worker_count,
 )
 from giflab.synthetic_gifs import SyntheticFrameGenerator, SyntheticGifGenerator
+from PIL import Image
 
 
 class TestPerformanceIntegration:
@@ -103,7 +102,7 @@ class TestPerformanceIntegration:
         generator = SyntheticGifGenerator(self.temp_dir)
 
         # Test with a small subset of specs
-        test_specs = [spec for spec in generator.synthetic_specs[:3]]  # First 3 specs
+        test_specs = list(generator.synthetic_specs[:3])  # First 3 specs
 
         start_time = time.time()
 

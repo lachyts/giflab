@@ -6,13 +6,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from PIL import Image
-
 from giflab.enhanced_metrics import (
     calculate_efficiency_metric,
     process_metrics_with_enhanced_quality,
 )
 from giflab.metrics import calculate_comprehensive_metrics
+from PIL import Image
 
 
 class TestEfficiencyIntegrationWorkflows:

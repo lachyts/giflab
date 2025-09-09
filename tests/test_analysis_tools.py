@@ -1,5 +1,4 @@
 import pandas as pd
-
 from giflab.analysis_tools import (
     performance_matrix,
     pipeline_to_mermaid,

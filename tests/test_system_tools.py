@@ -4,7 +4,6 @@ import os
 from unittest.mock import patch
 
 import pytest
-
 from giflab.config import EngineConfig
 from giflab.system_tools import (
     ToolInfo,

@@ -4,9 +4,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-from PIL import Image
-
 from giflab.metrics import extract_gif_frames
+from PIL import Image
 
 
 class TestFrameSamplingDistribution:

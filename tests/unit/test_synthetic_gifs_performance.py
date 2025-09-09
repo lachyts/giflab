@@ -10,13 +10,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
-
 from giflab.synthetic_gifs import (
     SyntheticFrameGenerator,
     SyntheticGifGenerator,
     SyntheticGifSpec,
 )
+from PIL import Image
 
 
 class TestSyntheticFrameGeneratorVectorized:

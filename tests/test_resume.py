@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from giflab.meta import GifMetadata
 from giflab.pipeline import CompressionJob, CompressionPipeline
 

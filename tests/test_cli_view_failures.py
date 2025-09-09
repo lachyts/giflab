@@ -4,7 +4,6 @@ import json
 
 import pytest
 from click.testing import CliRunner
-
 from giflab.cli import main
 
 

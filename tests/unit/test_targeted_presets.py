@@ -1,6 +1,6 @@
 """Unit tests for the targeted experiment preset system.
 
-This module tests the new slot-based preset system that replaces 
+This module tests the new slot-based preset system that replaces
 generate_all_pipelines() + sampling with targeted pipeline generation.
 """
 

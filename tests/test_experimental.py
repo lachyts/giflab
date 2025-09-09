@@ -7,7 +7,6 @@ research findings about redundant dithering methods.
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from giflab.core.runner import AnalysisResult, GifLabRunner
 from giflab.synthetic_gifs import SyntheticGifSpec
 

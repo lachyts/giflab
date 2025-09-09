@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-
 from giflab.cli import (
     debug_failures,
     main,
@@ -55,7 +54,10 @@ class TestRunCommand:
         result = runner.invoke(run, ["--help"])
 
         assert result.exit_code == 0
-        assert "Run comprehensive GIF compression analysis and optimization" in result.output
+        assert (
+            "Run comprehensive GIF compression analysis and optimization"
+            in result.output
+        )
         assert "--workers" in result.output
         assert "--resume" in result.output
 
@@ -95,7 +97,9 @@ class TestRunCommand:
     @patch("giflab.cli.run_cmd.validate_and_get_worker_count")
     @patch("giflab.core.runner.GifLabRunner")
     @patch("giflab.cli.utils.validate_and_get_raw_dir")
-    def test_run_with_workers_option(self, mock_validate, mock_runner_class, mock_worker_validate):
+    def test_run_with_workers_option(
+        self, mock_validate, mock_runner_class, mock_worker_validate
+    ):
         """Test run command with workers option."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_dir = Path(tmpdir)
@@ -108,7 +112,9 @@ class TestRunCommand:
             mock_runner._estimate_execution_time.return_value = "1 minute"
 
             runner = CliRunner()
-            result = runner.invoke(run, [str(test_dir), "--workers", "4", "--estimate-time"])
+            result = runner.invoke(
+                run, [str(test_dir), "--workers", "4", "--estimate-time"]
+            )
 
             # Check that worker validation was called with correct value
             mock_worker_validate.assert_called_once_with(4)

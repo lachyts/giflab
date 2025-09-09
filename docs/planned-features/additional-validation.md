@@ -143,31 +143,52 @@ Additional metrics that improve debugging precision and catch edge cases.
 - **Test Suite Status**: Basic functionality implemented, comprehensive test suite pending
 - Main integration in `calculate_comprehensive_metrics()` with conditional execution
 
-### Phase 3: Conditional Content-Specific Metrics ⏳ PLANNED
-**Progress:** 0% Complete
-**Current Focus:** Dependent on content detection heuristics
+### Phase 3: Conditional Content-Specific Metrics ✅ COMPLETED
+**Progress:** 100% Complete (2/2 subtasks completed)
+**Current Focus:** All conditional content-specific metrics implemented and integrated
 
 Metrics triggered only for specific content types to control computational cost.
 
-#### Subtask 3.1: Text/UI Content Validation ⏳ PLANNED  
-- [ ] Implement content detection heuristic (edges + small components)
-- [ ] Add OCR confidence delta measurement for text regions
-- [ ] Implement MTF50 edge acuity measurement for sharpness
-- [ ] Add conditional triggering based on content analysis
+#### Subtask 3.1: Text/UI Content Validation ✅ COMPLETED  
+- [x] Implement content detection heuristic (edges + small components)
+- [x] Add OCR confidence delta measurement for text regions
+- [x] Implement MTF50 edge acuity measurement for sharpness
+- [x] Add conditional triggering based on content analysis
 
 **Debug Value:** Catches text readability degradation in UI/caption content
 **When to Use:** Only when text/UI content detected
 **Cost:** High when triggered - OCR processing required
 
-#### Subtask 3.2: Modern Perceptual Metric (SSIMULACRA2) ⏳ PLANNED
-- [ ] Integrate SSIMULACRA2 CLI tool
-- [ ] Add to slow validation pipeline for borderline cases
-- [ ] Compare performance vs LPIPS/DISTS for metric selection
-- [ ] Add to composite quality calculation if beneficial
+**Implementation Notes:**
+- Full `TextUIContentDetector` class implemented in `src/giflab/text_ui_validation.py`
+- Uses Canny edge detection + connected component analysis for text region detection
+- OCR validation via pytesseract (primary) and EasyOCR (fallback) with confidence scoring
+- MTF50 edge sharpness analysis using FFT-based Modulation Transfer Function
+- Smart conditional triggering based on edge density and component analysis
+- Integrated into main metrics calculation via `calculate_comprehensive_metrics()`
+- Comprehensive test suite in `tests/unit/test_text_ui_validation.py`
+- Dependencies added: `pytesseract ^0.3.10`, `easyocr ^1.7.0` (optional)
+
+#### Subtask 3.2: Modern Perceptual Metric (SSIMULACRA2) ✅ COMPLETED
+- [x] Integrate SSIMULACRA2 CLI tool
+- [x] Add to slow validation pipeline for borderline cases
+- [x] Compare performance vs LPIPS/DISTS for metric selection
+- [x] Add to composite quality calculation if beneficial
 
 **Debug Value:** Modern perceptual assessment with good human alignment
 **When to Use:** Optional secondary validation for quality disputes
 **Cost:** Medium - CLI tool execution
+
+**Implementation Notes:**
+- Full `Ssimulacra2Validator` class implemented in `src/giflab/ssimulacra2_metrics.py`
+- Uses external SSIMULACRA2 binary (located at `/opt/homebrew/bin/ssimulacra2`)
+- Raw scores (-inf to 100) normalized to 0-1 range using linear interpolation
+- Conditional triggering for borderline quality cases (composite_quality < 0.7)
+- Frame sampling strategy: uniform distribution, max 30 frames (configurable)
+- Integrated into enhanced composite quality calculation with 2% weight
+- Comprehensive validation thresholds: 0.3 (low), 0.5 (medium), 0.7 (high)
+- Full error handling with graceful fallbacks when binary unavailable
+- **Test Coverage**: Complete unit test suite in `tests/unit/test_ssimulacra2_metrics.py`
 
 ### Phase 4: Integration & System Optimization ⏳ PLANNED
 **Progress:** 0% Complete
@@ -201,8 +222,8 @@ Metrics triggered only for specific content types to control computational cost.
 | Color palette corruption | ΔE00 patches | Color histogram | deltae_pct_gt3 > 0.10 |
 | Gradient posterization | Banding detection | GMSD | banding_score > 60 |
 | Over/under dithering | Dither quality index (✅) | Texture similarity | ratio outside [0.8, 1.3] |
-| Perceptual degradation | LPIPS quality (✅) | Deep perceptual validation | lpips_quality_mean > 0.3 |
-| Text degradation | OCR confidence delta | MTF50 acuity | conf_delta < -0.05 |
+| Perceptual degradation | LPIPS quality (✅) + SSIMULACRA2 (✅) | Deep perceptual validation | lpips_quality_mean > 0.3 \|\| ssimulacra2_mean < 0.5 |
+| Text degradation | OCR confidence delta (✅) | MTF50 acuity (✅) | conf_delta < -0.05 |
 
 ### Conditional Triggering Logic
 ```python
@@ -217,10 +238,11 @@ def determine_validation_metrics(content_analysis, operation_type):
         metrics.append("dither_quality")  # ✅ IMPLEMENTED
         
     if content_analysis.has_text_ui:
-        metrics.extend(["ocr_confidence", "mtf50"])
+        metrics.extend(["ocr_confidence", "mtf50"])  # ✅ IMPLEMENTED
         
     if composite_quality < threshold:  # Borderline cases
         metrics.append("deep_perceptual")  # ✅ IMPLEMENTED
+        metrics.append("ssimulacra2")     # ✅ IMPLEMENTED
         
     return metrics
 ```
@@ -307,9 +329,13 @@ dither_ratio_mean, dither_ratio_p95, dither_quality_score, flat_region_count, (�
 # Deep perceptual metrics (✅ IMPLEMENTED - Phase 2.2)
 lpips_quality_mean, lpips_quality_p95, lpips_quality_max, deep_perceptual_frame_count, deep_perceptual_downscaled, deep_perceptual_device,
 
-# Conditional metrics (when applicable)
-ocr_conf_delta_mean, mtf50_ratio_mean,
-ssimulacra2_mean
+# Text/UI validation metrics (✅ IMPLEMENTED - Phase 3.1)
+has_text_ui_content, text_ui_edge_density, text_ui_component_count,
+ocr_conf_delta_mean, ocr_conf_delta_min, ocr_regions_analyzed,
+mtf50_ratio_mean, mtf50_ratio_min, edge_sharpness_score,
+
+# SSIMULACRA2 perceptual metrics (✅ IMPLEMENTED - Phase 3.2)
+ssimulacra2_mean, ssimulacra2_p95, ssimulacra2_min, ssimulacra2_frame_count, ssimulacra2_triggered
 ```
 
 ## Success Criteria

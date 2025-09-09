@@ -148,12 +148,12 @@ class TestMonitorConfig:
         config = MonitorConfig()
 
         # Test active processing
-        assert config.is_actively_processing(1.0) == True
-        assert config.is_actively_processing(0.2) == True
+        assert config.is_actively_processing(1.0) is True
+        assert config.is_actively_processing(0.2) is True
 
         # Test likely batching
-        assert config.is_actively_processing(0.05) == False
-        assert config.is_actively_processing(0.0) == False
+        assert config.is_actively_processing(0.05) is False
+        assert config.is_actively_processing(0.0) is False
 
     def test_estimate_remaining_time(self):
         """Test remaining time estimation."""
@@ -232,7 +232,7 @@ class TestMonitorConfig:
             assert config_path.exists()
 
             # Test that file contains valid JSON
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config_data = json.load(f)
 
             assert isinstance(config_data, dict)

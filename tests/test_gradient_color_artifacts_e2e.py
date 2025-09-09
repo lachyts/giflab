@@ -9,13 +9,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from PIL import Image, ImageDraw
-
 from giflab.config import DEFAULT_ENGINE_CONFIG
 from giflab.lossy import _is_executable
 from giflab.metrics import calculate_comprehensive_metrics
 from giflab.optimization_validation.data_structures import ValidationConfig
 from giflab.tool_wrappers import GifsicleColorReducer
+from PIL import Image, ImageDraw
 
 
 @pytest.mark.external_tools
@@ -105,7 +104,11 @@ class TestGradientColorE2E:
                 capture_output=True,
                 timeout=10,
             )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ) as e:
             pytest.skip(f"Animately binary not functional: {e}")
 
         # Create a brand color test GIF
@@ -117,9 +120,12 @@ class TestGradientColorE2E:
             subprocess.run(
                 [
                     str(DEFAULT_ENGINE_CONFIG.ANIMATELY_PATH),
-                    "--input", str(input_gif),
-                    "--output", str(output_gif),
-                    "--lossy", "60",  # Moderate lossy setting
+                    "--input",
+                    str(input_gif),
+                    "--output",
+                    str(output_gif),
+                    "--lossy",
+                    "60",  # Moderate lossy setting
                 ],
                 check=True,
                 capture_output=True,
@@ -393,7 +399,7 @@ class TestGradientColorE2E:
         gif_path = tmp_path / filename
 
         frames = []
-        for i in range(3):
+        for _i in range(3):
             img = Image.new("RGB", (128, 128))
             pixels = img.load()
 
@@ -447,7 +453,7 @@ class TestGradientColorE2E:
         ]
 
         frames = []
-        for i, color in enumerate(brand_colors):
+        for _i, _color in enumerate(brand_colors):
             img = Image.new("RGB", (96, 96), (255, 255, 255))  # White background
             draw = ImageDraw.Draw(img)
 

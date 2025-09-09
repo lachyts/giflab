@@ -1,6 +1,6 @@
 """Engine-specific validation tests for wrapper output validation.
 
-This test suite validates that each compression engine (FFmpeg, ImageMagick, 
+This test suite validates that each compression engine (FFmpeg, ImageMagick,
 Gifsicle, Gifski, Animately) produces expected output for frame reduction,
 color reduction, and lossy compression operations.
 """
@@ -9,7 +9,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from giflab.meta import extract_gif_metadata
 from giflab.tool_wrappers import (  # Frame reduction wrappers; Color reduction wrappers; Lossy compression wrappers
     AnimatelyColorReducer,
@@ -573,7 +572,7 @@ class TestEdgeCases(TestFixtures):
         start_time = time.time()
 
         # Run multiple validations to measure overhead
-        for i in range(10):
+        for _i in range(10):
             result = validator.validate_file_integrity(
                 Path(__file__), {}  # Use this Python file as a non-GIF
             )

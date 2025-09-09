@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from giflab.meta import extract_gif_metadata
 from giflab.tool_wrappers import (  # Dithering-specific wrappers; All Bayer scale variations
     FFmpegColorReducer,
@@ -511,7 +510,7 @@ class TestFFmpegDitheringWrappers:
             ),
         ]
 
-        for wrapper_class, expected_method, description in bayer_wrappers:
+        for wrapper_class, expected_method, _description in bayer_wrappers:
             wrapper = wrapper_class()
 
             if not wrapper.available():

@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from PIL import Image
-
 from giflab.metrics import calculate_comprehensive_metrics
+from PIL import Image
 
 
 def _make_gifs(tmp_path: Path):

@@ -90,7 +90,8 @@ class MetricsConfig:
     ENHANCED_TEMPORAL_WEIGHT: float = 0.05
 
     # Deep perceptual metrics (3% total)
-    ENHANCED_LPIPS_WEIGHT: float = 0.03
+    ENHANCED_LPIPS_WEIGHT: float = 0.01  # Reduced to make room for SSIMULACRA2
+    ENHANCED_SSIMULACRA2_WEIGHT: float = 0.02  # Modern perceptual metric
 
     # Enable enhanced composite quality calculation
     USE_ENHANCED_COMPOSITE_QUALITY: bool = True
@@ -100,6 +101,12 @@ class MetricsConfig:
     DEEP_PERCEPTUAL_DEVICE: str = "auto"
     LPIPS_DOWNSCALE_SIZE: int = 512
     LPIPS_MAX_FRAMES: int = 100
+
+    # SSIMULACRA2 configuration
+    ENABLE_SSIMULACRA2: bool = True
+    SSIMULACRA2_PATH: str = "/opt/homebrew/bin/ssimulacra2"
+    SSIMULACRA2_MAX_FRAMES: int = 30
+    SSIMULACRA2_QUALITY_THRESHOLD: float = 0.7  # Trigger for borderline quality
 
     # PSNR normalisation upper bound (dB) – values ≥ this map to 1.0
     PSNR_MAX_DB: float = 50.0
@@ -136,6 +143,7 @@ class MetricsConfig:
             + self.ENHANCED_TEXTURE_WEIGHT
             + self.ENHANCED_TEMPORAL_WEIGHT
             + self.ENHANCED_LPIPS_WEIGHT
+            + self.ENHANCED_SSIMULACRA2_WEIGHT
         )
         if abs(enhanced_total - 1.0) > tolerance:
             raise ValueError(
@@ -162,6 +170,7 @@ class MetricsConfig:
             self.ENHANCED_TEXTURE_WEIGHT,
             self.ENHANCED_TEMPORAL_WEIGHT,
             self.ENHANCED_LPIPS_WEIGHT,
+            self.ENHANCED_SSIMULACRA2_WEIGHT,
         ]
         all_weights = legacy_weights + enhanced_weights
         if any(w < 0 for w in all_weights):

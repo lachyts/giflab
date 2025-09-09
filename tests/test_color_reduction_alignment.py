@@ -9,10 +9,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
-
 from giflab.color_keep import count_gif_colors
 from giflab.lossy import LossyEngine, compress_with_animately, compress_with_gifsicle
+from PIL import Image
+
 from tests.test_engine_equivalence import _engine_available
 
 

@@ -1,8 +1,6 @@
 from pathlib import Path
 
 import pytest
-from PIL import Image
-
 from giflab.tool_wrappers import (
     AnimatelyColorReducer,
     AnimatelyFrameReducer,
@@ -18,6 +16,7 @@ from giflab.tool_wrappers import (
     ImageMagickFrameReducer,
     ImageMagickLossyCompressor,
 )
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Helpers

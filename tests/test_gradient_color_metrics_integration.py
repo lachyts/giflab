@@ -11,12 +11,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from PIL import Image, ImageDraw
-
 from giflab.config import MetricsConfig
 from giflab.metrics import (
     calculate_comprehensive_metrics,
 )
+from PIL import Image, ImageDraw
 
 
 class TestMetricsIntegration:
@@ -56,7 +55,7 @@ class TestMetricsIntegration:
         for metric in expected_banding_metrics:
             assert metric in result, f"Missing banding metric: {metric}"
             assert isinstance(
-                result[metric], (int, float)
+                result[metric], int | float
             ), f"Invalid type for {metric}: {type(result[metric])}"
 
         # Verify color validation metrics are included
@@ -74,7 +73,7 @@ class TestMetricsIntegration:
         for metric in expected_color_metrics:
             assert metric in result, f"Missing color metric: {metric}"
             assert isinstance(
-                result[metric], (int, float)
+                result[metric], int | float
             ), f"Invalid type for {metric}: {type(result[metric])}"
 
     @pytest.mark.fast
@@ -111,11 +110,12 @@ class TestMetricsIntegration:
         """Test graceful degradation when gradient_color_artifacts import fails."""
         # Mock the module import to raise ImportError
         import sys
-        original_module = sys.modules.get('giflab.gradient_color_artifacts')
-        if 'giflab.gradient_color_artifacts' in sys.modules:
-            del sys.modules['giflab.gradient_color_artifacts']
-        
-        with patch.dict('sys.modules', {'giflab.gradient_color_artifacts': None}):
+
+        original_module = sys.modules.get("giflab.gradient_color_artifacts")
+        if "giflab.gradient_color_artifacts" in sys.modules:
+            del sys.modules["giflab.gradient_color_artifacts"]
+
+        with patch.dict("sys.modules", {"giflab.gradient_color_artifacts": None}):
             original_gif = self._create_test_gif("original.gif")
             compressed_gif = self._create_test_gif("compressed.gif")
 
@@ -128,10 +128,10 @@ class TestMetricsIntegration:
             assert result["banding_score_mean"] == 0.0
             assert result["deltae_mean"] == 0.0
             assert result["color_patch_count"] == 0
-        
+
         # Restore the original module
         if original_module is not None:
-            sys.modules['giflab.gradient_color_artifacts'] = original_module
+            sys.modules["giflab.gradient_color_artifacts"] = original_module
 
     @pytest.mark.fast
     def test_metrics_calculation_exception_handling(self):
@@ -248,7 +248,7 @@ class TestMetricsIntegration:
         gif_path = self.temp_dir / filename
 
         images = []
-        for i in range(3):
+        for _i in range(3):
             img = Image.new("RGB", size)
             pixels = img.load()
 
@@ -320,7 +320,7 @@ class TestCSVOutputIntegration:
                 writer.writerow(result)
 
         # Read back and verify
-        with open(csv_path, "r") as csvfile:
+        with open(csv_path) as csvfile:
             reader = csv.DictReader(csvfile)
             rows = list(reader)
 
@@ -454,31 +454,46 @@ class TestPerformanceIntegration:
     @pytest.mark.fast
     def test_memory_impact(self):
         """Test memory impact of new metrics calculation."""
+        import gc
         import os
 
         import psutil
 
+        # Import cleanup function for model cache
+        from giflab.model_cache import cleanup_model_cache
+
         process = psutil.Process(os.getpid())
+        
+        # Clean cache before test to ensure clean state
+        cleanup_model_cache(force=True)
+        gc.collect()
+        
         initial_memory = process.memory_info().rss
 
-        # Create and process multiple GIFs
-        for i in range(3):
-            original_gif = self._create_test_gif(f"original_{i}.gif")
-            compressed_gif = self._create_test_gif(f"compressed_{i}.gif")
+        try:
+            # Create and process multiple GIFs
+            for i in range(3):
+                original_gif = self._create_test_gif(f"original_{i}.gif")
+                compressed_gif = self._create_test_gif(f"compressed_{i}.gif")
 
-            result = calculate_comprehensive_metrics(
-                original_path=original_gif, compressed_path=compressed_gif
-            )
+                result = calculate_comprehensive_metrics(
+                    original_path=original_gif, compressed_path=compressed_gif
+                )
 
-            # Verify we got results
-            assert "banding_score_mean" in result
-            assert "deltae_mean" in result
+                # Verify we got results
+                assert "banding_score_mean" in result
+                assert "deltae_mean" in result
 
-        final_memory = process.memory_info().rss
-        memory_increase = (final_memory - initial_memory) / (1024 * 1024)  # MB
+            final_memory = process.memory_info().rss
+            memory_increase = (final_memory - initial_memory) / (1024 * 1024)  # MB
 
-        # Memory increase should be reasonable (<100MB)
-        assert memory_increase < 100, f"Memory increased by {memory_increase:.1f}MB"
+            # Memory increase should be reasonable (<100MB)
+            assert memory_increase < 100, f"Memory increased by {memory_increase:.1f}MB"
+            
+        finally:
+            # Always clean up model cache after test
+            cleanup_model_cache(force=True)
+            gc.collect()
 
     # Helper methods
     def _create_test_gif(self, filename: str, size=(32, 32), frames=3):
@@ -677,7 +692,7 @@ class TestEdgeCaseIntegration:
         gif_path = self.temp_dir / filename
 
         images = []
-        for i in range(3):
+        for _i in range(3):
             img = Image.new("RGB", size)
             pixels = img.load()
 

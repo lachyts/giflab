@@ -555,6 +555,31 @@ GifLab maintains strict testing standards to ensure code quality and project cle
 - **Debug Sessions**: Create organized sessions in `test-workspace/debug/`
 - **Cleanup Protocols**: Regular cleanup prevents project pollution
 
+### Test Markers
+GifLab uses pytest markers to organize and selectively run different types of tests:
+
+- **`@pytest.mark.fast`**: Quick tests safe for parallel execution (< 1 second)
+- **`@pytest.mark.slow`**: Long-running tests or those requiring external binaries
+- **`@pytest.mark.performance`**: Performance benchmark and timing-sensitive tests
+- **`@pytest.mark.serial`**: Tests requiring sequential execution (not parallel-safe)
+- **`@pytest.mark.integration`**: Integration tests with external tools/dependencies
+- **`@pytest.mark.external_tools`**: Tests requiring specific external tools
+
+**Marker-Based Test Execution:**
+```bash
+# Run only fast tests (parallel execution)
+poetry run pytest -m "fast" -n auto
+
+# Run performance tests sequentially
+poetry run pytest -m "performance and serial" -n 1
+
+# Run performance tests that can be parallelized
+poetry run pytest -m "performance and not serial" -n auto
+
+# Skip slow and external tool tests
+poetry run pytest -m "not slow and not external_tools"
+```
+
 ### Quick Commands
 ```bash
 # Development Testing (⚡ <30s, rapid iteration)

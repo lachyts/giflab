@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 import torch
-
 from giflab.temporal_artifacts import (
     TemporalArtifactDetector,
     calculate_enhanced_temporal_metrics,
@@ -135,11 +134,11 @@ class TestTemporalArtifactDetector:
         with patch.object(detector, "_get_lpips_model") as mock_get_model:
             # Mock LPIPS model that works with batch processing
             mock_model = MagicMock()
-            
+
             # Mock tensor behavior for batch processing
             mock_tensor_result = MagicMock()
             mock_tensor_result.cpu.return_value.item.return_value = 0.01
-            
+
             # Return a list-like tensor for batch results
             mock_batch_result = [mock_tensor_result, mock_tensor_result]
             mock_model.return_value = mock_batch_result
@@ -208,11 +207,11 @@ class TestTemporalArtifactDetector:
         with patch.object(detector, "_get_lpips_model") as mock_get_model:
             # Mock LPIPS model that works with batch processing
             mock_model = MagicMock()
-            
+
             # Mock tensor behavior for batch processing
             mock_tensor_result = MagicMock()
             mock_tensor_result.cpu.return_value.item.return_value = 0.1  # High distance
-            
+
             # Return a list-like tensor for batch results (9 pairs for 10 frames)
             mock_batch_result = [mock_tensor_result] * 9
             mock_model.return_value = mock_batch_result
@@ -384,7 +383,7 @@ class TestTemporalArtifactDetector:
 
         # Create highly textured frames
         frames = []
-        for i in range(5):
+        for _i in range(5):
             frame = np.random.randint(0, 255, (32, 32, 3), dtype=np.uint8)
             frames.append(frame)
 
@@ -478,7 +477,7 @@ class TestTemporalArtifactDetector:
         detector = TemporalArtifactDetector()
 
         frames = []
-        for i in range(12):
+        for _i in range(12):
             frame = np.ones((64, 64, 3), dtype=np.uint8) * 128
             # Consistent pattern across all frames
             frame[20:40, 20:40] = 200

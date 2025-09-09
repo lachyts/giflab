@@ -6,8 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image, ImageDraw
-
 from giflab.lossy import (
     _execute_animately_advanced,
     _extract_frame_timing,
@@ -21,6 +19,7 @@ from giflab.lossy import (
     compress_with_animately_advanced_lossy,
 )
 from giflab.tool_wrappers import AnimatelyAdvancedLossyCompressor
+from PIL import Image, ImageDraw
 
 
 def create_test_gif(path: Path, frames: int = 5, size: tuple = (50, 50)) -> None:
@@ -213,7 +212,7 @@ class TestAnimatelyAdvancedLossyFunctionsFast:
 
                 assert isinstance(png_dir_result, Path)
                 assert isinstance(png_export_result, dict)
-                assert was_provided == False
+                assert was_provided is False
                 mock_export.assert_called_once()
 
                 # Verify PNG export was called with correct paths
@@ -428,9 +427,9 @@ class TestAnimatelyAdvancedErrorHandlingFast:
         with tempfile.TemporaryDirectory() as tmpdir:
             test_temp_dir = Path(tmpdir) / "test_temp_dir"
 
-            with patch(
-                "tempfile.mkdtemp", return_value=str(test_temp_dir)
-            ), patch("giflab.lossy.rmtree") as mock_rmtree:
+            with patch("tempfile.mkdtemp", return_value=str(test_temp_dir)), patch(
+                "giflab.lossy.rmtree"
+            ) as mock_rmtree:
                 # Simulate an error during the managed temp directory usage
                 with pytest.raises(RuntimeError, match="Test directory error"):
                     with _managed_temp_directory():

@@ -136,6 +136,9 @@ class ValidationChecker:
             self._validate_deep_perceptual_metrics(
                 result, compression_metrics, effective_thresholds
             )
+            self._validate_ssimulacra2_metrics(
+                result, compression_metrics, effective_thresholds
+            )
 
             # Perform multi-metric combination validation
             self._validate_multi_metric_combinations(
@@ -250,11 +253,31 @@ class ValidationChecker:
             lpips_quality_mean=compression_metrics.get("lpips_quality_mean"),
             lpips_quality_p95=compression_metrics.get("lpips_quality_p95"),
             lpips_quality_max=compression_metrics.get("lpips_quality_max"),
-            deep_perceptual_frame_count=compression_metrics.get("deep_perceptual_frame_count"),
-            deep_perceptual_downscaled=compression_metrics.get("deep_perceptual_downscaled"),
+            deep_perceptual_frame_count=compression_metrics.get(
+                "deep_perceptual_frame_count"
+            ),
+            deep_perceptual_downscaled=compression_metrics.get(
+                "deep_perceptual_downscaled"
+            ),
             # Size
             original_size_kb=original_metadata.orig_kilobytes,
             compressed_size_kb=compression_metrics.get("kilobytes"),
+            # Phase 3: Text/UI validation metrics
+            text_ui_edge_density=compression_metrics.get("text_ui_edge_density"),
+            text_ui_component_count=compression_metrics.get("text_ui_component_count"),
+            ocr_conf_delta_mean=compression_metrics.get("ocr_conf_delta_mean"),
+            ocr_conf_delta_min=compression_metrics.get("ocr_conf_delta_min"),
+            ocr_regions_analyzed=compression_metrics.get("ocr_regions_analyzed"),
+            mtf50_ratio_mean=compression_metrics.get("mtf50_ratio_mean"),
+            mtf50_ratio_min=compression_metrics.get("mtf50_ratio_min"),
+            edge_sharpness_score=compression_metrics.get("edge_sharpness_score"),
+            has_text_ui_content=compression_metrics.get("has_text_ui_content"),
+            # Phase 3: SSIMULACRA2 perceptual quality metrics
+            ssimulacra2_mean=compression_metrics.get("ssimulacra2_mean"),
+            ssimulacra2_p95=compression_metrics.get("ssimulacra2_p95"),
+            ssimulacra2_min=compression_metrics.get("ssimulacra2_min"),
+            ssimulacra2_frame_count=compression_metrics.get("ssimulacra2_frame_count"),
+            ssimulacra2_triggered=compression_metrics.get("ssimulacra2_triggered"),
         )
 
     def _validate_frame_reduction(
@@ -690,7 +713,7 @@ class ValidationChecker:
         thresholds: dict[str, float],
     ) -> None:
         """Validate deep perceptual quality metrics from Task 2.2.
-        
+
         This validates the new LPIPS-based spatial quality metrics that catch
         perceptual issues traditional metrics miss.
         """
@@ -698,12 +721,19 @@ class ValidationChecker:
         lpips_quality_mean = compression_metrics.get("lpips_quality_mean")
         lpips_quality_p95 = compression_metrics.get("lpips_quality_p95")
         lpips_quality_max = compression_metrics.get("lpips_quality_max")
-        deep_perceptual_used = compression_metrics.get("deep_perceptual_device", "fallback") != "fallback"
-        
-        if not any([lpips_quality_mean, lpips_quality_p95, lpips_quality_max]) or not deep_perceptual_used:
+        deep_perceptual_used = (
+            compression_metrics.get("deep_perceptual_device", "fallback") != "fallback"
+        )
+
+        if (
+            not any([lpips_quality_mean, lpips_quality_p95, lpips_quality_max])
+            or not deep_perceptual_used
+        ):
             # Only warn if deep perceptual was expected but unavailable
             composite_quality = compression_metrics.get("composite_quality")
-            if composite_quality is not None and 0.3 <= composite_quality <= 0.7:  # Borderline quality
+            if (
+                composite_quality is not None and 0.3 <= composite_quality <= 0.7
+            ):  # Borderline quality
                 result.warnings.append(
                     ValidationWarning(
                         category="deep_perceptual_unavailable",
@@ -712,10 +742,10 @@ class ValidationChecker:
                     )
                 )
             return
-        
+
         # Validate LPIPS quality - higher scores indicate more perceptual difference (worse quality)
         lpips_threshold = thresholds.get("lpips_quality_threshold", 0.3)
-        
+
         if lpips_quality_mean is not None and lpips_quality_mean > lpips_threshold:
             result.issues.append(
                 ValidationIssue(
@@ -727,7 +757,7 @@ class ValidationChecker:
                     severity="WARNING",
                 )
             )
-        
+
         # Validate extreme cases with p95 metric
         extreme_threshold = thresholds.get("lpips_quality_extreme_threshold", 0.5)
         if lpips_quality_p95 is not None and lpips_quality_p95 > extreme_threshold:
@@ -741,7 +771,7 @@ class ValidationChecker:
                     severity="CRITICAL",
                 )
             )
-        
+
         # Check for very high maximum values that indicate severe artifacts
         max_threshold = thresholds.get("lpips_quality_max_threshold", 0.7)
         if lpips_quality_max is not None and lpips_quality_max > max_threshold:
@@ -755,7 +785,7 @@ class ValidationChecker:
                     recommendation="Check for compression artifacts or frame corruption",
                 )
             )
-        
+
         # Combination check: Low composite quality + High LPIPS = Comprehensive quality degradation
         composite_quality = compression_metrics.get("composite_quality")
         if (
@@ -769,6 +799,114 @@ class ValidationChecker:
                     category="comprehensive_quality_failure",
                     message=f"Both traditional and perceptual quality poor: Composite {composite_quality:.3f} + LPIPS {lpips_quality_mean:.3f}",
                     severity="CRITICAL",
+                )
+            )
+
+    def _validate_ssimulacra2_metrics(
+        self,
+        result: ValidationResult,
+        compression_metrics: dict[str, Any],
+        thresholds: dict[str, float],
+    ) -> None:
+        """Validate SSIMULACRA2 perceptual quality metrics from Task 3.2.
+
+        This validates the modern SSIMULACRA2 perceptual quality metric that provides
+        good human visual alignment for borderline quality cases.
+        """
+        # Check if SSIMULACRA2 metrics are available
+        ssimulacra2_mean = compression_metrics.get("ssimulacra2_mean")
+        ssimulacra2_p95 = compression_metrics.get("ssimulacra2_p95")
+        ssimulacra2_min = compression_metrics.get("ssimulacra2_min")
+        ssimulacra2_triggered = compression_metrics.get("ssimulacra2_triggered", 0.0)
+
+        if (
+            not any([ssimulacra2_mean, ssimulacra2_p95, ssimulacra2_min])
+            or ssimulacra2_triggered == 0.0
+        ):
+            # Only warn if SSIMULACRA2 was expected but unavailable
+            composite_quality = compression_metrics.get("composite_quality")
+            if (
+                composite_quality is not None and composite_quality < 0.7
+            ):  # Borderline quality
+                result.warnings.append(
+                    ValidationWarning(
+                        category="ssimulacra2_unavailable",
+                        message="SSIMULACRA2 metrics unavailable for borderline quality case",
+                        recommendation="Check if ssimulacra2 binary is installed and accessible",
+                    )
+                )
+            return
+
+        # Validate SSIMULACRA2 quality - scores are normalized (0-1, higher = better quality)
+        low_threshold = thresholds.get("ssimulacra2_low_threshold", 0.3)  # Low quality
+        medium_threshold = thresholds.get(
+            "ssimulacra2_threshold", 0.5
+        )  # Medium quality
+        thresholds.get("ssimulacra2_high_threshold", 0.7)  # High quality
+
+        # Check mean quality
+        if ssimulacra2_mean is not None and ssimulacra2_mean < low_threshold:
+            result.issues.append(
+                ValidationIssue(
+                    category="ssimulacra2_poor_quality",
+                    message=f"Poor SSIMULACRA2 quality: {ssimulacra2_mean:.3f} < {low_threshold:.3f} - significant perceptual degradation",
+                    expected_value=low_threshold,
+                    actual_value=ssimulacra2_mean,
+                    threshold=low_threshold,
+                    severity="CRITICAL",
+                )
+            )
+        elif ssimulacra2_mean is not None and ssimulacra2_mean < medium_threshold:
+            result.warnings.append(
+                ValidationWarning(
+                    category="ssimulacra2_medium_quality",
+                    message=f"Medium SSIMULACRA2 quality: {ssimulacra2_mean:.3f} < {medium_threshold:.3f} - noticeable perceptual differences",
+                    expected_value=medium_threshold,
+                    actual_value=ssimulacra2_mean,
+                    threshold=medium_threshold,
+                    recommendation="Consider less aggressive compression settings",
+                )
+            )
+
+        # Check worst case (minimum) quality
+        if ssimulacra2_min is not None and ssimulacra2_min < low_threshold:
+            result.issues.append(
+                ValidationIssue(
+                    category="ssimulacra2_worst_frame",
+                    message=f"Worst frame SSIMULACRA2 quality very poor: {ssimulacra2_min:.3f} < {low_threshold:.3f}",
+                    expected_value=low_threshold,
+                    actual_value=ssimulacra2_min,
+                    threshold=low_threshold,
+                    severity="WARNING",
+                )
+            )
+
+        # Check 95th percentile quality
+        if ssimulacra2_p95 is not None and ssimulacra2_p95 < medium_threshold:
+            result.warnings.append(
+                ValidationWarning(
+                    category="ssimulacra2_poor_consistency",
+                    message=f"Inconsistent SSIMULACRA2 quality: P95 {ssimulacra2_p95:.3f} < {medium_threshold:.3f}",
+                    expected_value=medium_threshold,
+                    actual_value=ssimulacra2_p95,
+                    threshold=medium_threshold,
+                    recommendation="Check for frame-specific compression artifacts",
+                )
+            )
+
+        # Combination check: SSIMULACRA2 disagrees with composite quality
+        composite_quality = compression_metrics.get("composite_quality")
+        if (
+            composite_quality is not None
+            and ssimulacra2_mean is not None
+            and composite_quality > 0.7  # High composite quality
+            and ssimulacra2_mean < medium_threshold  # But poor perceptual quality
+        ):
+            result.warnings.append(
+                ValidationWarning(
+                    category="quality_metric_disagreement",
+                    message=f"Quality metrics disagree: Composite {composite_quality:.3f} high but SSIMULACRA2 {ssimulacra2_mean:.3f} poor",
+                    recommendation="Review compression with focus on perceptual quality",
                 )
             )
 

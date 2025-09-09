@@ -84,7 +84,9 @@ class QualityThresholdValidator:
             # Calculate composite quality scores
             if self.metrics_config.USE_ENHANCED_COMPOSITE_QUALITY:
                 # Filter metrics to only numeric values for composite quality calculation
-                numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, int | float)}
+                numeric_metrics = {
+                    k: v for k, v in metrics.items() if isinstance(v, int | float)
+                }
                 composite_quality = calculate_composite_quality(
                     numeric_metrics, self.metrics_config
                 )
@@ -182,7 +184,9 @@ class QualityThresholdValidator:
                 details={"exception": str(e)},
             )
 
-    def _calculate_legacy_composite_quality(self, metrics: dict[str, float | str]) -> float:
+    def _calculate_legacy_composite_quality(
+        self, metrics: dict[str, float | str]
+    ) -> float:
         """Calculate legacy 4-metric composite quality score.
 
         This is a fallback for when enhanced composite quality is disabled.
@@ -201,7 +205,7 @@ class QualityThresholdValidator:
         for metric_name, weight in weights.items():
             if metric_name in metrics:
                 value = metrics[metric_name]
-                
+
                 # Skip non-numeric values
                 if not isinstance(value, int | float):
                     continue
@@ -335,7 +339,8 @@ class QualityThresholdValidator:
                     # Only compare if value is numeric
                     is_acceptable = (
                         isinstance(variance, int | float)
-                        and variance <= self.catastrophic_thresholds["max_quality_variance"]
+                        and variance
+                        <= self.catastrophic_thresholds["max_quality_variance"]
                     )
                     variance_indicators.append(
                         {

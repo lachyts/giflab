@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-
 from giflab.lossy import (
     _analyze_gif_disposal_complexity,
     _select_optimal_disposal_method,

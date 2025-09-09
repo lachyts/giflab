@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from giflab.external_engines import (
     ffmpeg_color_reduce,
     ffmpeg_frame_reduce,

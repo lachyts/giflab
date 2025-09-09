@@ -4,7 +4,6 @@ import csv
 from unittest.mock import Mock, patch
 
 import pytest
-
 from giflab.tag_pipeline import (
     TaggingPipeline,
     create_tagging_pipeline,

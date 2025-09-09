@@ -16,14 +16,48 @@ from pathlib import Path
 import numpy as np
 import psutil
 import pytest
-from PIL import Image
-
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
     calculate_gradient_color_metrics,
 )
 from giflab.metrics import calculate_comprehensive_metrics
+from PIL import Image
+
+
+def _get_performance_threshold_multiplier():
+    """Get performance threshold multiplier based on environment.
+
+    Returns higher multipliers for CI environments to account for:
+    - Shared resources and variable load
+    - Different hardware characteristics
+    - Concurrent test execution
+    - Cold start effects
+
+    Returns:
+        float: Multiplier for performance thresholds (1.0 = local dev, >1.0 = CI)
+    """
+    # Common CI environment variables
+    ci_indicators = [
+        "CI",  # Generic CI flag
+        "CONTINUOUS_INTEGRATION",  # Common CI flag
+        "GITHUB_ACTIONS",  # GitHub Actions
+        "TRAVIS",  # Travis CI
+        "JENKINS_URL",  # Jenkins
+        "BUILDKITE",  # Buildkite
+        "CIRCLECI",  # Circle CI
+    ]
+
+    # Check if running in CI environment
+    is_ci = any(os.getenv(var) for var in ci_indicators)
+
+    if is_ci:
+        # Use 2.0x multiplier for CI environments
+        # This accounts for shared resources, variable load, and hardware differences
+        return 2.0
+    else:
+        # Local development environment - use strict thresholds
+        return 1.0
 
 
 @pytest.mark.benchmark
@@ -89,7 +123,9 @@ class TestPerformanceBenchmarks:
         # Verify scaling is reasonable (not exponential)
         small_time = results[(64, 64)]["avg_time"]
         large_time = results[(256, 256)]["avg_time"]
-        scaling_factor = large_time / max(small_time, 0.0001)  # Avoid division by tiny numbers
+        scaling_factor = large_time / max(
+            small_time, 0.0001
+        )  # Avoid division by tiny numbers
 
         # 256x256 is 16x the pixels of 64x64, but allow generous scaling for very fast operations
         assert scaling_factor < 1000, f"Excessive scaling: {scaling_factor:.1f}x"
@@ -138,7 +174,7 @@ class TestPerformanceBenchmarks:
         assert results[(128, 128)]["avg_time"] < 0.300  # <300ms for medium images
         assert results[(256, 256)]["avg_time"] < 1.200  # <1.2s for large images
 
-    @pytest.mark.fast
+    @pytest.mark.serial
     def test_combined_metrics_speed(self):
         """Benchmark combined gradient and color metrics calculation."""
         sizes = [(128, 128), (256, 256)]  # Focus on realistic sizes
@@ -171,6 +207,10 @@ class TestPerformanceBenchmarks:
                 print(f"Combined metrics {size} x{num_frames}: {avg_time:.3f}s")
 
         # Performance should scale reasonably with frame count
+        # Use environment-aware thresholds for CI reliability
+        threshold_multiplier = _get_performance_threshold_multiplier()
+        max_scaling = 7.0 * threshold_multiplier
+
         for size in sizes:
             key_3 = f"{size}_3frames"
             key_10 = f"{size}_10frames"
@@ -180,8 +220,14 @@ class TestPerformanceBenchmarks:
                 time_10 = results[key_10]["avg_time"]
 
                 # 10 frames should be <7x slower than 3 frames (allow for system variance)
+                # Adjust for CI environments: local=7.0x, CI=14.0x
                 scaling = time_10 / time_3
-                assert scaling < 7.0, f"Poor frame scaling for {size}: {scaling:.1f}x"
+                print(
+                    f"Frame scaling {size}: {scaling:.1f}x (threshold: {max_scaling:.1f}x, multiplier: {threshold_multiplier:.1f}x)"
+                )
+                assert (
+                    scaling < max_scaling
+                ), f"Poor frame scaling for {size}: {scaling:.1f}x > {max_scaling:.1f}x"
 
     @pytest.mark.fast
     def test_memory_usage(self):
@@ -244,7 +290,7 @@ class TestPerformanceBenchmarks:
             processing_time < 5.0
         ), f"Processing took too long: {processing_time:.3f}s"
 
-    @pytest.mark.fast
+    @pytest.mark.serial
     def test_thread_safety_performance(self):
         """Test performance with concurrent execution."""
         size = (128, 128)
@@ -279,14 +325,24 @@ class TestPerformanceBenchmarks:
 
         concurrent_time = time.perf_counter() - start_time
 
+        # Use environment-aware thresholds for CI reliability
+        threshold_multiplier = _get_performance_threshold_multiplier()
+        max_concurrent_ratio = 2.0 * threshold_multiplier
+
         print(f"Sequential: {sequential_time:.3f}s, Concurrent: {concurrent_time:.3f}s")
+        print(
+            f"Thread performance ratio: {concurrent_time/sequential_time:.1f}x (threshold: {max_concurrent_ratio:.1f}x, multiplier: {threshold_multiplier:.1f}x)"
+        )
 
         # Should not crash
         assert len(exceptions) == 0, f"Concurrent execution failed: {exceptions}"
         assert len(results) == 5, f"Not all threads completed: {len(results)}/5"
 
         # Concurrent might be faster (or at least not much slower)
-        assert concurrent_time <= sequential_time * 2.0, "Concurrent execution too slow"
+        # Adjust for CI environments: local=2.0x, CI=4.0x
+        assert (
+            concurrent_time <= sequential_time * max_concurrent_ratio
+        ), f"Concurrent execution too slow: {concurrent_time/sequential_time:.1f}x > {max_concurrent_ratio:.1f}x"
 
     @pytest.mark.fast
     def test_comprehensive_metrics_performance_impact(self):
@@ -314,9 +370,7 @@ class TestPerformanceBenchmarks:
             times_without = []
             for _ in range(3):
                 start_time = time.perf_counter()
-                calculate_comprehensive_metrics(
-                    original_gif, compressed_gif
-                )
+                calculate_comprehensive_metrics(original_gif, compressed_gif)
                 times_without.append(time.perf_counter() - start_time)
 
         avg_time_without = statistics.mean(times_without)
@@ -334,7 +388,7 @@ class TestPerformanceBenchmarks:
     def _create_gradient_frames(self, size, num_frames):
         """Create frames with gradients for testing."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros(
                 (size[1], size[0], 3), dtype=np.uint8
             )  # Note: numpy is (height, width)
@@ -514,7 +568,7 @@ class TestScalingBenchmarks:
     def _create_gradient_frames(self, size, num_frames):
         """Create frames with gradients for testing."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros(
                 (size[1], size[0], 3), dtype=np.uint8
             )  # Note: numpy is (height, width)
@@ -600,7 +654,7 @@ class TestStressTesting:
     @pytest.mark.slow  # Mark as slow since these are stress tests
     def test_large_image_stress(self):
         """Stress test with very large images.
-        
+
         Note: This test is intentionally skipped during normal test runs.
         To run stress tests, set the environment variable:
         GIFLAB_STRESS_TESTS=1 poetry run pytest tests/test_gradient_color_performance.py::TestStressTesting
@@ -628,7 +682,7 @@ class TestStressTesting:
     @pytest.mark.slow
     def test_many_frames_stress(self):
         """Stress test with many frames.
-        
+
         Note: This test is intentionally skipped during normal test runs.
         To run stress tests, set the environment variable:
         GIFLAB_STRESS_TESTS=1 poetry run pytest tests/test_gradient_color_performance.py::TestStressTesting

@@ -1,7 +1,5 @@
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
-
 from giflab.metrics import (
     chist,
     edge_similarity,
@@ -12,6 +10,7 @@ from giflab.metrics import (
     sharpness_similarity,
     texture_similarity,
 )
+from PIL import Image, ImageDraw
 
 
 class TestAdditionalMetrics:

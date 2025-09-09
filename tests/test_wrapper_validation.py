@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-
 from giflab.config import DEFAULT_VALIDATION_CONFIG
 from giflab.wrapper_validation import (
     ValidationConfig,

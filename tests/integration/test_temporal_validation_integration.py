@@ -9,12 +9,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from giflab.meta import GifMetadata
 from giflab.optimization_validation.data_structures import (
     ValidationConfig,
 )
 from giflab.optimization_validation.validation_checker import ValidationChecker
+
 from tests.fixtures.generate_temporal_artifact_fixtures import (
     create_background_flicker_gif,
     create_disposal_artifact_gif,

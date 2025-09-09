@@ -9,8 +9,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from PIL import Image
-
 from giflab.wrapper_validation.timing_validation import (
     TimingGridValidator,
     TimingMetrics,
@@ -18,6 +16,7 @@ from giflab.wrapper_validation.timing_validation import (
     validate_frame_timing_for_operation,
 )
 from giflab.wrapper_validation.types import ValidationResult
+from PIL import Image
 
 
 @pytest.fixture
@@ -77,7 +76,7 @@ def create_test_gif_with_variable_timing(path: Path, durations: list[int]):
     size = (20, 20)
     images = []
 
-    for i, duration in enumerate(durations):
+    for i, _duration in enumerate(durations):
         color = (i * 50, 150, 255 - i * 50)
         img = Image.new("RGB", size, color)
         images.append(img)
@@ -530,7 +529,7 @@ class TestErrorHandling:
         assert drift_metrics["frames_analyzed"] == 4
 
 
-@pytest.mark.fast
+@pytest.mark.performance
 class TestPerformance:
     """Test cases for performance characteristics."""
 

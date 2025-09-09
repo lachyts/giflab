@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 from giflab.elimination_cache import PipelineResultsCache, get_git_commit
 from giflab.elimination_errors import ErrorTypes
 
@@ -62,7 +61,7 @@ class TestPipelineResultsCache:
         with sqlite3.connect(temp_cache_db) as conn:
             cursor = conn.execute(
                 """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='table' AND name IN ('pipeline_results', 'pipeline_failures')
             """
             )
@@ -75,7 +74,7 @@ class TestPipelineResultsCache:
         with sqlite3.connect(temp_cache_db) as conn:
             cursor = conn.execute(
                 """
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='index' AND name LIKE 'idx_%'
             """
             )
@@ -132,7 +131,7 @@ class TestPipelineResultsCache:
         # Now should be cached
         cached = cache.get_cached_result(pipeline_id, gif_name, sample_test_params)
         assert cached is not None
-        assert cached["success"] == True
+        assert cached["success"] is True
         assert cached["file_size_kb"] == 245.3
         assert cached["ssim_mean"] == 0.936
 
@@ -433,7 +432,7 @@ class TestPipelineResultsCache:
         # Should be retrievable
         cached = cache.get_cached_result(pipeline_id, gif_name, sample_test_params)
         assert cached is not None
-        assert cached["success"] == True
+        assert cached["success"] is True
         assert cached["file_size_kb"] == 245.3
 
 
@@ -545,7 +544,7 @@ class TestCacheIntegrationScenarios:
                             pipeline_id, gif_name, test_params
                         )
                         assert cached is not None
-                        assert cached["success"] == True
+                        assert cached["success"] is True
 
     def test_cache_performance_with_large_dataset(self, elimination_cache_scenario):
         """Test cache performance with a larger dataset."""

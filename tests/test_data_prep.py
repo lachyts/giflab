@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from giflab.data_prep import (
     apply_confidence_weights,
     clip_outliers,

@@ -3,7 +3,6 @@
 import math
 from unittest.mock import patch
 
-
 from giflab.config import MetricsConfig
 from giflab.enhanced_metrics import (
     calculate_composite_quality,
@@ -108,12 +107,8 @@ class TestEfficiencyMetricCalculation:
         balanced = calculate_efficiency_metric(
             5.0, 0.8
         )  # Good quality + good compression
-        calculate_efficiency_metric(
-            1.5, 1.0
-        )  # Perfect quality + poor compression
-        calculate_efficiency_metric(
-            20.0, 0.6
-        )  # Perfect compression + poor quality
+        calculate_efficiency_metric(1.5, 1.0)  # Perfect quality + poor compression
+        calculate_efficiency_metric(20.0, 0.6)  # Perfect compression + poor quality
 
         # Balanced should be competitive with or better than extremes
         assert balanced > 0.5  # Should achieve reasonable efficiency

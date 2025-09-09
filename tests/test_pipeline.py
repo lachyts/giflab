@@ -4,7 +4,6 @@ from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
 from giflab.pipeline import (
     CompressionJob,
     CompressionPipeline,

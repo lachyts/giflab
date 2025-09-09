@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
 from giflab.lossy import (
     _execute_animately_advanced,
     _extract_frame_timing,

@@ -9,13 +9,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
     calculate_gradient_color_metrics,
 )
 from giflab.metrics import extract_gif_frames
+
 from tests.fixtures.generate_gradient_color_fixtures import (
     _interpolate_color,
     create_banded_gradient_gif,

@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from giflab.core.runner import ExperimentalConfig, ExperimentalPipeline, ExperimentJob
 from giflab.dynamic_pipeline import Pipeline, PipelineStep
 from giflab.meta import GifMetadata

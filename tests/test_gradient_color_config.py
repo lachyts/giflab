@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
@@ -431,7 +430,7 @@ class TestConfiguration:
     def _create_test_frames(self, size=(128, 128), num_frames=3):
         """Create basic test frames."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             # Create simple gradient
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
             for x in range(size[0]):
@@ -443,7 +442,7 @@ class TestConfiguration:
     def _create_gradient_frames(self, size=(128, 128), num_frames=3):
         """Create frames with smooth gradients."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
             for x in range(size[0]):
                 intensity = int(x * 255 / (size[0] - 1))
@@ -454,7 +453,7 @@ class TestConfiguration:
     def _create_banded_frames(self, size=(128, 128), bands=8, num_frames=3):
         """Create frames with banded gradients."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
             for x in range(size[0]):
                 band = int(x * bands / size[0])
@@ -466,7 +465,7 @@ class TestConfiguration:
     def _create_shifted_frames(self, size=(128, 128), num_frames=3):
         """Create frames with shifted colors."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
             for x in range(size[0]):
                 intensity = int(x * 255 / (size[0] - 1))

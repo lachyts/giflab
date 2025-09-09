@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-
 from giflab.core.runner import GifLabRunner
 
 

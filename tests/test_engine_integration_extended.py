@@ -2,12 +2,12 @@
 
 This module provides comprehensive functional validation for all engine x action combinations:
 - ImageMagick: color reduction, frame reduction, lossy compression
-- FFmpeg: color reduction, frame reduction, lossy compression  
+- FFmpeg: color reduction, frame reduction, lossy compression
 - gifski: lossy compression
 - gifsicle: color reduction, frame reduction, lossy compression
 - animately: color reduction, frame reduction, lossy compression
 
-Tests validate both functional changes (palette size, frame count, file size) and 
+Tests validate both functional changes (palette size, frame count, file size) and
 metadata completeness per the engine rollout plan specifications.
 """
 
@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
-
 from giflab.meta import extract_gif_metadata
 from giflab.metrics import calculate_comprehensive_metrics
 from giflab.tool_wrappers import (
@@ -48,7 +47,7 @@ def get_gif_color_count(gif_path: Path) -> int:
     return metadata.orig_n_colors
 
 
-def validate_metadata(result: Dict[str, Any], expected_engine: str) -> None:
+def validate_metadata(result: dict[str, Any], expected_engine: str) -> None:
     """Validate metadata completeness and correctness."""
     # Core required fields that all engines should provide
     core_fields = ["render_ms", "engine", "command"]

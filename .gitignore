@@ -147,6 +147,10 @@ test-performance-history.json
 
 # Test fixtures (exclude binary test files)
 tests/fixtures/*.gif
+tests/fixtures/**/*.png
+tests/fixtures/**/*.jpg
+tests/fixtures/**/*.jpeg
+tests/fixtures/phase3/
 
 # Pipeline cache databases
 pipeline_results_cache.db

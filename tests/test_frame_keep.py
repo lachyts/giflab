@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from giflab.frame_keep import (
     build_animately_frame_args,
     build_gifsicle_frame_args,

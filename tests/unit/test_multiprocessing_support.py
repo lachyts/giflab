@@ -9,7 +9,6 @@ import queue
 import time
 
 import pytest
-
 from giflab.multiprocessing_support import (
     FrameGenerationResult,
     FrameGenerationTask,

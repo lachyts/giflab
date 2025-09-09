@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from giflab.meta import GifMetadata
 from giflab.optimization_validation.data_structures import ValidationConfig
 from giflab.optimization_validation.validation_checker import ValidationChecker

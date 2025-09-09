@@ -173,9 +173,18 @@ def calculate_composite_quality(
         # LPIPS scores are inverted (lower = better), so we need to invert for quality
         # Normalize LPIPS score: 0.0 (identical) -> 1.0, 1.0 (very different) -> 0.0
         lpips_score = metrics["lpips_quality_mean"]
-        normalized_lpips = max(0.0, min(1.0, 1.0 - lpips_score))  # Invert: lower LPIPS = higher quality
+        normalized_lpips = max(
+            0.0, min(1.0, 1.0 - lpips_score)
+        )  # Invert: lower LPIPS = higher quality
         composite_quality += config.ENHANCED_LPIPS_WEIGHT * normalized_lpips
         total_weight += config.ENHANCED_LPIPS_WEIGHT
+
+    if "ssimulacra2_mean" in metrics:
+        # SSIMULACRA2 scores are already normalized (0-1, higher = better quality)
+        ssimulacra2_score = metrics["ssimulacra2_mean"]
+        normalized_ssimulacra2 = max(0.0, min(1.0, ssimulacra2_score))
+        composite_quality += config.ENHANCED_SSIMULACRA2_WEIGHT * normalized_ssimulacra2
+        total_weight += config.ENHANCED_SSIMULACRA2_WEIGHT
 
     # Normalize by actual weights used (handles missing metrics gracefully)
     raw_composite = composite_quality
@@ -344,7 +353,8 @@ def get_enhanced_weights_info(config: MetricsConfig | None = None) -> dict[str, 
         },
         "deep_perceptual": {
             "lpips_mean": config.ENHANCED_LPIPS_WEIGHT,
-            "total": config.ENHANCED_LPIPS_WEIGHT,
+            "ssimulacra2_mean": config.ENHANCED_SSIMULACRA2_WEIGHT,
+            "total": config.ENHANCED_LPIPS_WEIGHT + config.ENHANCED_SSIMULACRA2_WEIGHT,
         },
         "grand_total": (
             config.ENHANCED_SSIM_WEIGHT
@@ -359,6 +369,7 @@ def get_enhanced_weights_info(config: MetricsConfig | None = None) -> dict[str, 
             + config.ENHANCED_TEXTURE_WEIGHT
             + config.ENHANCED_TEMPORAL_WEIGHT
             + config.ENHANCED_LPIPS_WEIGHT
+            + config.ENHANCED_SSIMULACRA2_WEIGHT
         ),
     }
 

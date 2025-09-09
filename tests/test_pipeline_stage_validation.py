@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-
 from giflab.wrapper_validation import (
     PipelineStageValidator,
     ValidationResult,

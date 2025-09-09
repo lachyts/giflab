@@ -8,10 +8,9 @@ metadata and writes the expected output file.
 from pathlib import Path
 from unittest.mock import patch
 
+import giflab.lossy as lossy
 import pytest
 from PIL import Image
-
-import giflab.lossy as lossy
 
 
 @pytest.fixture()

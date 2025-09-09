@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-
 from giflab.gradient_color_artifacts import (
     GradientBandingDetector,
     PerceptualColorValidator,
@@ -164,7 +163,7 @@ class TestGradientBandingDetector:
     def _create_smooth_gradient_frames(self, num_frames=3):
         """Create frames with smooth gradients for testing."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
             # Create horizontal gradient
@@ -178,7 +177,7 @@ class TestGradientBandingDetector:
     def _create_banded_gradient_frames(self, num_frames=3, bands=8):
         """Create frames with posterized/banded gradients for testing."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
             # Create banded horizontal gradient
@@ -371,7 +370,7 @@ class TestPerceptualColorValidator:
             (128, 128, 128),  # Gray
         ]
 
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
             # Create colored patches
@@ -394,7 +393,7 @@ class TestPerceptualColorValidator:
             (148, 108, 108),  # Shifted gray
         ]
 
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
             # Create shifted colored patches
@@ -417,7 +416,7 @@ class TestPerceptualColorValidator:
             (50, 200, 200),  # Very different from gray
         ]
 
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
             # Create very different colored patches
@@ -448,7 +447,7 @@ class TestGradientColorIntegration:
             "gradient_region_count",
         ]
         assert all(key in result for key in expected_keys)
-        assert all(isinstance(result[key], (int, float)) for key in expected_keys)
+        assert all(isinstance(result[key], int | float) for key in expected_keys)
 
     @pytest.mark.fast
     def test_calculate_perceptual_color_metrics_function(self):
@@ -468,7 +467,7 @@ class TestGradientColorIntegration:
             "color_patch_count",
         ]
         assert all(key in result for key in expected_keys)
-        assert all(isinstance(result[key], (int, float)) for key in expected_keys)
+        assert all(isinstance(result[key], int | float) for key in expected_keys)
 
     @pytest.mark.fast
     def test_calculate_gradient_color_metrics_combined(self):
@@ -529,7 +528,7 @@ class TestGradientColorIntegration:
 
         # Create larger test frames
         large_frames = []
-        for i in range(5):
+        for _i in range(5):
             frame = np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8)
             large_frames.append(frame)
 
@@ -544,7 +543,7 @@ class TestGradientColorIntegration:
     def _create_test_frames(self, num_frames=3):
         """Create simple test frames for testing."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             # Create frame with gradient and color patches
             frame = np.zeros((64, 64, 3), dtype=np.uint8)
 
@@ -568,7 +567,7 @@ class TestGradientColorIntegration:
 def test_gradient_frames():
     """Fixture providing test frames with gradients."""
     frames = []
-    for i in range(3):
+    for _i in range(3):
         frame = np.zeros((64, 64, 3), dtype=np.uint8)
         # Horizontal gradient
         for x in range(64):
@@ -584,7 +583,7 @@ def test_color_frames():
     frames = []
     colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
 
-    for i, color in enumerate(colors):
+    for _i, color in enumerate(colors):
         frame = np.full((64, 64, 3), color, dtype=np.uint8)
         frames.append(frame)
     return frames

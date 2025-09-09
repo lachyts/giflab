@@ -14,7 +14,6 @@ from typing import Dict, List
 
 import numpy as np
 import pytest
-
 from giflab.gradient_color_artifacts import (
     calculate_gradient_color_metrics,
 )
@@ -26,10 +25,10 @@ class GoldenTestCase:
 
     name: str
     description: str
-    expected_metrics: Dict[str, float]
-    tolerance: Dict[str, float]  # Acceptable tolerance for each metric
-    frames_original: List[np.ndarray] = None
-    frames_compressed: List[np.ndarray] = None
+    expected_metrics: dict[str, float]
+    tolerance: dict[str, float]  # Acceptable tolerance for each metric
+    frames_original: list[np.ndarray] = None
+    frames_compressed: list[np.ndarray] = None
 
 
 class TestRegressionPrevention:
@@ -47,7 +46,7 @@ class TestRegressionPrevention:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
-    def _create_golden_test_cases(self) -> List[GoldenTestCase]:
+    def _create_golden_test_cases(self) -> list[GoldenTestCase]:
         """Create golden test cases with known expected outputs."""
 
         golden_cases = []
@@ -242,7 +241,7 @@ class TestRegressionPrevention:
         case = self.golden_cases[0]  # Identical smooth gradients
 
         results = []
-        for run in range(5):
+        for _run in range(5):
             result = calculate_gradient_color_metrics(
                 case.frames_original, case.frames_compressed
             )
@@ -393,7 +392,7 @@ class TestRegressionPrevention:
 
     def test_save_and_load_golden_results(self, request):
         """Save golden results to file for future regression testing.
-        
+
         Note: This test is intentionally skipped during normal test runs.
         To generate/update golden reference results, run:
         poetry run pytest tests/test_gradient_color_regression.py::TestGradientColorRegression::test_save_and_load_golden_results --update-golden
@@ -427,7 +426,7 @@ class TestRegressionPrevention:
     def _create_smooth_gradient_frames(self, size=(128, 128), num_frames=3):
         """Create frames with smooth gradients."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
 
             # Horizontal gradient
@@ -442,7 +441,7 @@ class TestRegressionPrevention:
     def _create_banded_gradient_frames(self, bands=8, size=(128, 128), num_frames=3):
         """Create frames with banded/posterized gradients."""
         frames = []
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.zeros((size[1], size[0], 3), dtype=np.uint8)
 
             # Banded horizontal gradient
@@ -490,7 +489,7 @@ class TestRegressionPrevention:
         """Create frames with complex scenes containing gradients and solid areas."""
         frames = []
 
-        for i in range(num_frames):
+        for _i in range(num_frames):
             frame = np.full(
                 (size[1], size[0], 3), (240, 240, 240), dtype=np.uint8
             )  # Light gray background
@@ -534,7 +533,7 @@ class TestRegressionPrevention:
         shifted_frames = []
 
         # Create frames with color patches
-        for frame_idx in range(3):
+        for _frame_idx in range(3):
             # Original frame
             orig_frame = np.full((size[1], size[0], 3), (255, 255, 255), dtype=np.uint8)
 

@@ -46,7 +46,13 @@ class ValidationWarning:
 
 @dataclass
 class ValidationMetrics:
-    """Summary of key metrics used in validation."""
+    """Summary of key metrics used in validation.
+
+    Includes metrics from all validation phases:
+    - Phase 1: Frame/timing, quality, temporal consistency
+    - Phase 2: Deep perceptual quality (LPIPS)
+    - Phase 3: Text/UI content validation and sharpness analysis
+    """
 
     # Frame and timing metrics
     original_frame_count: int
@@ -88,6 +94,26 @@ class ValidationMetrics:
     # Size metrics
     original_size_kb: float | None = None
     compressed_size_kb: float | None = None
+
+    # Phase 3: Text and UI content validation metrics
+    text_ui_edge_density: float | None = (
+        None  # Edge density measurement for UI detection
+    )
+    text_ui_component_count: int | None = None  # Number of UI components detected
+    ocr_conf_delta_mean: float | None = None  # Mean OCR confidence change
+    ocr_conf_delta_min: float | None = None  # Minimum OCR confidence change
+    ocr_regions_analyzed: int | None = None  # Number of OCR regions processed
+    mtf50_ratio_mean: float | None = None  # Mean MTF50 sharpness ratio
+    mtf50_ratio_min: float | None = None  # Minimum MTF50 sharpness ratio
+    edge_sharpness_score: float | None = None  # Overall edge sharpness score
+    has_text_ui_content: bool | None = None  # Boolean flag for UI content presence
+
+    # Phase 3: SSIMULACRA2 perceptual quality metrics
+    ssimulacra2_mean: float | None = None  # Mean SSIMULACRA2 quality score
+    ssimulacra2_p95: float | None = None  # 95th percentile SSIMULACRA2 score
+    ssimulacra2_min: float | None = None  # Minimum SSIMULACRA2 score
+    ssimulacra2_frame_count: float | None = None  # Number of frames processed
+    ssimulacra2_triggered: float | None = None  # Boolean flag for SSIMULACRA2 usage
 
 
 @dataclass
@@ -227,6 +253,11 @@ class ValidationConfig:
     lpips_quality_extreme_threshold: float = 0.5  # Extreme LPIPS P95 threshold
     lpips_quality_max_threshold: float = 0.7  # Maximum LPIPS threshold
 
+    # SSIMULACRA2 perceptual quality thresholds (Task 3.2)
+    ssimulacra2_threshold: float = 0.5  # Medium quality threshold (normalized score)
+    ssimulacra2_high_threshold: float = 0.7  # High quality threshold
+    ssimulacra2_low_threshold: float = 0.3  # Low quality threshold
+
     # Content-type specific adjustments
     content_type_adjustments: dict[str, dict[str, float]] = field(default_factory=dict)
 
@@ -266,6 +297,10 @@ class ValidationConfig:
             "lpips_quality_threshold": self.lpips_quality_threshold,
             "lpips_quality_extreme_threshold": self.lpips_quality_extreme_threshold,
             "lpips_quality_max_threshold": self.lpips_quality_max_threshold,
+            # SSIMULACRA2 perceptual quality thresholds (Task 3.2)
+            "ssimulacra2_threshold": self.ssimulacra2_threshold,
+            "ssimulacra2_high_threshold": self.ssimulacra2_high_threshold,
+            "ssimulacra2_low_threshold": self.ssimulacra2_low_threshold,
         }
 
         # Apply content-type specific adjustments

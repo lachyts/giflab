@@ -5,8 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
-
 from giflab.config import DEFAULT_METRICS_CONFIG, MetricsConfig
 from giflab.metrics import (
     FrameExtractResult,
@@ -21,6 +19,7 @@ from giflab.metrics import (
     extract_gif_frames,
     resize_to_common_dimensions,
 )
+from PIL import Image
 
 
 class TestMetricsConfig:
@@ -963,7 +962,6 @@ class TestExtendedComprehensiveMetrics:
     def test_positional_sampling_helper_function(self):
         """Test the _calculate_positional_samples helper function directly."""
         import numpy as np
-
         from giflab.metrics import _calculate_positional_samples, mse
 
         # Create test frame pairs with different qualities

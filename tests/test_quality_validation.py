@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-
 from giflab.config import DEFAULT_METRICS_CONFIG
 from giflab.wrapper_validation import WrapperOutputValidator
 from giflab.wrapper_validation.quality_validation import QualityThresholdValidator

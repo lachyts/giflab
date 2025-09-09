@@ -1,6 +1,6 @@
 """SSIM regression tests for gifski frame padding normalization.
 
-These tests verify that frame dimension normalization (padding) doesn't 
+These tests verify that frame dimension normalization (padding) doesn't
 significantly degrade image quality as measured by SSIM.
 """
 import tempfile

@@ -1,10 +1,9 @@
 from pathlib import Path
 
 import pytest
-from PIL import Image
-
 from giflab.metrics import calculate_comprehensive_metrics
 from giflab.schema import MetricRecordV1, is_valid_record, validate_metric_record
+from PIL import Image
 
 
 class TestMetricRecordSchema:

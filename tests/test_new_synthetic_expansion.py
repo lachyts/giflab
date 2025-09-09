@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from giflab.core import AnalysisResult, GifLabRunner, SyntheticGifSpec
 
 
@@ -366,7 +365,7 @@ class TestIntegrationWithCLI:
         sampling_strategy = "targeted"
         use_targeted_gifs = sampling_strategy == "targeted"
 
-        assert use_targeted_gifs == True
+        assert use_targeted_gifs is True
 
         # Should be able to get targeted GIFs
         if use_targeted_gifs:
