@@ -141,10 +141,19 @@ class TestGradientColorE2E:
         if not output_gif.exists():
             pytest.skip("Animately output not created")
 
-        # Calculate color validation metrics
-        result = calculate_comprehensive_metrics(
-            original_path=input_gif, compressed_path=output_gif
-        )
+        # Calculate color validation metrics - force calculation even for high quality
+        import os
+        old_env = os.environ.get("GIFLAB_FORCE_GRADIENT_METRICS")
+        try:
+            os.environ["GIFLAB_FORCE_GRADIENT_METRICS"] = "true"
+            result = calculate_comprehensive_metrics(
+                original_path=input_gif, compressed_path=output_gif
+            )
+        finally:
+            if old_env is None:
+                os.environ.pop("GIFLAB_FORCE_GRADIENT_METRICS", None)
+            else:
+                os.environ["GIFLAB_FORCE_GRADIENT_METRICS"] = old_env
 
         # Verify color validation metrics
         assert "deltae_mean" in result

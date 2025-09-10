@@ -268,6 +268,18 @@ class TemporalArtifactDetector:
             else None
         )
 
+    def __del__(self) -> None:
+        """Clean up resources when the detector is destroyed."""
+        # Release LPIPS model reference
+        if hasattr(self, "_lpips_model"):
+            if self._lpips_model is not None and self._lpips_model is not False:
+                # Release the model reference from cache
+                if hasattr(self, "device"):
+                    LPIPSModelCache.release_model(
+                        net="alex", version="0.1", spatial=False, device=self.device
+                    )
+                self._lpips_model = None
+
     def _prepare_frame_pairs(
         self, frames: list[np.ndarray], batch_start: int, batch_end: int
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
@@ -1166,3 +1178,65 @@ For troubleshooting compression issues, focus on:
 2. High flat_flicker_ratio suggesting background corruption
 3. High temporal_pumping_score indicating quality inconsistency
 """
+
+
+# Global singleton instance management
+_global_temporal_detector: TemporalArtifactDetector | None = None
+
+
+def cleanup_global_temporal_detector() -> None:
+    """Clean up the global temporal detector instance and release model references."""
+    global _global_temporal_detector
+    if _global_temporal_detector is not None:
+        # Release the LPIPS model reference
+        if hasattr(_global_temporal_detector, "_lpips_model"):
+            if (
+                _global_temporal_detector._lpips_model is not None
+                and _global_temporal_detector._lpips_model is not False
+            ):
+                # Release the model reference from cache
+                LPIPSModelCache.release_model(
+                    net="alex",
+                    version="0.1",
+                    spatial=False,
+                    device=_global_temporal_detector.device,
+                )
+            _global_temporal_detector._lpips_model = None
+        _global_temporal_detector = None
+        logger.debug("Global temporal detector cleaned up")
+
+
+def get_temporal_detector(
+    device: str = "cpu", memory_threshold: float = 0.8, force_mse_fallback: bool = False
+) -> TemporalArtifactDetector:
+    """Get or create a global temporal detector instance.
+
+    Args:
+        device: Device for computation ('cpu' or 'cuda')
+        memory_threshold: Memory threshold for automatic fallback
+        force_mse_fallback: Force MSE-based processing instead of LPIPS
+
+    Returns:
+        Global TemporalArtifactDetector instance
+    """
+    global _global_temporal_detector
+
+    # Check if we need to create a new instance
+    if (
+        _global_temporal_detector is None
+        or _global_temporal_detector.device != device
+        or _global_temporal_detector.force_mse_fallback != force_mse_fallback
+    ):
+        # Clean up existing instance if present
+        if _global_temporal_detector is not None:
+            cleanup_global_temporal_detector()
+
+        # Create new instance
+        _global_temporal_detector = TemporalArtifactDetector(
+            device=device,
+            memory_threshold=memory_threshold,
+            force_mse_fallback=force_mse_fallback,
+        )
+        logger.debug(f"Created new global temporal detector on device: {device}")
+
+    return _global_temporal_detector

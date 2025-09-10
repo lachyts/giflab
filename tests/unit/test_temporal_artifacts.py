@@ -27,31 +27,29 @@ class TestTemporalArtifactDetector:
         detector = TemporalArtifactDetector(device="cpu")
         assert detector.device == "cpu"
 
-    @patch("giflab.temporal_artifacts.lpips")
+    @patch("giflab.temporal_artifacts.LPIPSModelCache")
     @patch("giflab.temporal_artifacts.LPIPS_AVAILABLE", True)
     @pytest.mark.fast
-    def test_lpips_model_initialization_success(self, mock_lpips):
+    def test_lpips_model_initialization_success(self, mock_cache):
         """Test successful LPIPS model lazy initialization."""
         mock_model = MagicMock()
-        mock_model.to.return_value = mock_model  # Chain return for .to().eval()
-        mock_model.eval.return_value = mock_model
-        mock_lpips.LPIPS.return_value = mock_model
+        mock_cache.get_model.return_value = mock_model
 
         detector = TemporalArtifactDetector(device="cpu")
         model = detector._get_lpips_model()
 
         assert model is not None  # Model should be initialized
         assert detector._lpips_model is not None  # Should be cached
-        mock_lpips.LPIPS.assert_called_once_with(net="alex", spatial=False)
-        mock_model.to.assert_called_once_with("cpu")
-        mock_model.eval.assert_called_once()
+        mock_cache.get_model.assert_called_once_with(
+            net="alex", version="0.1", spatial=False, device="cpu"
+        )
 
-    @patch("giflab.temporal_artifacts.lpips")
+    @patch("giflab.temporal_artifacts.LPIPSModelCache")
     @patch("giflab.temporal_artifacts.LPIPS_AVAILABLE", True)
     @pytest.mark.fast
-    def test_lpips_model_initialization_failure(self, mock_lpips):
+    def test_lpips_model_initialization_failure(self, mock_cache):
         """Test LPIPS model initialization failure handling."""
-        mock_lpips.LPIPS.side_effect = RuntimeError("LPIPS init failed")
+        mock_cache.get_model.return_value = None  # Simulate failure
 
         detector = TemporalArtifactDetector(device="cpu")
         model = detector._get_lpips_model()

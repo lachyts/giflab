@@ -424,14 +424,12 @@ class TestPerformanceIntegration:
         original_gif = self._create_test_gif("original.gif", frames=5)
         compressed_gif = self._create_test_gif("compressed.gif", frames=5)
 
-        # Measure time with new metrics
-        start_time = time.time()
+        # Warm up the cache first (load any models that will be needed)
         calculate_comprehensive_metrics(
             original_path=original_gif, compressed_path=compressed_gif
         )
-        time_with_metrics = time.time() - start_time
 
-        # Mock out the gradient/color metrics to measure without them
+        # Now measure without gradient/color metrics
         with patch(
             "giflab.gradient_color_artifacts.calculate_gradient_color_metrics",
             return_value={},
@@ -441,6 +439,13 @@ class TestPerformanceIntegration:
                 original_path=original_gif, compressed_path=compressed_gif
             )
             time_without_metrics = time.time() - start_time
+
+        # Measure time with new metrics (models already cached)
+        start_time = time.time()
+        calculate_comprehensive_metrics(
+            original_path=original_gif, compressed_path=compressed_gif
+        )
+        time_with_metrics = time.time() - start_time
 
         # Performance overhead should be reasonable (<2x slower)
         overhead = time_with_metrics / max(

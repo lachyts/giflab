@@ -69,7 +69,7 @@ class TextUIContentDetector:
         # Validate input
         if frame is None:
             raise ValueError("Frame cannot be None")
-        
+
         # Quick edge density check
         edge_density = self._detect_edge_density(frame)
         if edge_density < self.edge_density_threshold:
@@ -194,7 +194,7 @@ class TextUIContentDetector:
             raise ValueError("Frame is empty")
         if len(frame.shape) < 2:
             raise ValueError("Frame must be at least 2-dimensional")
-        
+
         try:
             # Convert to grayscale if needed
             if len(frame.shape) == 3:
@@ -581,7 +581,9 @@ class OCRValidator:
         edge_score = min(1.0, edge_density * 10.0)
 
         # Weighted combination
-        confidence = float(0.4 * sharpness_score + 0.3 * contrast_score + 0.3 * edge_score)
+        confidence = float(
+            0.4 * sharpness_score + 0.3 * contrast_score + 0.3 * edge_score
+        )
         return float(max(0.1, min(1.0, confidence)))  # Clamp between 0.1 and 1.0
 
     def _calculate_confidence_delta(self, orig_conf: float, comp_conf: float) -> float:

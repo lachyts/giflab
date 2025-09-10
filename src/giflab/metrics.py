@@ -2,6 +2,7 @@
 
 import logging
 import math
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -574,10 +575,10 @@ def _detect_partial_animation_artifacts_enhanced(
     This enhanced version integrates temporal artifact detection from the temporal_artifacts
     module to provide better background stability tracking and flicker detection.
     """
-    from .temporal_artifacts import TemporalArtifactDetector
+    from .temporal_artifacts import get_temporal_detector
 
-    # Initialize temporal detector
-    detector = TemporalArtifactDetector()
+    # Get global temporal detector instance
+    detector = get_temporal_detector()
 
     # Extract first and last frames for comparison (most likely to show accumulation)
     first_frame = frames[0].astype(np.float32)
@@ -1328,6 +1329,217 @@ def _calculate_positional_samples(
         }
 
 
+def calculate_selected_metrics(
+    original_frames: list[np.ndarray],
+    compressed_frames: list[np.ndarray],
+    selected_metrics: dict[str, bool],
+    config: MetricsConfig | None = None,
+) -> dict[str, Any]:
+    """Calculate only selected metrics between original and compressed frames.
+
+    This function is used by ConditionalMetricsCalculator to calculate only
+    the metrics that are needed based on quality assessment and content profile.
+
+    Args:
+        original_frames: List of original frames as numpy arrays
+        compressed_frames: List of compressed frames as numpy arrays
+        selected_metrics: Dictionary with metric names as keys and bool values
+                         indicating whether to calculate that metric
+        config: Optional metrics configuration (uses default if None)
+
+    Returns:
+        Dictionary with calculated metrics (only those selected)
+    """
+    if config is None:
+        config = DEFAULT_METRICS_CONFIG
+
+    # Resize frames to common dimensions
+    original_frames_resized, compressed_frames_resized = resize_to_common_dimensions(
+        original_frames, compressed_frames
+    )
+
+    # Align frames
+    aligned_pairs = align_frames(original_frames_resized, compressed_frames_resized)
+
+    if not aligned_pairs:
+        raise ValueError("No frame pairs could be aligned")
+
+    # Initialize result dictionary
+    metric_values: dict[str, list[float]] = {}
+
+    # Calculate basic metrics (always included)
+    if selected_metrics.get("mse", False):
+        metric_values["mse"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                frame_mse = mse(orig_frame, comp_frame)
+                metric_values["mse"].append(frame_mse)
+            except Exception as e:
+                logger.warning(f"MSE calculation failed: {e}")
+                metric_values["mse"].append(0.0)
+
+    if selected_metrics.get("psnr", False):
+        metric_values["psnr"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                frame_psnr = calculate_safe_psnr(orig_frame, comp_frame)
+                # Don't normalize PSNR - keep raw dB values for quality validation
+                # The enhanced_metrics module expects raw dB values and will normalize itself
+                metric_values["psnr"].append(frame_psnr)
+            except Exception as e:
+                logger.warning(f"PSNR calculation failed: {e}")
+                metric_values["psnr"].append(0.0)
+
+    if selected_metrics.get("ssim", False):
+        metric_values["ssim"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                if len(orig_frame.shape) == 3:
+                    orig_gray = cv2.cvtColor(orig_frame, cv2.COLOR_RGB2GRAY)
+                    comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY)
+                else:
+                    orig_gray = orig_frame
+                    comp_gray = comp_frame
+                frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
+                metric_values["ssim"].append(max(0.0, min(1.0, frame_ssim)))
+            except Exception as e:
+                logger.warning(f"SSIM calculation failed: {e}")
+                metric_values["ssim"].append(0.0)
+
+    # Calculate advanced metrics (conditional)
+    if selected_metrics.get("fsim", False):
+        metric_values["fsim"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                frame_fsim = fsim(orig_frame, comp_frame)
+                metric_values["fsim"].append(frame_fsim)
+            except Exception as e:
+                logger.warning(f"FSIM calculation failed: {e}")
+                metric_values["fsim"].append(0.0)
+
+    if selected_metrics.get("vif", False):
+        # VIF would be calculated here if implemented
+        pass
+
+    if selected_metrics.get("edge_similarity", False):
+        metric_values["edge_similarity"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                frame_edge = edge_similarity(
+                    orig_frame,
+                    comp_frame,
+                    config.EDGE_CANNY_THRESHOLD1,
+                    config.EDGE_CANNY_THRESHOLD2,
+                )
+                metric_values["edge_similarity"].append(frame_edge)
+            except Exception as e:
+                logger.warning(f"Edge similarity calculation failed: {e}")
+                metric_values["edge_similarity"].append(0.0)
+
+    if selected_metrics.get("texture_similarity", False):
+        metric_values["texture_similarity"] = []
+        for orig_frame, comp_frame in aligned_pairs:
+            try:
+                frame_texture = texture_similarity(orig_frame, comp_frame)
+                metric_values["texture_similarity"].append(frame_texture)
+            except Exception as e:
+                logger.warning(f"Texture similarity calculation failed: {e}")
+                metric_values["texture_similarity"].append(0.0)
+
+    # Calculate expensive deep metrics conditionally
+    results: dict[str, Any] = {}
+
+    if selected_metrics.get("lpips", False):
+        try:
+            from .deep_perceptual_metrics import (
+                calculate_deep_perceptual_quality_metrics,
+            )
+
+            deep_config = {
+                "device": getattr(config, "DEEP_PERCEPTUAL_DEVICE", "auto"),
+                "lpips_downscale_size": getattr(config, "LPIPS_DOWNSCALE_SIZE", 512),
+                "lpips_max_frames": getattr(config, "LPIPS_MAX_FRAMES", 100),
+            }
+            deep_metrics = calculate_deep_perceptual_quality_metrics(
+                original_frames_resized, compressed_frames_resized, deep_config
+            )
+            results.update(deep_metrics)
+        except Exception as e:
+            logger.warning(f"LPIPS calculation failed: {e}")
+            results["lpips_quality_mean"] = 0.5
+
+    if selected_metrics.get("ssimulacra2", False):
+        try:
+            from .ssimulacra2_metrics import calculate_ssimulacra2_quality_metrics
+
+            ssim2_metrics = calculate_ssimulacra2_quality_metrics(
+                original_frames_resized, compressed_frames_resized, config
+            )
+            results.update(ssim2_metrics)
+        except Exception as e:
+            logger.warning(f"SSIMULACRA2 calculation failed: {e}")
+            results["ssimulacra2_mean"] = 50.0
+
+    if selected_metrics.get("temporal_artifacts", False):
+        try:
+            from .temporal_artifacts import calculate_enhanced_temporal_metrics
+
+            temporal_metrics = calculate_enhanced_temporal_metrics(
+                original_frames_resized, compressed_frames_resized, device=None
+            )
+            results.update(temporal_metrics)
+        except Exception as e:
+            logger.warning(f"Temporal artifacts calculation failed: {e}")
+
+    if selected_metrics.get("text_ui_validation", False):
+        try:
+            from .text_ui_validation import calculate_text_ui_metrics
+
+            text_ui_metrics = calculate_text_ui_metrics(
+                original_frames_resized, compressed_frames_resized, max_frames=5
+            )
+            results.update(text_ui_metrics)
+        except Exception as e:
+            logger.warning(f"Text/UI validation calculation failed: {e}")
+
+    if selected_metrics.get("color_gradients", False):
+        try:
+            from .gradient_color_artifacts import calculate_gradient_color_metrics
+
+            gradient_metrics = calculate_gradient_color_metrics(
+                original_frames_resized, compressed_frames_resized
+            )
+            results.update(gradient_metrics)
+        except Exception as e:
+            logger.warning(f"Color gradients calculation failed: {e}")
+
+    # Aggregate frame-level metrics
+    # Add "_mean" suffix to match expected format for composite quality calculation
+    for metric_name, values in metric_values.items():
+        aggregated = _aggregate_metric(values, metric_name)
+        # Rename the main metric to have "_mean" suffix for compatibility
+        if metric_name in aggregated:
+            aggregated[f"{metric_name}_mean"] = aggregated.pop(metric_name)
+        results.update(aggregated)
+
+    return results
+
+
+def calculate_all_metrics(
+    original_frames: list[np.ndarray],
+    compressed_frames: list[np.ndarray],
+    config: MetricsConfig | None = None,
+) -> dict[str, Any]:
+    """Calculate all available metrics (used when bypassing conditional logic).
+
+    This is essentially a wrapper around calculate_comprehensive_metrics_from_frames
+    but returns only the core metrics without file-specific data.
+    """
+    return calculate_comprehensive_metrics_from_frames(
+        original_frames, compressed_frames, config
+    )
+
+
 def calculate_comprehensive_metrics_from_frames(
     original_frames: list[np.ndarray],
     compressed_frames: list[np.ndarray],
@@ -1376,130 +1588,553 @@ def calculate_comprehensive_metrics_from_frames(
         if not aligned_pairs:
             raise ValueError("No frame pairs could be aligned")
 
-        # Calculate all frame-level metrics
-        metric_values: dict[str, list[float]] = {
-            "ssim": [],
-            "ms_ssim": [],
-            "psnr": [],
-            "mse": [],
-            "rmse": [],
-            "fsim": [],
-            "gmsd": [],
-            "chist": [],
-            "edge_similarity": [],
-            "texture_similarity": [],
-            "sharpness_similarity": [],
-        }
+        # Check if conditional metrics optimization is enabled
+        use_conditional = (
+            os.environ.get("GIFLAB_ENABLE_CONDITIONAL_METRICS", "true").lower()
+            == "true"
+        )
+        force_all_metrics = (
+            os.environ.get("GIFLAB_FORCE_ALL_METRICS", "false").lower() == "true"
+        )
+
+        if use_conditional and not force_all_metrics:
+            try:
+                from .conditional_metrics import ConditionalMetricsCalculator
+
+                logger.info("Using conditional metrics optimization")
+                conditional_calc = ConditionalMetricsCalculator()
+
+                # Perform quality assessment and content profiling
+                quality_assessment = conditional_calc.assess_quality(
+                    original_frames_resized, compressed_frames_resized
+                )
+                content_profile = conditional_calc.detect_content_profile(
+                    compressed_frames_resized, quick_mode=True
+                )
+
+                # Select which metrics to calculate
+                selected_metrics = conditional_calc.select_metrics(
+                    quality_assessment, content_profile
+                )
+
+                # Log optimization decision
+                num_selected = sum(1 for v in selected_metrics.values() if v)
+                num_skipped = sum(1 for v in selected_metrics.values() if not v)
+                logger.info(
+                    f"Quality tier: {quality_assessment.tier.value} "
+                    f"(PSNR={quality_assessment.base_psnr:.1f}dB). "
+                    f"Calculating {num_selected} metrics, skipping {num_skipped}"
+                )
+
+                # If we're skipping most expensive metrics, use the optimized path
+                if (
+                    quality_assessment.tier.value == "high"
+                    and not selected_metrics.get("lpips", False)
+                    and not selected_metrics.get("ssimulacra2", False)
+                ):
+                    # Calculate only selected metrics using the optimized function
+                    optimized_results = calculate_selected_metrics(
+                        original_frames_resized,
+                        compressed_frames_resized,
+                        selected_metrics,
+                        config,
+                    )
+
+                    # Add base metric names (without _mean suffix) for backwards compatibility
+                    # This ensures tests expecting "ssim", "psnr" etc. still work
+                    for metric in ["ssim", "psnr", "mse"]:
+                        mean_key = f"{metric}_mean"
+                        if (
+                            mean_key in optimized_results
+                            and metric not in optimized_results
+                        ):
+                            optimized_results[metric] = optimized_results[mean_key]
+
+                    # Add metadata about optimization
+                    optimized_results["_optimization_metadata"] = {
+                        "quality_tier": quality_assessment.tier.value,
+                        "quality_confidence": quality_assessment.confidence,
+                        "base_psnr": quality_assessment.base_psnr,
+                        "metrics_calculated": num_selected,
+                        "metrics_skipped": num_skipped,
+                        "optimization_applied": True,
+                    }
+
+                    # Add frame counts
+                    optimized_results["frame_count"] = len(original_frames)
+                    optimized_results["compressed_frame_count"] = len(compressed_frames)
+
+                    # Add file metadata if provided
+                    if file_metadata:
+                        if "compressed_path" in file_metadata:
+                            optimized_results["kilobytes"] = float(
+                                calculate_file_size_kb(file_metadata["compressed_path"])
+                            )
+                        elif "compressed_size_bytes" in file_metadata:
+                            optimized_results["kilobytes"] = float(
+                                file_metadata["compressed_size_bytes"] / 1024.0
+                            )
+
+                        if (
+                            "original_size_bytes" in file_metadata
+                            and "compressed_size_bytes" in file_metadata
+                        ):
+                            optimized_results["compression_ratio"] = (
+                                file_metadata["original_size_bytes"]
+                                / file_metadata["compressed_size_bytes"]
+                                if file_metadata["compressed_size_bytes"] > 0
+                                else 1.0
+                            )
+
+                    # Calculate gradient and color artifact metrics only if not high quality
+                    # or if explicitly requested
+                    should_calculate_gradient_color = (
+                        quality_assessment.tier.value != "HIGH"
+                        or not conditional_calc.skip_expensive_on_high_quality
+                        or os.environ.get(
+                            "GIFLAB_FORCE_GRADIENT_METRICS", "false"
+                        ).lower()
+                        == "true"
+                    )
+
+                    # Default fallback metrics
+                    default_gradient_metrics = {
+                        "banding_score_mean": 0.0,
+                        "banding_score_p95": 0.0,
+                        "banding_patch_count": 0,
+                        "gradient_region_count": 0,
+                        "deltae_mean": 0.0,
+                        "deltae_p95": 0.0,
+                        "deltae_max": 0.0,
+                        "deltae_pct_gt1": 0.0,
+                        "deltae_pct_gt2": 0.0,
+                        "deltae_pct_gt3": 0.0,
+                        "deltae_pct_gt5": 0.0,
+                        "color_patch_count": 0,
+                    }
+
+                    if should_calculate_gradient_color:
+                        try:
+                            from .gradient_color_artifacts import (
+                                calculate_gradient_color_metrics,
+                            )
+
+                            logger.debug(
+                                "Calculating gradient/color metrics in optimized path"
+                            )
+                            gradient_color_metrics = calculate_gradient_color_metrics(
+                                original_frames_resized, compressed_frames_resized
+                            )
+
+                            # Add gradient and color metrics to optimized results
+                            for (
+                                metric_key,
+                                metric_value,
+                            ) in gradient_color_metrics.items():
+                                optimized_results[metric_key] = (
+                                    float(metric_value)
+                                    if isinstance(metric_value, int | float)
+                                    else metric_value
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"Gradient/color metrics failed in optimized path: {e}, using defaults"
+                            )
+                            # Add default values
+                            for (
+                                metric_key,
+                                metric_value,
+                            ) in default_gradient_metrics.items():
+                                optimized_results[metric_key] = float(metric_value)
+                    else:
+                        logger.debug(
+                            "Skipping gradient/color metrics for high quality result"
+                        )
+                        # Add default values for skipped metrics
+                        for (
+                            metric_key,
+                            metric_value,
+                        ) in default_gradient_metrics.items():
+                            optimized_results[metric_key] = float(metric_value)
+
+                    # Calculate text/UI validation metrics (always needed for Phase 3 tests)
+                    # Default fallback metrics
+                    default_text_ui_metrics = {
+                        "has_text_ui_content": False,
+                        "text_ui_edge_density": 0.0,
+                        "text_ui_component_count": 0,
+                        "ocr_regions_analyzed": 0,
+                        "ocr_conf_delta_mean": 0.0,
+                        "ocr_conf_delta_min": 0.0,
+                        "mtf50_ratio_mean": 1.0,
+                        "mtf50_ratio_min": 1.0,
+                        "edge_sharpness_score": 100.0,
+                    }
+
+                    try:
+                        from .text_ui_validation import calculate_text_ui_metrics
+
+                        logger.debug("Calculating text/UI metrics in optimized path")
+                        text_ui_metrics = calculate_text_ui_metrics(
+                            original_frames_resized,
+                            compressed_frames_resized,
+                            max_frames=5,
+                        )
+
+                        # Add text/UI metrics to optimized results
+                        for text_ui_key, text_ui_value in text_ui_metrics.items():
+                            if isinstance(text_ui_value, int | float):
+                                optimized_results[text_ui_key] = float(text_ui_value)
+                            else:
+                                optimized_results[text_ui_key] = str(text_ui_value)
+                    except Exception as e:
+                        logger.warning(
+                            f"Text/UI metrics failed in optimized path: {e}, using defaults"
+                        )
+                        # Add default values
+                        for (
+                            text_ui_key,
+                            text_ui_value,
+                        ) in default_text_ui_metrics.items():
+                            if isinstance(text_ui_value, int | float):
+                                optimized_results[text_ui_key] = float(text_ui_value)
+                            else:
+                                optimized_results[text_ui_key] = str(text_ui_value)
+
+                    # Calculate SSIMULACRA2 metrics (always needed for Phase 3 tests)
+                    # Default fallback metrics
+                    default_ssimulacra2_metrics = {
+                        "ssimulacra2_mean": 50.0,
+                        "ssimulacra2_p95": 50.0,
+                        "ssimulacra2_min": 50.0,
+                        "ssimulacra2_frame_count": 0.0,
+                        "ssimulacra2_triggered": 0.0,
+                    }
+
+                    # Check if SSIMULACRA2 metrics should be calculated
+                    should_calculate_ssimulacra2 = getattr(
+                        config, "ENABLE_SSIMULACRA2", True
+                    )
+
+                    if should_calculate_ssimulacra2:
+                        try:
+                            from .ssimulacra2_metrics import (
+                                calculate_ssimulacra2_quality_metrics,
+                                should_use_ssimulacra2,
+                            )
+
+                            logger.debug(
+                                "Calculating SSIMULACRA2 metrics in optimized path"
+                            )
+
+                            # Use existing composite quality for conditional triggering
+                            if should_use_ssimulacra2(
+                                None
+                            ):  # No composite quality available yet
+                                ssimulacra2_result = (
+                                    calculate_ssimulacra2_quality_metrics(
+                                        original_frames_resized,
+                                        compressed_frames_resized,
+                                        config,
+                                    )
+                                )
+                                # Add SSIMULACRA2 metrics to optimized results
+                                for (
+                                    ssim2_key,
+                                    ssim2_value,
+                                ) in ssimulacra2_result.items():
+                                    if isinstance(ssim2_value, int | float):
+                                        optimized_results[ssim2_key] = float(
+                                            ssim2_value
+                                        )
+                                    else:
+                                        optimized_results[ssim2_key] = str(ssim2_value)
+                            else:
+                                logger.debug(
+                                    "SSIMULACRA2 metrics skipped based on conditional logic"
+                                )
+                                for (
+                                    ssim2_key,
+                                    ssim2_value,
+                                ) in default_ssimulacra2_metrics.items():
+                                    optimized_results[ssim2_key] = float(ssim2_value)
+                        except Exception as e:
+                            logger.warning(
+                                f"SSIMULACRA2 metrics failed in optimized path: {e}, using defaults"
+                            )
+                            # Add default values
+                            for (
+                                ssim2_key,
+                                ssim2_value,
+                            ) in default_ssimulacra2_metrics.items():
+                                optimized_results[ssim2_key] = float(ssim2_value)
+                    else:
+                        logger.debug("SSIMULACRA2 metrics calculation disabled")
+                        for (
+                            ssim2_key,
+                            ssim2_value,
+                        ) in default_ssimulacra2_metrics.items():
+                            optimized_results[ssim2_key] = float(ssim2_value)
+
+                    # Calculate temporal consistency metrics
+                    # These are fast metrics that should always be included
+                    try:
+                        temporal_pre = calculate_temporal_consistency(
+                            original_frames_resized
+                        )
+                        temporal_post = calculate_temporal_consistency(
+                            compressed_frames_resized
+                        )
+                        temporal_delta = abs(temporal_pre - temporal_post)
+
+                        optimized_results["temporal_consistency"] = float(temporal_post)
+                        optimized_results["temporal_consistency_std"] = 0.0
+                        optimized_results["temporal_consistency_min"] = float(
+                            temporal_post
+                        )
+                        optimized_results["temporal_consistency_max"] = float(
+                            temporal_post
+                        )
+                        optimized_results["temporal_consistency_pre"] = float(
+                            temporal_pre
+                        )
+                        optimized_results["temporal_consistency_post"] = float(
+                            temporal_post
+                        )
+                        optimized_results["temporal_consistency_delta"] = float(
+                            temporal_delta
+                        )
+                    except Exception as e:
+                        logger.warning(f"Temporal consistency calculation failed: {e}")
+                        # Use default values if calculation fails
+                        optimized_results["temporal_consistency"] = 1.0
+                        optimized_results["temporal_consistency_pre"] = 1.0
+                        optimized_results["temporal_consistency_post"] = 1.0
+                        optimized_results["temporal_consistency_delta"] = 0.0
+
+                    # Process with quality system
+                    from .enhanced_metrics import process_metrics_with_enhanced_quality
+
+                    optimized_results = process_metrics_with_enhanced_quality(
+                        optimized_results, config
+                    )
+
+                    # Calculate processing time
+                    end_time = time.perf_counter()
+                    elapsed_seconds = end_time - start_time
+                    optimized_results["render_ms"] = min(
+                        int(elapsed_seconds * 1000), 86400000
+                    )
+
+                    # Get optimization stats
+                    opt_stats = conditional_calc.get_optimization_stats()
+                    logger.info(
+                        f"Conditional optimization complete. "
+                        f"Metrics skipped: {opt_stats['metrics_skipped']}, "
+                        f"Estimated time saved: {opt_stats['estimated_time_saved']:.2f}s"
+                    )
+
+                    return optimized_results
+
+            except ImportError:
+                logger.info(
+                    "Conditional metrics module not available, using standard processing"
+                )
+                use_conditional = False
+            except Exception as e:
+                logger.warning(
+                    f"Conditional metrics failed: {e}, using standard processing"
+                )
+                use_conditional = False
+
+        # Check if parallel processing is enabled
+        use_parallel = (
+            os.environ.get("GIFLAB_ENABLE_PARALLEL_METRICS", "true").lower() != "false"
+        )
 
         # Store raw (un-normalised) metric values where necessary
         raw_metric_values: dict[str, list[float]] = {
             "psnr": [],  # PSNR is normalised for main reporting; keep raw values separately
         }
 
-        for orig_frame, comp_frame in aligned_pairs:
-            # Traditional SSIM calculation
+        if use_parallel and len(aligned_pairs) > 1:
+            # Use parallel processing for frame-level metrics
             try:
-                if len(orig_frame.shape) == 3:
-                    orig_gray = cv2.cvtColor(orig_frame, cv2.COLOR_RGB2GRAY)
-                    comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY)
-                else:
-                    orig_gray = orig_frame
-                    comp_gray = comp_frame
+                from .parallel_metrics import ParallelConfig, ParallelMetricsCalculator
 
-                frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
-                metric_values["ssim"].append(max(0.0, min(1.0, frame_ssim)))
-            except Exception as e:
-                logger.warning(f"SSIM calculation failed for frame: {e}")
-                metric_values["ssim"].append(0.0)
+                # Create parallel calculator
+                parallel_config = ParallelConfig()
+                calculator = ParallelMetricsCalculator(parallel_config)
 
-            # MS-SSIM calculation
-            try:
-                frame_ms_ssim = calculate_ms_ssim(orig_frame, comp_frame)
-                metric_values["ms_ssim"].append(frame_ms_ssim)
-            except Exception as e:
-                logger.warning(f"MS-SSIM calculation failed for frame: {e}")
-                metric_values["ms_ssim"].append(0.0)
+                # Define metric functions to parallelize
+                metric_functions = {
+                    "ssim": None,  # Special handling needed
+                    "ms_ssim": None,
+                    "psnr": None,
+                    "mse": None,
+                    "rmse": None,
+                    "fsim": None,
+                    "gmsd": None,
+                    "chist": None,
+                    "edge_similarity": None,
+                    "texture_similarity": None,
+                    "sharpness_similarity": None,
+                }
 
-            # PSNR calculation
-            try:
-                frame_psnr = calculate_safe_psnr(orig_frame, comp_frame)
-                # Keep un-scaled PSNR for optional raw metrics output
-                raw_metric_values["psnr"].append(frame_psnr)
-
-                # Normalize PSNR using configurable upper bound
-                normalized_psnr = min(frame_psnr / float(config.PSNR_MAX_DB), 1.0)
-                metric_values["psnr"].append(max(0.0, normalized_psnr))
-            except Exception as e:
-                logger.warning(f"PSNR calculation failed for frame: {e}")
-                metric_values["psnr"].append(0.0)
-                raw_metric_values["psnr"].append(0.0)
-
-            # New metrics - MSE and RMSE
-            try:
-                frame_mse = mse(orig_frame, comp_frame)
-                metric_values["mse"].append(frame_mse)
-
-                frame_rmse = rmse(orig_frame, comp_frame)
-                metric_values["rmse"].append(frame_rmse)
-            except Exception as e:
-                logger.warning(f"MSE/RMSE calculation failed for frame: {e}")
-                metric_values["mse"].append(0.0)
-                metric_values["rmse"].append(0.0)
-
-            # FSIM calculation
-            try:
-                frame_fsim = fsim(orig_frame, comp_frame)
-                metric_values["fsim"].append(frame_fsim)
-            except Exception as e:
-                logger.warning(f"FSIM calculation failed for frame: {e}")
-                metric_values["fsim"].append(0.0)
-
-            # GMSD calculation
-            try:
-                frame_gmsd = gmsd(orig_frame, comp_frame)
-                metric_values["gmsd"].append(frame_gmsd)
-            except Exception as e:
-                logger.warning(f"GMSD calculation failed for frame: {e}")
-                metric_values["gmsd"].append(0.0)
-
-            # Color histogram correlation
-            try:
-                frame_chist = chist(orig_frame, comp_frame)
-                metric_values["chist"].append(frame_chist)
-            except Exception as e:
-                logger.warning(f"Color histogram calculation failed for frame: {e}")
-                metric_values["chist"].append(0.0)
-
-            # Edge similarity
-            try:
-                frame_edge = edge_similarity(
-                    orig_frame,
-                    comp_frame,
-                    config.EDGE_CANNY_THRESHOLD1,
-                    config.EDGE_CANNY_THRESHOLD2,
+                # Calculate metrics in parallel
+                metric_values = calculator.calculate_frame_metrics_parallel(
+                    aligned_pairs, metric_functions, config
                 )
-                metric_values["edge_similarity"].append(frame_edge)
-            except Exception as e:
-                logger.warning(f"Edge similarity calculation failed for frame: {e}")
-                metric_values["edge_similarity"].append(0.0)
 
-            # Texture similarity
-            try:
-                frame_texture = texture_similarity(orig_frame, comp_frame)
-                metric_values["texture_similarity"].append(frame_texture)
-            except Exception as e:
-                logger.warning(f"Texture similarity calculation failed for frame: {e}")
-                metric_values["texture_similarity"].append(0.0)
+                # Extract raw PSNR values before normalization
+                if "psnr" in metric_values:
+                    raw_metric_values["psnr"] = metric_values["psnr"].copy()
+                    # Normalize PSNR values
+                    metric_values["psnr"] = [
+                        max(0.0, min(value / float(config.PSNR_MAX_DB), 1.0))
+                        for value in metric_values["psnr"]
+                    ]
 
-            # Sharpness similarity
-            try:
-                frame_sharpness = sharpness_similarity(orig_frame, comp_frame)
-                metric_values["sharpness_similarity"].append(frame_sharpness)
+                logger.debug(
+                    f"Parallel processing completed for {len(aligned_pairs)} frame pairs"
+                )
+
+            except ImportError:
+                logger.info(
+                    "Parallel metrics module not available, falling back to sequential processing"
+                )
+                use_parallel = False
             except Exception as e:
                 logger.warning(
-                    f"Sharpness similarity calculation failed for frame: {e}"
+                    f"Parallel processing failed: {e}, falling back to sequential processing"
                 )
-                metric_values["sharpness_similarity"].append(0.0)
+                use_parallel = False
+        else:
+            use_parallel = False
+
+        if not use_parallel:
+            # Fall back to sequential processing
+            # Calculate all frame-level metrics
+            metric_values: dict[str, list[float]] = {
+                "ssim": [],
+                "ms_ssim": [],
+                "psnr": [],
+                "mse": [],
+                "rmse": [],
+                "fsim": [],
+                "gmsd": [],
+                "chist": [],
+                "edge_similarity": [],
+                "texture_similarity": [],
+                "sharpness_similarity": [],
+            }
+
+            for orig_frame, comp_frame in aligned_pairs:
+                # Traditional SSIM calculation
+                try:
+                    if len(orig_frame.shape) == 3:
+                        orig_gray = cv2.cvtColor(orig_frame, cv2.COLOR_RGB2GRAY)
+                        comp_gray = cv2.cvtColor(comp_frame, cv2.COLOR_RGB2GRAY)
+                    else:
+                        orig_gray = orig_frame
+                        comp_gray = comp_frame
+
+                    frame_ssim = ssim(orig_gray, comp_gray, data_range=255.0)
+                    metric_values["ssim"].append(max(0.0, min(1.0, frame_ssim)))
+                except Exception as e:
+                    logger.warning(f"SSIM calculation failed for frame: {e}")
+                    metric_values["ssim"].append(0.0)
+
+                # MS-SSIM calculation
+                try:
+                    frame_ms_ssim = calculate_ms_ssim(orig_frame, comp_frame)
+                    metric_values["ms_ssim"].append(frame_ms_ssim)
+                except Exception as e:
+                    logger.warning(f"MS-SSIM calculation failed for frame: {e}")
+                    metric_values["ms_ssim"].append(0.0)
+
+                # PSNR calculation
+                try:
+                    frame_psnr = calculate_safe_psnr(orig_frame, comp_frame)
+                    # Keep un-scaled PSNR for optional raw metrics output
+                    raw_metric_values["psnr"].append(frame_psnr)
+
+                    # Normalize PSNR using configurable upper bound
+                    normalized_psnr = min(frame_psnr / float(config.PSNR_MAX_DB), 1.0)
+                    metric_values["psnr"].append(max(0.0, normalized_psnr))
+                except Exception as e:
+                    logger.warning(f"PSNR calculation failed for frame: {e}")
+                    metric_values["psnr"].append(0.0)
+                    raw_metric_values["psnr"].append(0.0)
+
+                # New metrics - MSE and RMSE
+                try:
+                    frame_mse = mse(orig_frame, comp_frame)
+                    metric_values["mse"].append(frame_mse)
+
+                    frame_rmse = rmse(orig_frame, comp_frame)
+                    metric_values["rmse"].append(frame_rmse)
+                except Exception as e:
+                    logger.warning(f"MSE/RMSE calculation failed for frame: {e}")
+                    metric_values["mse"].append(0.0)
+                    metric_values["rmse"].append(0.0)
+
+                # FSIM calculation
+                try:
+                    frame_fsim = fsim(orig_frame, comp_frame)
+                    metric_values["fsim"].append(frame_fsim)
+                except Exception as e:
+                    logger.warning(f"FSIM calculation failed for frame: {e}")
+                    metric_values["fsim"].append(0.0)
+
+                # GMSD calculation
+                try:
+                    frame_gmsd = gmsd(orig_frame, comp_frame)
+                    metric_values["gmsd"].append(frame_gmsd)
+                except Exception as e:
+                    logger.warning(f"GMSD calculation failed for frame: {e}")
+                    metric_values["gmsd"].append(0.0)
+
+                # Color histogram correlation
+                try:
+                    frame_chist = chist(orig_frame, comp_frame)
+                    metric_values["chist"].append(frame_chist)
+                except Exception as e:
+                    logger.warning(f"Color histogram calculation failed for frame: {e}")
+                    metric_values["chist"].append(0.0)
+
+                # Edge similarity
+                try:
+                    frame_edge = edge_similarity(
+                        orig_frame,
+                        comp_frame,
+                        config.EDGE_CANNY_THRESHOLD1,
+                        config.EDGE_CANNY_THRESHOLD2,
+                    )
+                    metric_values["edge_similarity"].append(frame_edge)
+                except Exception as e:
+                    logger.warning(f"Edge similarity calculation failed for frame: {e}")
+                    metric_values["edge_similarity"].append(0.0)
+
+                # Texture similarity
+                try:
+                    frame_texture = texture_similarity(orig_frame, comp_frame)
+                    metric_values["texture_similarity"].append(frame_texture)
+                except Exception as e:
+                    logger.warning(
+                        f"Texture similarity calculation failed for frame: {e}"
+                    )
+                    metric_values["texture_similarity"].append(0.0)
+
+                # Sharpness similarity
+                try:
+                    frame_sharpness = sharpness_similarity(orig_frame, comp_frame)
+                    metric_values["sharpness_similarity"].append(frame_sharpness)
+                except Exception as e:
+                    logger.warning(
+                        f"Sharpness similarity calculation failed for frame: {e}"
+                    )
+                    metric_values["sharpness_similarity"].append(0.0)
 
         # Calculate temporal consistency for original and compressed frames
         temporal_pre = 0.0
@@ -2139,3 +2774,50 @@ def calculate_comprehensive_metrics(
     except Exception as e:
         logger.error(f"Failed to calculate comprehensive metrics: {e}")
         raise ValueError(f"Metrics calculation failed: {e}") from e
+
+
+def cleanup_all_validators() -> None:
+    """Clean up all global validator instances and release model references.
+
+    This function should be called when you want to free up memory used by
+    cached models and validator instances. It's especially useful in testing
+    scenarios or when switching between different processing configurations.
+    """
+    logger.info("Cleaning up all validators and model cache")
+
+    # Clean up temporal detector
+    try:
+        from .temporal_artifacts import cleanup_global_temporal_detector
+
+        cleanup_global_temporal_detector()
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to cleanup temporal detector: {e}")
+
+    # Clean up deep perceptual validator
+    try:
+        from .deep_perceptual_metrics import cleanup_global_validator
+
+        cleanup_global_validator()
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to cleanup deep perceptual validator: {e}")
+
+    # Clean up model cache
+    try:
+        from .model_cache import cleanup_model_cache
+
+        cleanup_model_cache(force=True)
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to cleanup model cache: {e}")
+
+    # Force garbage collection
+    import gc
+
+    gc.collect()
+
+    logger.debug("All validators and model cache cleaned up")

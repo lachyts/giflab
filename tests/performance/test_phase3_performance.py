@@ -21,7 +21,7 @@ import numpy as np
 import psutil
 import pytest
 from giflab.config import MetricsConfig
-from giflab.metrics import calculate_comprehensive_metrics
+from giflab.metrics import calculate_comprehensive_metrics_from_frames
 from giflab.ssimulacra2_metrics import (
     Ssimulacra2Validator,
     calculate_ssimulacra2_quality_metrics,
@@ -417,12 +417,12 @@ class TestPhase3PipelinePerformance:
         config_with_phase3.ENABLE_SSIMULACRA2 = True
 
         # Mock Phase 3 components for consistent timing
-        with patch("giflab.metrics.calculate_text_ui_metrics") as mock_text_ui, patch(
-            "giflab.metrics.calculate_ssimulacra2_quality_metrics"
+        with patch("giflab.text_ui_validation.calculate_text_ui_metrics") as mock_text_ui, patch(
+            "giflab.ssimulacra2_metrics.calculate_ssimulacra2_quality_metrics"
         ) as mock_ssim2, patch(
-            "giflab.metrics.should_validate_text_ui", return_value=(True, {})
+            "giflab.text_ui_validation.should_validate_text_ui", return_value=(True, {})
         ), patch(
-            "giflab.metrics.should_use_ssimulacra2", return_value=True
+            "giflab.ssimulacra2_metrics.should_use_ssimulacra2", return_value=True
         ):
             # Quick mock responses
             mock_text_ui.return_value = {
@@ -436,12 +436,12 @@ class TestPhase3PipelinePerformance:
 
             # Measure without Phase 3
             _, time_without = measure_execution_time(
-                calculate_comprehensive_metrics, frames, frames, config_without_phase3
+                calculate_comprehensive_metrics_from_frames, frames, frames, config_without_phase3
             )
 
             # Measure with Phase 3
             _, time_with = measure_execution_time(
-                calculate_comprehensive_metrics, frames, frames, config_with_phase3
+                calculate_comprehensive_metrics_from_frames, frames, frames, config_with_phase3
             )
 
         # Phase 3 overhead should be reasonable
@@ -467,7 +467,7 @@ class TestPhase3PipelinePerformance:
 
         # Measure time when both components should be skipped
         _, execution_time = measure_execution_time(
-            calculate_comprehensive_metrics, smooth_frames, smooth_frames, config
+            calculate_comprehensive_metrics_from_frames, smooth_frames, smooth_frames, config
         )
 
         # Should complete quickly when Phase 3 components are skipped
@@ -496,12 +496,12 @@ class TestPhase3PipelinePerformance:
         config = MetricsConfig()
 
         # Mock Phase 3 components to simulate processing time
-        with patch("giflab.metrics.calculate_text_ui_metrics") as mock_text_ui, patch(
-            "giflab.metrics.calculate_ssimulacra2_quality_metrics"
+        with patch("giflab.text_ui_validation.calculate_text_ui_metrics") as mock_text_ui, patch(
+            "giflab.ssimulacra2_metrics.calculate_ssimulacra2_quality_metrics"
         ) as mock_ssim2, patch(
-            "giflab.metrics.should_validate_text_ui", return_value=(True, {})
+            "giflab.text_ui_validation.should_validate_text_ui", return_value=(True, {})
         ), patch(
-            "giflab.metrics.should_use_ssimulacra2", return_value=True
+            "giflab.ssimulacra2_metrics.should_use_ssimulacra2", return_value=True
         ):
 
             def slow_text_ui(*args, **kwargs):
@@ -518,13 +518,13 @@ class TestPhase3PipelinePerformance:
             # Test sequential processing
             start_time = time.perf_counter()
             for orig_frames, comp_frames in frame_pairs:
-                calculate_comprehensive_metrics(orig_frames, comp_frames, config)
+                calculate_comprehensive_metrics_from_frames(orig_frames, comp_frames, config)
             sequential_time = time.perf_counter() - start_time
 
             # Test parallel processing simulation
             def process_pair(pair):
                 orig_frames, comp_frames = pair
-                return calculate_comprehensive_metrics(orig_frames, comp_frames, config)
+                return calculate_comprehensive_metrics_from_frames(orig_frames, comp_frames, config)
 
             start_time = time.perf_counter()
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -555,16 +555,16 @@ class TestPhase3PipelinePerformance:
                 frame_sequences.append((frames, frames))
 
             with patch(
-                "giflab.metrics.calculate_text_ui_metrics",
+                "giflab.text_ui_validation.calculate_text_ui_metrics",
                 return_value={"has_text_ui_content": False},
             ), patch(
-                "giflab.metrics.calculate_ssimulacra2_quality_metrics",
+                "giflab.ssimulacra2_metrics.calculate_ssimulacra2_quality_metrics",
                 return_value={"ssimulacra2_triggered": 0.0},
             ):
                 # Measure batch processing time
                 start_time = time.perf_counter()
                 for orig_frames, comp_frames in frame_sequences:
-                    calculate_comprehensive_metrics(orig_frames, comp_frames, config)
+                    calculate_comprehensive_metrics_from_frames(orig_frames, comp_frames, config)
                 batch_time = time.perf_counter() - start_time
 
                 # Performance should scale reasonably
@@ -589,7 +589,7 @@ class TestPerformanceRegression:
         times = []
         for _i in range(5):
             _, exec_time = measure_execution_time(
-                calculate_comprehensive_metrics, frames, frames, config
+                calculate_comprehensive_metrics_from_frames, frames, frames, config
             )
             times.append(exec_time)
 
@@ -618,7 +618,7 @@ class TestPerformanceRegression:
 
         # Run many iterations
         for i in range(50):
-            calculate_comprehensive_metrics(frames, frames, config)
+            calculate_comprehensive_metrics_from_frames(frames, frames, config)
 
             # Force garbage collection periodically
             if i % 10 == 9:
@@ -657,7 +657,7 @@ class TestPerformanceRegression:
 
         # Run processing
         start_time = time.time()
-        calculate_comprehensive_metrics(frames, frames, config)
+        calculate_comprehensive_metrics_from_frames(frames, frames, config)
         processing_time = time.time() - start_time
 
         cpu_thread.join()
@@ -668,16 +668,25 @@ class TestPerformanceRegression:
 
     def test_performance_consistency(self):
         """Test that performance is consistent across multiple runs."""
+        # Clean up any existing global instances before testing
+        from giflab.metrics import cleanup_all_validators
+        cleanup_all_validators()
+        
         frames = [
             np.random.randint(0, 255, (90, 90, 3), dtype=np.uint8) for _ in range(3)
         ]
         config = MetricsConfig()
 
+        # Warm-up run to initialize any lazy-loaded models (e.g., LPIPS)
+        _, _ = measure_execution_time(
+            calculate_comprehensive_metrics_from_frames, frames, frames, config
+        )
+        
         # Run multiple iterations
         times = []
         for _i in range(20):
             _, exec_time = measure_execution_time(
-                calculate_comprehensive_metrics, frames, frames, config
+                calculate_comprehensive_metrics_from_frames, frames, frames, config
             )
             times.append(exec_time)
 
@@ -718,7 +727,7 @@ class TestStressTestingPhase3:
 
         # Should handle large images without crashing
         _, execution_time = measure_execution_time(
-            calculate_comprehensive_metrics, large_frames, large_frames, config
+            calculate_comprehensive_metrics_from_frames, large_frames, large_frames, config
         )
 
         # May be slow but should complete
@@ -741,7 +750,7 @@ class TestStressTestingPhase3:
 
         # Should handle many frames efficiently due to sampling
         _, execution_time = measure_execution_time(
-            calculate_comprehensive_metrics, many_frames, many_frames, config
+            calculate_comprehensive_metrics_from_frames, many_frames, many_frames, config
         )
 
         # Should be efficient due to frame sampling
