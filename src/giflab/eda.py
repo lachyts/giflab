@@ -21,7 +21,9 @@ matplotlib.use("Agg")  # Headless backend for CI / servers
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
+
+# Lazy import sklearn to reduce startup time
+# PCA will be imported only when generate_eda is called with PCA analysis needed
 
 __all__ = ["generate_eda"]
 
@@ -104,6 +106,8 @@ def generate_eda(
 
     # PCA scree plot
     try:
+        # Import PCA only when needed (lazy loading for performance)
+        from sklearn.decomposition import PCA
         pca = PCA()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)

@@ -6,7 +6,8 @@ with the main CLI entry point while keeping commands organized in separate modul
 
 import click
 
-from .debug_failures_cmd import debug_failures
+from .cache_cmd import cache
+from .metrics_cmd import metrics
 from .organize_cmd import organize_directories
 from .run_cmd import run
 from .select_pipelines_cmd import select_pipelines
@@ -23,17 +24,19 @@ def main() -> None:
 
 
 # Register all commands from the modular CLI structure
+main.add_command(cache)
+main.add_command(metrics)
 main.add_command(run)
 main.add_command(tag)
 main.add_command(organize_directories)
 main.add_command(select_pipelines)
 main.add_command(validate)
 main.add_command(view_failures)
-main.add_command(debug_failures)
 
 __all__ = [
-    "debug_failures",
+    "cache",
     "main",
+    "metrics",
     "organize_directories",
     "run",
     "select_pipelines",

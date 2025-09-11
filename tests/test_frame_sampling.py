@@ -42,8 +42,8 @@ class TestFrameSamplingDistribution:
         # Extract 5 frames from 10-frame GIF
         result = extract_gif_frames(gif_path, max_frames=5)
 
-        assert result.frame_count == 5
-        assert len(result.frames) == 5
+        assert result.frame_count == 10  # Total frames in GIF
+        assert len(result.frames) == 5  # Number of frames actually extracted
 
         # Should sample frames: 0, 2, 4, 6, 8 (indices from np.linspace(0, 9, 5))
         expected_indices = np.linspace(0, 9, 5, dtype=int)  # [0, 2, 4, 6, 8]
@@ -104,7 +104,7 @@ class TestFrameSamplingDistribution:
             mock_linspace.assert_called_once_with(0, 39, 4, dtype=int)
 
             # Should have returned 4 frames
-            assert result.frame_count == 4
+            assert result.frame_count == 40  # Total frames in GIF
 
     def test_full_timeline_coverage(self, tmp_path):
         """Test that sampling covers the full animation timeline."""
@@ -114,7 +114,8 @@ class TestFrameSamplingDistribution:
         # Extract 30 frames (default max)
         result = extract_gif_frames(gif_path, max_frames=30)
 
-        assert result.frame_count == 30
+        assert result.frame_count == 40  # Total frames in GIF
+        assert len(result.frames) == 30  # Frames actually extracted
 
         # Verify coverage includes frames from end of animation
         # With even sampling, we should get frames distributed across 0-39
@@ -193,7 +194,8 @@ class TestFrameSamplingDistribution:
         for max_frames, total_frames in test_cases:
             result = extract_gif_frames(gif_path, max_frames=max_frames)
 
-            assert result.frame_count == max_frames
+            assert result.frame_count == 100  # Total frames in GIF
+            assert len(result.frames) == max_frames  # Frames actually extracted
 
             # Verify even distribution
             expected_indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
@@ -274,8 +276,8 @@ class TestFrameSamplingDistribution:
         result = extract_gif_frames(gif_path, max_frames=30)
 
         # Should only have 30 frames in memory, not 200
-        assert result.frame_count == 30
-        assert len(result.frames) == 30
+        assert result.frame_count == 200  # Total frames in GIF
+        assert len(result.frames) == 30  # Frames actually extracted
 
         # Each frame should be the expected size
         for frame in result.frames:
@@ -318,8 +320,10 @@ class TestFrameSamplingIntegration:
         result_many = extract_gif_frames(gif_path, max_frames=30)
 
         # Both should cover the full timeline, but with different densities
-        assert result_few.frame_count == 5
-        assert result_many.frame_count == 30
+        assert result_few.frame_count == 40  # Total frames in GIF
+        assert len(result_few.frames) == 5  # Frames actually extracted
+        assert result_many.frame_count == 40  # Total frames in GIF
+        assert len(result_many.frames) == 30  # Frames actually extracted
 
         # More samples should potentially capture more variation
         # (This is more about ensuring the sampling works than specific quality values)
@@ -338,9 +342,9 @@ class TestFrameSamplingIntegration:
             gif_path = self.create_gradient_gif(tmp_path, frame_count=gif_frames)
             result = extract_gif_frames(gif_path, max_frames=sample_frames)
 
-            expected_count = min(sample_frames, gif_frames)
-            assert result.frame_count == expected_count
-            assert len(result.frames) == expected_count
+            expected_extracted = min(sample_frames, gif_frames)
+            assert result.frame_count == gif_frames  # Total frames in GIF
+            assert len(result.frames) == expected_extracted  # Frames actually extracted
 
             # Verify timeline coverage
             if sample_frames < gif_frames:

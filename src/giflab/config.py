@@ -205,6 +205,109 @@ class MetricsConfig:
         if self.POSITIONAL_METRICS is None:
             self.POSITIONAL_METRICS = ["ssim", "mse", "fsim", "chist"]
 
+# Frame cache configuration (added for performance optimization)
+FRAME_CACHE = {
+    "enabled": True,  # Enable frame caching
+    "memory_limit_mb": 500,  # Maximum memory usage for in-memory cache
+    "disk_path": None,  # Path to disk cache (None for default ~/.giflab_cache)
+    "disk_limit_mb": 2000,  # Maximum disk cache size
+    "ttl_seconds": 86400,  # Time-to-live for cache entries (24 hours)
+    # Resized frame cache configuration
+    "resize_cache_enabled": True,  # Enable resized frame caching
+    "resize_cache_memory_mb": 200,  # Memory limit for resized frame cache
+    "resize_cache_ttl_seconds": 3600,  # TTL for resized frames (1 hour)
+    "enable_buffer_pooling": True,  # Enable memory buffer pooling for efficiency
+}
+
+# Frame sampling configuration for efficient validation
+FRAME_SAMPLING = {
+    "enabled": True,  # Enable frame sampling for large GIFs
+    "min_frames_threshold": 30,  # Don't sample if fewer frames
+    "default_strategy": "adaptive",  # Options: uniform, adaptive, progressive, scene_aware, full
+    "confidence_level": 0.95,  # Target confidence level for statistical sampling
+    # Strategy-specific configuration
+    "uniform": {
+        "sampling_rate": 0.3,  # Sample 30% of frames uniformly
+    },
+    "adaptive": {
+        "base_rate": 0.2,  # Base sampling rate for low-motion areas
+        "motion_threshold": 0.1,  # Threshold for detecting significant motion
+        "max_rate": 0.8,  # Maximum sampling rate for high-motion areas
+    },
+    "progressive": {
+        "initial_rate": 0.1,  # Initial sampling rate
+        "increment_rate": 0.1,  # Rate increase per iteration
+        "max_iterations": 5,  # Maximum sampling iterations
+        "target_ci_width": 0.1,  # Target confidence interval width
+    },
+    "scene_aware": {
+        "scene_threshold": 0.3,  # Threshold for scene change detection
+        "boundary_window": 2,  # Frames to sample around scene boundaries
+        "min_scene_samples": 3,  # Minimum samples per detected scene
+        "base_rate": 0.3,  # Base sampling rate within scenes
+    },
+    "verbose": False,  # Enable verbose logging for sampling operations
+}
+
+# Validation cache configuration for caching metric results
+VALIDATION_CACHE = {
+    "enabled": True,  # Enable validation result caching
+    "memory_limit_mb": 100,  # Maximum memory usage for in-memory cache
+    "disk_path": None,  # Path to disk cache (None for default ~/.giflab_cache/validation_cache.db)
+    "disk_limit_mb": 1000,  # Maximum disk cache size
+    "ttl_seconds": 172800,  # Time-to-live for cache entries (48 hours)
+    "cache_ssim": True,  # Cache SSIM calculations
+    "cache_ms_ssim": True,  # Cache MS-SSIM calculations
+    "cache_lpips": True,  # Cache LPIPS calculations
+    "cache_gradient_color": True,  # Cache gradient color metrics
+    "cache_ssimulacra2": True,  # Cache SSIMulacra2 metrics
+}
+
+# Performance monitoring configuration for optimization systems
+MONITORING = {
+    "enabled": True,  # Enable performance monitoring
+    "backend": "sqlite",  # Backend type: "memory", "sqlite", or "statsd"
+    "buffer_size": 10000,  # In-memory ring buffer size for recent metrics
+    "flush_interval": 10.0,  # Seconds between automatic metric flushes
+    "sampling_rate": 1.0,  # Fraction of metrics to collect (1.0 = all)
+    
+    # SQLite backend configuration
+    "sqlite": {
+        "db_path": None,  # Path to metrics database (None for ~/.giflab_cache/metrics.db)
+        "retention_days": 7.0,  # Days to retain metrics before cleanup
+        "max_size_mb": 100.0,  # Maximum database size in MB
+    },
+    
+    # StatsD backend configuration (optional, requires statsd library)
+    "statsd": {
+        "host": "localhost",  # StatsD server host
+        "port": 8125,  # StatsD server port
+        "prefix": "giflab",  # Metric name prefix
+    },
+    
+    # Alert thresholds for monitoring
+    "alerts": {
+        "cache_hit_rate_warning": 0.4,  # Warn if cache hit rate drops below 40%
+        "cache_hit_rate_critical": 0.2,  # Critical if cache hit rate drops below 20%
+        "memory_usage_warning": 0.8,  # Warn at 80% memory usage
+        "memory_usage_critical": 0.95,  # Critical at 95% memory usage
+        "eviction_rate_spike": 3.0,  # Alert if eviction rate > 3x normal
+        "response_time_degradation": 1.5,  # Alert if response time > 1.5x baseline
+    },
+    
+    # Per-system monitoring configuration
+    "systems": {
+        "frame_cache": True,  # Monitor FrameCache performance
+        "validation_cache": True,  # Monitor ValidationCache performance
+        "resize_cache": True,  # Monitor ResizedFrameCache performance
+        "sampling": True,  # Monitor frame sampling performance
+        "lazy_imports": True,  # Monitor lazy import patterns
+        "metrics_calculation": True,  # Monitor core metrics calculation
+    },
+    
+    "verbose": False,  # Enable verbose monitoring logs
+}
+
 
 @dataclass
 class PathConfig:

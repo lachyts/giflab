@@ -17,6 +17,7 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 
 from .config import DEFAULT_METRICS_CONFIG, MetricsConfig
+from .caching.resized_frame_cache import resize_frame_cached
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +48,44 @@ def extract_gif_frames(
         IOError: If GIF cannot be read
         ValueError: If GIF is invalid or corrupted
     """
+    # Try to get from cache first
+    from .caching import get_frame_cache
+    
+    frame_cache = get_frame_cache()
+    cached = frame_cache.get(gif_path, max_frames)
+    
+    if cached is not None:
+        frames, frame_count, dimensions, duration_ms = cached
+        return FrameExtractResult(
+            frames=frames,
+            frame_count=frame_count,
+            dimensions=dimensions,
+            duration_ms=duration_ms,
+        )
+    
+    # Not in cache, extract frames
     try:
         with Image.open(gif_path) as img:
             if not hasattr(img, "n_frames") or img.n_frames == 1:
                 # Single frame image (PNG, JPEG, etc.) or single-frame GIF
                 frame = np.array(img.convert("RGB"))
-                return FrameExtractResult(
+                result = FrameExtractResult(
                     frames=[frame],
                     frame_count=1,
                     dimensions=(img.width, img.height),
                     duration_ms=0,
                 )
+                
+                # Cache the result
+                frame_cache.put(
+                    gif_path,
+                    result.frames,
+                    result.frame_count,
+                    result.dimensions,
+                    result.duration_ms
+                )
+                
+                return result
 
             total_frames = img.n_frames
 
@@ -101,12 +129,23 @@ def extract_gif_frames(
                 duration = img.info.get("duration", 100)  # Default 100ms
                 total_duration += duration
 
-            return FrameExtractResult(
+            result = FrameExtractResult(
                 frames=frames,
-                frame_count=len(frames),
+                frame_count=total_frames,  # Store the actual total frame count
                 dimensions=(img.width, img.height),
                 duration_ms=total_duration,
             )
+            
+            # Cache the result
+            frame_cache.put(
+                gif_path,
+                result.frames,
+                result.frame_count,
+                result.dimensions,
+                result.duration_ms
+            )
+            
+            return result
 
     except Exception as e:
         raise OSError(f"Failed to extract frames from {gif_path}: {e}") from e
@@ -297,19 +336,24 @@ def align_frames(
     return align_frames_content_based(original_frames, compressed_frames)
 
 
-def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -> float:
+def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5, use_cache: bool = True) -> float:
     """Calculate Multi-Scale SSIM (MS-SSIM) between two frames.
 
     Args:
         frame1: First frame
         frame2: Second frame
         scales: Number of scales for MS-SSIM (default 5)
+        use_cache: Whether to use the resized frame cache
 
     Returns:
         MS-SSIM value between 0.0 and 1.0
     """
     if frame1.shape != frame2.shape:
-        frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+        frame2 = resize_frame_cached(
+            frame2, (frame1.shape[1], frame1.shape[0]),
+            interpolation=cv2.INTER_AREA,
+            use_cache=use_cache
+        )
 
     # Convert to grayscale for MS-SSIM calculation
     if len(frame1.shape) == 3:
@@ -340,11 +384,19 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5) -
         # Downsample for next scale (if not the last scale)
         if scale < max_possible_scales - 1:
             prev_shape = current_frame1.shape
-            current_frame1 = cv2.resize(
-                current_frame1, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
+            # Calculate target dimensions for 0.5x scaling
+            new_h = int(current_frame1.shape[0] * 0.5)
+            new_w = int(current_frame1.shape[1] * 0.5)
+            
+            current_frame1 = resize_frame_cached(
+                current_frame1, (new_w, new_h), 
+                interpolation=cv2.INTER_AREA,
+                use_cache=use_cache
             ).astype(np.float32)
-            current_frame2 = cv2.resize(
-                current_frame2, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA
+            current_frame2 = resize_frame_cached(
+                current_frame2, (new_w, new_h), 
+                interpolation=cv2.INTER_AREA,
+                use_cache=use_cache
             ).astype(np.float32)
 
             # Stop if frames become too small OR if size didn't change (safety check)
@@ -1018,13 +1070,18 @@ def calculate_compression_ratio(
 
 
 def _resize_if_needed(
-    frame1: np.ndarray, frame2: np.ndarray
+    frame1: np.ndarray, frame2: np.ndarray, use_cache: bool = True
 ) -> tuple[np.ndarray, np.ndarray]:
     """Resize both frames to the smallest common size if their shapes differ.
 
     The function keeps the aspect ratio by simply resizing to the *minimum* of the
     two input shapes. This avoids any padding/cropping artefacts while ensuring
     metric functions receive arrays with identical dimensions.
+    
+    Args:
+        frame1: First frame to resize
+        frame2: Second frame to resize
+        use_cache: Whether to use the resized frame cache for efficiency
     """
     if frame1.shape[:2] == frame2.shape[:2]:
         return frame1, frame2
@@ -1033,11 +1090,15 @@ def _resize_if_needed(
     target_w = min(frame1.shape[1], frame2.shape[1])
 
     try:
-        frame1_resized = cv2.resize(
-            frame1, (target_w, target_h), interpolation=cv2.INTER_AREA
+        frame1_resized = resize_frame_cached(
+            frame1, (target_w, target_h), 
+            interpolation=cv2.INTER_AREA,
+            use_cache=use_cache
         )
-        frame2_resized = cv2.resize(
-            frame2, (target_w, target_h), interpolation=cv2.INTER_AREA
+        frame2_resized = resize_frame_cached(
+            frame2, (target_w, target_h), 
+            interpolation=cv2.INTER_AREA,
+            use_cache=use_cache
         )
     except Exception as exc:  # pragma: no cover – surface as ValueError for callers
         raise ValueError(f"Failed to resize frames to common size: {exc}") from exc

@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 from giflab.config import MetricsConfig
 from giflab.meta import GifMetadata
-from giflab.metrics import calculate_comprehensive_metrics
+from giflab.metrics import calculate_comprehensive_metrics, calculate_comprehensive_metrics_from_frames
 from giflab.optimization_validation.config import ValidationConfig
 from giflab.optimization_validation.data_structures import (
     ValidationResult,
@@ -221,7 +221,14 @@ class TestValidationFlowIntegration:
         checker = ValidationChecker(validation_config)
 
         original_metadata = GifMetadata(
-            orig_frames=8, orig_fps=15.0, orig_kilobytes=100.0
+            gif_sha="test_sha256_hash",
+            orig_filename="test.gif",
+            orig_width=640,
+            orig_height=480,
+            orig_n_colors=256,
+            orig_frames=8,
+            orig_fps=15.0,
+            orig_kilobytes=100.0
         )
 
         # Test different content types
@@ -568,12 +575,12 @@ class TestValidationSystemIntegrationE2E:
         config.ENABLE_SSIMULACRA2 = True
 
         # Mock Phase 3 components for consistent test
-        with patch("giflab.metrics.calculate_text_ui_metrics") as mock_text_ui, patch(
-            "giflab.metrics.calculate_ssimulacra2_quality_metrics"
+        with patch("giflab.text_ui_validation.calculate_text_ui_metrics") as mock_text_ui, patch(
+            "giflab.ssimulacra2_metrics.calculate_ssimulacra2_quality_metrics"
         ) as mock_ssim2, patch(
-            "giflab.metrics.should_validate_text_ui", return_value=(True, {})
+            "giflab.text_ui_validation.should_validate_text_ui", return_value=(True, {})
         ), patch(
-            "giflab.metrics.should_use_ssimulacra2", return_value=True
+            "giflab.ssimulacra2_metrics.should_use_ssimulacra2", return_value=True
         ):
             mock_text_ui.return_value = {
                 "has_text_ui_content": True,
@@ -595,11 +602,18 @@ class TestValidationSystemIntegrationE2E:
             }
 
             # Calculate metrics
-            metrics = calculate_comprehensive_metrics(orig_frames, comp_frames, config)
+            metrics = calculate_comprehensive_metrics_from_frames(orig_frames, comp_frames, config)
 
         # Step 2: Create validation metadata
         original_metadata = GifMetadata(
-            orig_frames=3, orig_fps=10.0, orig_kilobytes=90.0
+            gif_sha="test_sha256_hash",
+            orig_filename="test_ui.gif",
+            orig_width=640,
+            orig_height=480,
+            orig_n_colors=256,
+            orig_frames=3,
+            orig_fps=10.0,
+            orig_kilobytes=90.0
         )
 
         # Step 3: Run validation
@@ -615,7 +629,7 @@ class TestValidationSystemIntegrationE2E:
         )
 
         # Step 4: Verify complete flow
-        assert validation_result.metrics.has_text_ui_content is True
+        assert validation_result.metrics.has_text_ui_content == 1.0  # Stored as float
         assert validation_result.metrics.text_ui_edge_density == 0.18
 
         # Should complete validation successfully
@@ -662,7 +676,14 @@ class TestValidationSystemIntegrationE2E:
             }
 
             original_metadata = GifMetadata(
-                orig_frames=5, orig_fps=15.0, orig_kilobytes=100.0
+                gif_sha=f"test_sha_{gif_name}",
+                orig_filename=f"{gif_name}.gif",
+                orig_width=640,
+                orig_height=480,
+                orig_n_colors=256,
+                orig_frames=5,
+                orig_fps=15.0,
+                orig_kilobytes=100.0
             )
 
             result = checker.validate_compression_result(
@@ -700,7 +721,14 @@ class TestValidationSystemIntegrationE2E:
         }
 
         original_metadata = GifMetadata(
-            orig_frames=5, orig_fps=12.0, orig_kilobytes=80.0
+            gif_sha="test_sha_incomplete",
+            orig_filename="test_error.gif",
+            orig_width=640,
+            orig_height=480,
+            orig_n_colors=256,
+            orig_frames=5,
+            orig_fps=12.0,
+            orig_kilobytes=80.0
         )
 
         # Should handle missing Phase 3 metrics gracefully
@@ -763,7 +791,14 @@ class TestValidationSystemIntegrationE2E:
         }
 
         original_metadata = GifMetadata(
-            orig_frames=8, orig_fps=15.0, orig_kilobytes=110.0
+            gif_sha="test_sha_performance",
+            orig_filename="test_perf.gif",
+            orig_width=640,
+            orig_height=480,
+            orig_n_colors=256,
+            orig_frames=8,
+            orig_fps=15.0,
+            orig_kilobytes=110.0
         )
 
         # Measure validation time

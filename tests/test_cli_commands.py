@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 from giflab.cli import (
-    debug_failures,
+    view_failures,
     main,
     organize_directories,
     run,
@@ -231,22 +231,22 @@ class TestSelectPipelinesCommand:
 class TestDebugFailuresCommand:
     """Tests for debug-failures CLI command."""
 
-    def test_debug_failures_help(self):
-        """Test debug-failures command help."""
+    def test_view_failures_help(self):
+        """Test view-failures command help."""
         runner = CliRunner()
-        result = runner.invoke(debug_failures, ["--help"])
+        result = runner.invoke(view_failures, ["--help"])
 
         assert result.exit_code == 0
         assert (
-            "Debug pipeline elimination failures using the cached failure database"
+            "View detailed information about failed pipelines"
             in result.output
         )
         assert "--error-type" in result.output
 
-    def test_debug_failures_missing_cache(self):
-        """Test debug command with missing cache directory."""
+    def test_view_failures_missing_cache(self):
+        """Test view command with missing cache directory."""
         runner = CliRunner()
-        result = runner.invoke(debug_failures, ["--cache-dir", "/nonexistent/cache"])
+        result = runner.invoke(view_failures, ["--cache-dir", "/nonexistent/cache"])
 
         # Should handle missing cache gracefully
         assert "No failures found" in result.output or result.exit_code != 0

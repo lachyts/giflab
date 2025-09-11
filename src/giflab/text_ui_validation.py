@@ -964,11 +964,10 @@ def should_validate_text_ui(
 
     # Standard text/UI detection
     is_standard_text = (
-        (0.03 <= avg_edge_density <= 0.10)
-        or (0.03 <= max_edge_density <= 0.12)  # Text/UI typical range
-        or avg_components >= 2.0  # Peak edge density in range
-        or total_components  # Average 2+ components per frame
-        >= 5  # At least 5 total components found
+        (0.03 <= avg_edge_density <= 0.10)  # Text/UI typical range
+        or (0.03 <= max_edge_density <= 0.12)  # Peak edge density in range
+        or avg_components >= 2.0  # Average 2+ components per frame
+        or total_components >= 5  # At least 5 total components found
     )
 
     should_validate = (

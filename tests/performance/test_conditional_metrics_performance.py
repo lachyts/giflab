@@ -24,22 +24,26 @@ class TestConditionalMetricsPerformance:
             compressed = []
             
             for i in range(num_frames):
-                # Create original frame
-                orig = np.ones((*size, 3), dtype=np.uint8) * (100 + i * 10)
+                # Create more realistic original frame with gradient patterns
+                y, x = np.ogrid[:size[0], :size[1]]
+                gradient = ((x + y + i * 20) % 256).astype(np.uint8)
+                orig = np.stack([gradient, gradient, gradient], axis=-1)
                 original.append(orig)
                 
                 # Create compressed frame based on quality
                 if quality == "high":
-                    # Very minor changes (high quality)
-                    noise = np.random.normal(0, 2, orig.shape)
+                    # Very minor changes (high quality) - almost identical
+                    noise = np.random.normal(0, 1, orig.shape)
+                    comp = np.clip(orig.astype(float) + noise, 0, 255).astype(np.uint8)
                 elif quality == "medium":
                     # Moderate changes
                     noise = np.random.normal(0, 10, orig.shape)
+                    comp = np.clip(orig.astype(float) + noise, 0, 255).astype(np.uint8)
                 else:  # low
                     # Significant changes
                     noise = np.random.normal(0, 30, orig.shape)
+                    comp = np.clip(orig.astype(float) + noise, 0, 255).astype(np.uint8)
                 
-                comp = np.clip(orig + noise, 0, 255).astype(np.uint8)
                 compressed.append(comp)
             
             return original, compressed
