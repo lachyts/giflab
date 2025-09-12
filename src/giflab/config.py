@@ -206,8 +206,11 @@ class MetricsConfig:
             self.POSITIONAL_METRICS = ["ssim", "mse", "fsim", "chist"]
 
 # Frame cache configuration (added for performance optimization)
+# EXPERIMENTAL: Caching disabled by default due to performance degradation found in Phase 4.3 benchmarking
+ENABLE_EXPERIMENTAL_CACHING = False
+
 FRAME_CACHE = {
-    "enabled": True,  # Enable frame caching
+    "enabled": ENABLE_EXPERIMENTAL_CACHING,  # Enable frame caching
     "memory_limit_mb": 500,  # Maximum memory usage for in-memory cache
     "disk_path": None,  # Path to disk cache (None for default ~/.giflab_cache)
     "disk_limit_mb": 2000,  # Maximum disk cache size
@@ -303,6 +306,77 @@ MONITORING = {
         "sampling": True,  # Monitor frame sampling performance
         "lazy_imports": True,  # Monitor lazy import patterns
         "metrics_calculation": True,  # Monitor core metrics calculation
+        "memory_pressure": True,  # Monitor system memory pressure
+    },
+    
+    # Memory pressure monitoring configuration
+    "memory_pressure": {
+        "enabled": True,  # Enable memory pressure monitoring
+        "update_interval": 5.0,  # Seconds between memory checks
+        "auto_eviction": True,  # Enable automatic cache eviction under pressure
+        "eviction_policy": "conservative",  # Eviction policy: "conservative", "aggressive"
+        
+        # Memory pressure thresholds (fractions of system memory)
+        "thresholds": {
+            "warning": 0.70,    # Warning level at 70% system memory
+            "critical": 0.80,   # Critical level at 80% system memory
+            "emergency": 0.95,  # Emergency level at 95% system memory
+        },
+        
+        # Eviction targets as fraction of process memory to free
+        "eviction_targets": {
+            "warning": 0.15,    # Free 15% of process memory at warning
+            "critical": 0.30,   # Free 30% of process memory at critical
+            "emergency": 0.50,  # Free 50% of process memory at emergency
+        },
+        
+        # Hysteresis to prevent eviction thrashing
+        "hysteresis": {
+            "enable_delta": 0.05,   # Re-enable pressure monitoring 5% below threshold
+            "eviction_cooldown": 30.0,  # Minimum seconds between evictions
+        },
+        
+        # Integration with existing cache limits
+        "respect_cache_limits": True,  # Don't evict below configured cache minimums
+        "fallback_when_unavailable": True,  # Graceful degradation without psutil
+    },
+    
+    # Phase 7: Performance regression monitoring configuration
+    "performance": {
+        "enabled": False,  # Disabled by default, enable with GIFLAB_ENABLE_PERFORMANCE_MONITORING=true
+        "regression_threshold": 0.10,  # Alert on 10%+ performance regression
+        "confidence_level": 0.95,  # 95% confidence level for statistical analysis
+        "monitoring_interval": 3600,  # Seconds between continuous monitoring checks (1 hour)
+        "max_history_days": 30,  # Days to retain performance history
+        "baseline_min_samples": 3,  # Minimum samples needed to establish baseline
+        
+        # Scenarios for continuous monitoring (lightweight subset)
+        "continuous_scenarios": [
+            "continuous_small_gif",  # Small GIF for regular monitoring
+        ],
+        
+        # Performance data storage
+        "data_directory": "performance_data",  # Directory for baselines and history
+        "baseline_file": "performance_baselines.json",  # Baseline storage file
+        "history_directory": "performance_history",  # History storage directory
+        
+        # Alert configuration
+        "alert_on_regression": True,  # Send alerts via AlertManager
+        "alert_severities": {
+            "minor_regression": 0.10,     # 10%+ regression = INFO
+            "major_regression": 0.25,     # 25%+ regression = WARNING
+            "critical_regression": 0.50,  # 50%+ regression = CRITICAL
+        },
+        
+        # CI/CD integration
+        "fail_ci_on_regression": True,  # Fail CI/CD on significant regression
+        "ci_regression_threshold": 0.15,  # 15%+ regression fails CI/CD
+        "ci_scenarios": ["small_gif_basic", "medium_gif_comprehensive"],  # Scenarios for CI
+        
+        # Phase 6 optimization validation
+        "validate_phase6": True,  # Monitor Phase 6 optimization effectiveness
+        "phase6_baseline_speedup": 5.04,  # Expected Phase 6 speedup (5.04x)
+        "phase6_regression_alert": 0.20,  # Alert if Phase 6 speedup drops 20%+
     },
     
     "verbose": False,  # Enable verbose monitoring logs

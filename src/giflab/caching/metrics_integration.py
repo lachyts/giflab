@@ -6,6 +6,7 @@ with various metric calculation functions like SSIM, MS-SSIM, LPIPS, etc.
 """
 
 import logging
+import time
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -178,8 +179,9 @@ def calculate_lpips_cached(
     """
     if not use_validation_cache or not VALIDATION_CACHE.get("enabled", True) or not VALIDATION_CACHE.get("cache_lpips", True):
         # Cache disabled, calculate directly
-        from ..deep_perceptual_metrics import calculate_lpips_frames
-        return calculate_lpips_frames([frame1], [frame2], net=net, version=version)[0]
+        from ..deep_perceptual_metrics import calculate_deep_perceptual_quality_metrics
+        result = calculate_deep_perceptual_quality_metrics([frame1], [frame2], config={"device": "auto"})
+        return result.get("lpips_quality_mean", 0.5)
     
     cache = get_validation_cache()
     config = {"net": net, "version": version}
@@ -193,8 +195,9 @@ def calculate_lpips_cached(
         return float(cached_value)
     
     # Calculate and cache
-    from ..deep_perceptual_metrics import calculate_lpips_frames
-    value = calculate_lpips_frames([frame1], [frame2], net=net, version=version)[0]
+    from ..deep_perceptual_metrics import calculate_deep_perceptual_quality_metrics
+    result = calculate_deep_perceptual_quality_metrics([frame1], [frame2], config={"device": "auto"})
+    value = result.get("lpips_quality_mean", 0.5)
     
     cache.put(
         frame1, frame2, "lpips", value, config, frame_indices
@@ -260,7 +263,6 @@ def calculate_gradient_color_cached(
     
     # Store in cache with the composite key
     if frames1 and frames2:
-        import time
         from ..caching.validation_cache import ValidationResult
         
         entry = ValidationResult(
@@ -332,8 +334,6 @@ def calculate_ssimulacra2_cached(
     
     # Store in cache
     if frames1 and frames2:
-        import time
-        import json
         from ..caching.validation_cache import ValidationResult
         
         entry = ValidationResult(

@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import cv2
 import numpy as np
@@ -16,10 +16,201 @@ from skimage.feature import local_binary_pattern
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 
-from .config import DEFAULT_METRICS_CONFIG, MetricsConfig
-from .caching.resized_frame_cache import resize_frame_cached
+from .config import DEFAULT_METRICS_CONFIG, ENABLE_EXPERIMENTAL_CACHING, FRAME_CACHE, MetricsConfig
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Conditional Import Architecture for Experimental Caching
+# ============================================================================
+# This section implements the conditional import pattern designed to break
+# circular dependencies between metrics and caching modules while providing
+# graceful degradation when caching is unavailable.
+#
+# Architecture Goals:
+# 1. Eliminate metrics ↔ caching circular dependency
+# 2. Allow safe toggling of experimental caching features
+# 3. Provide fallback implementations for production stability
+# 4. Enable comprehensive error handling with actionable guidance
+#
+# Flow Control:
+# 1. Check ENABLE_EXPERIMENTAL_CACHING feature flag
+# 2. Attempt conditional imports with comprehensive error handling
+# 3. Set up fallback implementations if imports fail
+# 4. Initialize module-level state variables for runtime access
+
+# Initialize module-level caching state variables
+# These are set during import and remain stable for the module's lifetime
+CACHING_ENABLED = False  # True if caching modules successfully imported
+get_frame_cache: Callable[[], Any] | None = None  # Function reference or None
+resize_frame_cached: Callable[..., Any]  # Function reference or fallback implementation
+CACHING_ERROR_MESSAGE: str | None = None  # Detailed error message for troubleshooting
+
+if ENABLE_EXPERIMENTAL_CACHING:
+    try:
+        # Attempt to import caching modules
+        # These imports may fail due to:
+        # 1. Missing dependencies (e.g., cache backends not installed)
+        # 2. Circular import issues (if caching modules import metrics)
+        # 3. Module initialization errors (configuration issues)
+        from .caching import get_frame_cache
+        from .caching.resized_frame_cache import resize_frame_cached
+
+        CACHING_ENABLED = True
+        logger.debug("✅ Caching modules loaded successfully")
+
+    except ImportError as e:
+        # Handle missing module dependencies with actionable guidance
+        # This is the most common failure mode in production
+        error_details = str(e)
+        module_name = error_details.split("'")[1] if "'" in error_details else "unknown"
+
+        CACHING_ERROR_MESSAGE = (
+            f"🚨 Caching features unavailable due to import error.\n"
+            f"Failed module: {module_name}\n"
+            f"Error details: {error_details}\n\n"
+            f"To resolve:\n"
+            f"1. Verify all caching dependencies are installed: poetry install\n"
+            f"2. Check for circular dependency issues in caching modules\n"
+            f"3. Disable caching if issues persist: ENABLE_EXPERIMENTAL_CACHING = False\n"
+            f"4. Report issue if problem continues: https://github.com/animately/giflab/issues"
+        )
+
+        logger.warning(f"❌ Failed to import caching modules: {e}")
+        logger.info("💡 Falling back to non-cached operations")
+        CACHING_ENABLED = False
+
+    except Exception as e:
+        # Handle unexpected errors during caching module initialization
+        # These could be configuration errors, memory issues, or system problems
+        CACHING_ERROR_MESSAGE = (
+            f"🚨 Unexpected error loading caching modules.\n"
+            f"Error type: {type(e).__name__}\n"
+            f"Error details: {str(e)}\n\n"
+            f"To resolve:\n"
+            f"1. Check system resources and memory availability\n"
+            f"2. Verify caching module integrity: poetry install --no-cache\n"
+            f"3. Disable caching temporarily: ENABLE_EXPERIMENTAL_CACHING = False\n"
+            f"4. Report issue: https://github.com/animately/giflab/issues"
+        )
+
+        logger.error(f"💥 Unexpected error loading caching modules: {e}")
+        logger.info("💡 Falling back to non-cached operations")
+        CACHING_ENABLED = False
+
+else:
+    # Feature flag is disabled - this is the normal production state
+    # until caching has been thoroughly tested and validated
+    logger.debug("📋 Experimental caching is disabled in configuration")
+
+
+def _resize_frame_fallback(
+    frame: Any,
+    size: tuple[int, int],
+    interpolation: int = cv2.INTER_AREA,
+    **kwargs: Any,
+) -> Any:
+    """Fallback implementation for frame resizing when caching is disabled.
+
+    Provides the same interface as resize_frame_cached but performs direct
+    OpenCV resizing without any caching functionality. This ensures that
+    all resize operations continue to work even when caching is unavailable.
+
+    Args:
+        frame: Input frame/image to resize
+        size: Target size as (width, height) tuple
+        interpolation: OpenCV interpolation method (default: INTER_AREA)
+        **kwargs: Additional arguments (ignored in fallback, maintained for compatibility)
+
+    Returns:
+        Resized frame using OpenCV's cv2.resize()
+
+    Design Notes:
+        - Maintains same function signature as cached version for drop-in replacement
+        - Uses cv2.INTER_AREA as default for high-quality downsampling
+        - Ignores cache-specific kwargs to prevent errors
+        - Performance: Direct OpenCV call, no overhead
+
+    Example:
+        >>> resized = _resize_frame_fallback(frame, (100, 100))
+        >>> # Equivalent to: cv2.resize(frame, (100, 100), interpolation=cv2.INTER_AREA)
+    """
+    return cv2.resize(frame, size, interpolation=interpolation)
+
+
+def get_caching_status() -> dict[str, Any]:
+    """Get comprehensive caching system status and diagnostic information.
+
+    Provides detailed information about the current state of the conditional
+    import system, including success/failure status, error messages, and
+    available functionality. Used for troubleshooting and monitoring.
+
+    Returns:
+        dict[str, any]: Status dictionary containing:
+            - enabled (bool): Whether caching modules successfully loaded
+            - experimental_flag (bool): State of ENABLE_EXPERIMENTAL_CACHING flag
+            - error_message (str|None): Detailed error message if import failed
+            - fallback_available (bool): Whether fallback functions are set up
+            - modules_available (dict): Per-module availability status
+
+    Thread Safety:
+        Thread-safe. Accesses only module-level constants set during import.
+
+    Performance:
+        Very fast (~0.1ms). Safe to call frequently for monitoring.
+
+    Example:
+        >>> status = get_caching_status()
+        >>> if status["enabled"]:
+        >>>     print("✅ Caching is fully operational")
+        >>> elif status["error_message"]:
+        >>>     print(f"❌ Caching error: {status['error_message']}")
+        >>> else:
+        >>>     print("📋 Caching disabled by configuration")
+        >>>
+        >>> # Check specific module availability
+        >>> if status["modules_available"]["resize_frame_cached"]:
+        >>>     print("Resize caching available")
+
+    CLI Integration:
+        This function is used by `giflab deps check` to report caching status
+        and provide troubleshooting information to users.
+    """
+    return {
+        "enabled": CACHING_ENABLED,
+        "experimental_flag": ENABLE_EXPERIMENTAL_CACHING,
+        "error_message": CACHING_ERROR_MESSAGE,
+        "fallback_available": resize_frame_cached is not None,
+        "modules_available": {
+            "get_frame_cache": get_frame_cache is not None,
+            "resize_frame_cached": resize_frame_cached is not None,
+        },
+    }
+
+
+# ============================================================================
+# Fallback Function Assignment
+# ============================================================================
+# Ensure resize_frame_cached is always callable, either with the real cached
+# implementation or the fallback. This assignment happens after the conditional
+# import attempt so that resize_frame_cached is never None.
+
+# Ensure resize_frame_cached is always assigned to a callable function
+# This prevents "None not callable" errors that mypy detects
+if not CACHING_ENABLED:
+    # Assign fallback implementation when caching is unavailable
+    # This ensures resize_frame_cached() calls always work, providing
+    # transparent fallback behavior for all calling code
+    resize_frame_cached = _resize_frame_fallback
+    logger.debug("🔄 Using fallback resize implementation (no caching)")
+else:
+    # resize_frame_cached was imported successfully from caching module
+    # No additional assignment needed - it's already set from import
+    logger.debug("🚀 Using cached resize implementation")
+
+# ============================================================================
+# End of Conditional Import Architecture
+# ============================================================================
 
 
 @dataclass
@@ -48,21 +239,43 @@ def extract_gif_frames(
         IOError: If GIF cannot be read
         ValueError: If GIF is invalid or corrupted
     """
-    # Try to get from cache first
-    from .caching import get_frame_cache
+    # Check if caching is available and enabled
+    # Try dynamic import if runtime config is enabled but modules weren't loaded  
+    global get_frame_cache, CACHING_ENABLED
     
-    frame_cache = get_frame_cache()
-    cached = frame_cache.get(gif_path, max_frames)
+    runtime_enabled = FRAME_CACHE.get("enabled", False)
+    caching_available = CACHING_ENABLED and get_frame_cache is not None
     
-    if cached is not None:
-        frames, frame_count, dimensions, duration_ms = cached
-        return FrameExtractResult(
-            frames=frames,
-            frame_count=frame_count,
-            dimensions=dimensions,
-            duration_ms=duration_ms,
-        )
+    # If runtime enabled but caching not available, try dynamic import
+    if runtime_enabled and not caching_available:
+        try:
+            # Attempt dynamic import for testing scenarios
+            from .caching import get_frame_cache as _get_frame_cache
+            get_frame_cache = _get_frame_cache
+            caching_available = True
+            CACHING_ENABLED = True
+            logger.debug("✅ Dynamic caching import successful for runtime-enabled cache")
+        except ImportError:
+            logger.debug("❌ Dynamic caching import failed, cache unavailable")
+            caching_available = False
     
+    use_cache = caching_available and runtime_enabled
+
+    # Try to get from cache first (only if caching is enabled)
+    
+    if use_cache:
+        frame_cache = get_frame_cache()
+        cached = frame_cache.get(gif_path, max_frames)
+
+        if cached is not None:
+            frames, frame_count, dimensions, duration_ms = cached
+            return FrameExtractResult(
+                frames=frames,
+                frame_count=frame_count,
+                dimensions=dimensions,
+                duration_ms=duration_ms,
+            )
+
     # Not in cache, extract frames
     try:
         with Image.open(gif_path) as img:
@@ -75,16 +288,17 @@ def extract_gif_frames(
                     dimensions=(img.width, img.height),
                     duration_ms=0,
                 )
-                
-                # Cache the result
-                frame_cache.put(
-                    gif_path,
-                    result.frames,
-                    result.frame_count,
-                    result.dimensions,
-                    result.duration_ms
-                )
-                
+
+                # Cache the result (only if caching is enabled)
+                if use_cache:
+                    frame_cache.put(
+                        gif_path,
+                        result.frames,
+                        result.frame_count,
+                        result.dimensions,
+                        result.duration_ms,
+                    )
+
                 return result
 
             total_frames = img.n_frames
@@ -135,16 +349,17 @@ def extract_gif_frames(
                 dimensions=(img.width, img.height),
                 duration_ms=total_duration,
             )
-            
-            # Cache the result
-            frame_cache.put(
-                gif_path,
-                result.frames,
-                result.frame_count,
-                result.dimensions,
-                result.duration_ms
-            )
-            
+
+            # Cache the result (only if caching is enabled)
+            if use_cache:
+                frame_cache.put(
+                    gif_path,
+                    result.frames,
+                    result.frame_count,
+                    result.dimensions,
+                    result.duration_ms,
+                )
+
             return result
 
     except Exception as e:
@@ -336,7 +551,9 @@ def align_frames(
     return align_frames_content_based(original_frames, compressed_frames)
 
 
-def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5, use_cache: bool = True) -> float:
+def calculate_ms_ssim(
+    frame1: np.ndarray, frame2: np.ndarray, scales: int = 5, use_cache: bool = True
+) -> float:
     """Calculate Multi-Scale SSIM (MS-SSIM) between two frames.
 
     Args:
@@ -350,9 +567,10 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5, u
     """
     if frame1.shape != frame2.shape:
         frame2 = resize_frame_cached(
-            frame2, (frame1.shape[1], frame1.shape[0]),
+            frame2,
+            (frame1.shape[1], frame1.shape[0]),
             interpolation=cv2.INTER_AREA,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
 
     # Convert to grayscale for MS-SSIM calculation
@@ -387,16 +605,18 @@ def calculate_ms_ssim(frame1: np.ndarray, frame2: np.ndarray, scales: int = 5, u
             # Calculate target dimensions for 0.5x scaling
             new_h = int(current_frame1.shape[0] * 0.5)
             new_w = int(current_frame1.shape[1] * 0.5)
-            
+
             current_frame1 = resize_frame_cached(
-                current_frame1, (new_w, new_h), 
+                current_frame1,
+                (new_w, new_h),
                 interpolation=cv2.INTER_AREA,
-                use_cache=use_cache
+                use_cache=use_cache,
             ).astype(np.float32)
             current_frame2 = resize_frame_cached(
-                current_frame2, (new_w, new_h), 
+                current_frame2,
+                (new_w, new_h),
                 interpolation=cv2.INTER_AREA,
-                use_cache=use_cache
+                use_cache=use_cache,
             ).astype(np.float32)
 
             # Stop if frames become too small OR if size didn't change (safety check)
@@ -1077,7 +1297,7 @@ def _resize_if_needed(
     The function keeps the aspect ratio by simply resizing to the *minimum* of the
     two input shapes. This avoids any padding/cropping artefacts while ensuring
     metric functions receive arrays with identical dimensions.
-    
+
     Args:
         frame1: First frame to resize
         frame2: Second frame to resize
@@ -1091,14 +1311,16 @@ def _resize_if_needed(
 
     try:
         frame1_resized = resize_frame_cached(
-            frame1, (target_w, target_h), 
+            frame1,
+            (target_w, target_h),
             interpolation=cv2.INTER_AREA,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
         frame2_resized = resize_frame_cached(
-            frame2, (target_w, target_h), 
+            frame2,
+            (target_w, target_h),
             interpolation=cv2.INTER_AREA,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
     except Exception as exc:  # pragma: no cover – surface as ValueError for callers
         raise ValueError(f"Failed to resize frames to common size: {exc}") from exc
@@ -1634,6 +1856,71 @@ def calculate_comprehensive_metrics_from_frames(
     if config is None:
         config = DEFAULT_METRICS_CONFIG
 
+    # Define default text/UI metrics once at function scope for consistent access
+    default_text_ui_metrics: dict[str, float | str] = {
+        "has_text_ui_content": False,
+        "text_ui_edge_density": 0.0,
+        "text_ui_component_count": 0,
+        "ocr_regions_analyzed": 0,
+        "ocr_conf_delta_mean": 0.0,
+        "ocr_conf_delta_min": 0.0,
+        "mtf50_ratio_mean": 1.0,
+        "mtf50_ratio_min": 1.0,
+        "edge_sharpness_score": 100.0,
+    }
+
+    # Check if Phase 6 optimized processing is enabled
+    use_phase6_optimization = (
+        os.environ.get("GIFLAB_ENABLE_PHASE6_OPTIMIZATION", "false").lower() == "true"
+    )
+
+    if use_phase6_optimization:
+        try:
+            from .optimized_metrics import calculate_optimized_comprehensive_metrics
+
+            logger.info("Using Phase 6 optimized metrics calculation")
+
+            # Call optimized implementation
+            optimized_result: dict[str, float | str] = cast(
+                dict[str, float | str],
+                calculate_optimized_comprehensive_metrics(
+                    original_frames, compressed_frames, config
+                ),
+            )
+
+            # Add file metadata if provided
+            if file_metadata:
+                if "compressed_path" in file_metadata:
+                    optimized_result["kilobytes"] = float(
+                        calculate_file_size_kb(file_metadata["compressed_path"])
+                    )
+                elif "compressed_size_bytes" in file_metadata:
+                    optimized_result["kilobytes"] = float(
+                        file_metadata["compressed_size_bytes"] / 1024.0
+                    )
+
+                if (
+                    "original_size_bytes" in file_metadata
+                    and "compressed_size_bytes" in file_metadata
+                ):
+                    optimized_result["compression_ratio"] = (
+                        file_metadata["original_size_bytes"]
+                        / file_metadata["compressed_size_bytes"]
+                        if file_metadata["compressed_size_bytes"] > 0
+                        else 1.0
+                    )
+
+            return optimized_result
+
+        except ImportError:
+            logger.warning(
+                "Phase 6 optimization module not available, falling back to standard processing"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Phase 6 optimization failed: {e}, falling back to standard processing"
+            )
+
     start_time = time.perf_counter()
 
     try:
@@ -1694,11 +1981,14 @@ def calculate_comprehensive_metrics_from_frames(
                     and not selected_metrics.get("ssimulacra2", False)
                 ):
                     # Calculate only selected metrics using the optimized function
-                    optimized_results = calculate_selected_metrics(
-                        original_frames_resized,
-                        compressed_frames_resized,
-                        selected_metrics,
-                        config,
+                    optimized_results: dict[str, float | str] = cast(
+                        dict[str, float | str],
+                        calculate_selected_metrics(
+                            original_frames_resized,
+                            compressed_frames_resized,
+                            selected_metrics,
+                            config,
+                        ),
                     )
 
                     # Add base metric names (without _mean suffix) for backwards compatibility
@@ -1712,7 +2002,7 @@ def calculate_comprehensive_metrics_from_frames(
                             optimized_results[metric] = optimized_results[mean_key]
 
                     # Add metadata about optimization
-                    optimized_results["_optimization_metadata"] = {
+                    optimized_results["_optimization_metadata"] = {  # type: ignore[assignment]
                         "quality_tier": quality_assessment.tier.value,
                         "quality_confidence": quality_assessment.confidence,
                         "base_psnr": quality_assessment.base_psnr,
@@ -1819,31 +2109,22 @@ def calculate_comprehensive_metrics_from_frames(
                             optimized_results[metric_key] = float(metric_value)
 
                     # Calculate text/UI validation metrics (always needed for Phase 3 tests)
-                    # Default fallback metrics
-                    default_text_ui_metrics = {
-                        "has_text_ui_content": False,
-                        "text_ui_edge_density": 0.0,
-                        "text_ui_component_count": 0,
-                        "ocr_regions_analyzed": 0,
-                        "ocr_conf_delta_mean": 0.0,
-                        "ocr_conf_delta_min": 0.0,
-                        "mtf50_ratio_mean": 1.0,
-                        "mtf50_ratio_min": 1.0,
-                        "edge_sharpness_score": 100.0,
-                    }
 
                     try:
                         from .text_ui_validation import calculate_text_ui_metrics
 
                         logger.debug("Calculating text/UI metrics in optimized path")
-                        text_ui_metrics = calculate_text_ui_metrics(
+                        optimized_text_ui_metrics = calculate_text_ui_metrics(
                             original_frames_resized,
                             compressed_frames_resized,
                             max_frames=5,
                         )
 
                         # Add text/UI metrics to optimized results
-                        for text_ui_key, text_ui_value in text_ui_metrics.items():
+                        for (
+                            text_ui_key,
+                            text_ui_value,
+                        ) in optimized_text_ui_metrics.items():
                             if isinstance(text_ui_value, int | float):
                                 optimized_results[text_ui_key] = float(text_ui_value)
                             else:
@@ -1864,7 +2145,7 @@ def calculate_comprehensive_metrics_from_frames(
 
                     # Calculate SSIMULACRA2 metrics (always needed for Phase 3 tests)
                     # Default fallback metrics
-                    default_ssimulacra2_metrics = {
+                    default_ssimulacra2_metrics: dict[str, float | str] = {
                         "ssimulacra2_mean": 50.0,
                         "ssimulacra2_p95": 50.0,
                         "ssimulacra2_min": 50.0,
@@ -1904,12 +2185,12 @@ def calculate_comprehensive_metrics_from_frames(
                                     ssim2_key,
                                     ssim2_value,
                                 ) in ssimulacra2_result.items():
-                                    if isinstance(ssim2_value, int | float):
-                                        optimized_results[ssim2_key] = float(
-                                            ssim2_value
-                                        )
-                                    else:
-                                        optimized_results[ssim2_key] = str(ssim2_value)
+                                    # Convert all values appropriately for type safety
+                                    optimized_results[ssim2_key] = (
+                                        float(ssim2_value)
+                                        if isinstance(ssim2_value, int | float)
+                                        else str(ssim2_value)
+                                    )
                             else:
                                 logger.debug(
                                     "SSIMULACRA2 metrics skipped based on conditional logic"
@@ -1918,7 +2199,8 @@ def calculate_comprehensive_metrics_from_frames(
                                     ssim2_key,
                                     ssim2_value,
                                 ) in default_ssimulacra2_metrics.items():
-                                    optimized_results[ssim2_key] = float(ssim2_value)
+                                    # All default values are floats, safe to cast directly
+                                    optimized_results[ssim2_key] = float(ssim2_value)  # type: ignore[assignment]
                         except Exception as e:
                             logger.warning(
                                 f"SSIMULACRA2 metrics failed in optimized path: {e}, using defaults"
@@ -1928,14 +2210,16 @@ def calculate_comprehensive_metrics_from_frames(
                                 ssim2_key,
                                 ssim2_value,
                             ) in default_ssimulacra2_metrics.items():
-                                optimized_results[ssim2_key] = float(ssim2_value)
+                                # All default values are floats, safe to cast directly
+                                optimized_results[ssim2_key] = float(ssim2_value)  # type: ignore[assignment]
                     else:
                         logger.debug("SSIMULACRA2 metrics calculation disabled")
                         for (
                             ssim2_key,
                             ssim2_value,
                         ) in default_ssimulacra2_metrics.items():
-                            optimized_results[ssim2_key] = float(ssim2_value)
+                            # All default values are floats, safe to cast directly
+                            optimized_results[ssim2_key] = float(ssim2_value)  # type: ignore[assignment]
 
                     # Calculate temporal consistency metrics
                     # These are fast metrics that should always be included
@@ -2028,7 +2312,7 @@ def calculate_comprehensive_metrics_from_frames(
                 calculator = ParallelMetricsCalculator(parallel_config)
 
                 # Define metric functions to parallelize
-                metric_functions = {
+                metric_functions: dict[str, Callable[..., Any] | None] = {
                     "ssim": None,  # Special handling needed
                     "ms_ssim": None,
                     "psnr": None,
@@ -2076,7 +2360,7 @@ def calculate_comprehensive_metrics_from_frames(
         if not use_parallel:
             # Fall back to sequential processing
             # Calculate all frame-level metrics
-            metric_values: dict[str, list[float]] = {
+            metric_values = {
                 "ssim": [],
                 "ms_ssim": [],
                 "psnr": [],
@@ -2386,15 +2670,6 @@ def calculate_comprehensive_metrics_from_frames(
         # Calculate SSIMULACRA2 metrics (Phase 3.2)
         ssimulacra2_metrics: dict[str, float | str] = {}
 
-        # Default fallback metrics
-        default_ssimulacra2_metrics: dict[str, float | str] = {
-            "ssimulacra2_mean": 50.0,
-            "ssimulacra2_p95": 50.0,
-            "ssimulacra2_min": 50.0,
-            "ssimulacra2_frame_count": 0.0,
-            "ssimulacra2_triggered": 0.0,
-        }
-
         # Check if SSIMULACRA2 metrics should be calculated
         should_calculate_ssimulacra2 = getattr(config, "ENABLE_SSIMULACRA2", True)
 
@@ -2420,50 +2695,75 @@ def calculate_comprehensive_metrics_from_frames(
                     logger.debug(
                         "SSIMULACRA2 metrics skipped based on conditional logic"
                     )
-                    ssimulacra2_metrics = default_ssimulacra2_metrics
+                    ssimulacra2_metrics = {
+                        "ssimulacra2_mean": 50.0,
+                        "ssimulacra2_p95": 50.0,
+                        "ssimulacra2_min": 50.0,
+                        "ssimulacra2_frame_count": 0.0,
+                        "ssimulacra2_triggered": 0.0,
+                    }
 
             except ImportError as e:
                 logger.info(
                     f"SSIMULACRA2 metrics module not available: {e}. Using fallback values."
                 )
-                ssimulacra2_metrics = default_ssimulacra2_metrics
+                ssimulacra2_metrics = {
+                    "ssimulacra2_mean": 50.0,
+                    "ssimulacra2_p95": 50.0,
+                    "ssimulacra2_min": 50.0,
+                    "ssimulacra2_frame_count": 0.0,
+                    "ssimulacra2_triggered": 0.0,
+                }
 
             except AttributeError as e:
                 logger.warning(
                     f"SSIMULACRA2 metrics function not found: {e}. Module may be incomplete."
                 )
-                ssimulacra2_metrics = default_ssimulacra2_metrics
+                ssimulacra2_metrics = {
+                    "ssimulacra2_mean": 50.0,
+                    "ssimulacra2_p95": 50.0,
+                    "ssimulacra2_min": 50.0,
+                    "ssimulacra2_frame_count": 0.0,
+                    "ssimulacra2_triggered": 0.0,
+                }
 
             except (ValueError, TypeError, RuntimeError) as e:
                 logger.error(
                     f"Error calculating SSIMULACRA2 metrics: {e}. Using fallback values."
                 )
-                ssimulacra2_metrics = default_ssimulacra2_metrics
+                ssimulacra2_metrics = {
+                    "ssimulacra2_mean": 50.0,
+                    "ssimulacra2_p95": 50.0,
+                    "ssimulacra2_min": 50.0,
+                    "ssimulacra2_frame_count": 0.0,
+                    "ssimulacra2_triggered": 0.0,
+                }
 
             except Exception as e:
                 logger.error(
                     f"Unexpected error in SSIMULACRA2 metrics calculation: {e}. Using fallback values."
                 )
-                ssimulacra2_metrics = default_ssimulacra2_metrics
+                ssimulacra2_metrics = {
+                    "ssimulacra2_mean": 50.0,
+                    "ssimulacra2_p95": 50.0,
+                    "ssimulacra2_min": 50.0,
+                    "ssimulacra2_frame_count": 0.0,
+                    "ssimulacra2_triggered": 0.0,
+                }
         else:
             logger.debug("SSIMULACRA2 metrics calculation disabled")
-            ssimulacra2_metrics = default_ssimulacra2_metrics
+            ssimulacra2_metrics = {
+                "ssimulacra2_mean": 50.0,
+                "ssimulacra2_p95": 50.0,
+                "ssimulacra2_min": 50.0,
+                "ssimulacra2_frame_count": 0.0,
+                "ssimulacra2_triggered": 0.0,
+            }
 
         # Calculate text/UI validation metrics (Phase 3.1)
         text_ui_metrics: dict[str, float | str] = {}
 
-        # Default fallback metrics
-        default_text_ui_metrics: dict[str, float | str] = {
-            "has_text_ui_content": False,
-            "text_ui_edge_density": 0.0,
-            "text_ui_component_count": 0,
-            "ocr_regions_analyzed": 0,
-            "ocr_conf_delta_mean": 0.0,
-            "ocr_conf_delta_min": 0.0,
-            "mtf50_ratio_mean": 1.0,
-            "mtf50_ratio_min": 1.0,
-            "edge_sharpness_score": 100.0,
-        }
+        # Use the default_text_ui_metrics already defined earlier in this function
 
         try:
             from .text_ui_validation import calculate_text_ui_metrics
@@ -2624,17 +2924,21 @@ def calculate_comprehensive_metrics_from_frames(
 
         # Add SSIMULACRA2 metrics (Phase 3.2)
         for ssim2_key, ssim2_value in ssimulacra2_metrics.items():
-            if isinstance(ssim2_value, int | float):
-                result[ssim2_key] = float(ssim2_value)
-            else:
-                result[ssim2_key] = str(ssim2_value)
+            # Convert values to appropriate types for storage
+            result[ssim2_key] = (  # type: ignore[assignment]
+                float(ssim2_value)
+                if isinstance(ssim2_value, int | float)
+                else str(ssim2_value)
+            )
 
         # Add text/UI validation metrics (Phase 3.1)
         for text_ui_key, text_ui_value in text_ui_metrics.items():
-            if isinstance(text_ui_value, int | float):
-                result[text_ui_key] = float(text_ui_value)
-            else:
-                result[text_ui_key] = str(text_ui_value)
+            # Convert values to appropriate types for storage
+            result[text_ui_key] = (
+                float(text_ui_value)
+                if isinstance(text_ui_value, int | float)
+                else str(text_ui_value)
+            )
 
         # Add frame count information
         result["frame_count"] = int(original_frame_count)

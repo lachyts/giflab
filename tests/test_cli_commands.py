@@ -1,6 +1,7 @@
 """Tests for CLI commands using click.testing.CliRunner."""
 
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,7 @@ from giflab.cli import (
     run,
     select_pipelines,
     tag,
+    deps,
 )
 
 
@@ -259,12 +261,15 @@ class TestCLIIntegration:
         """Test that all CLI commands provide help."""
         runner = CliRunner()
         commands = [
-            "run",
-            "tag",
+            "cache",
+            "deps",
+            "metrics",
             "organize-directories",
+            "run",
             "select-pipelines",
+            "tag",
+            "validate",
             "view-failures",
-            "debug-failures",
         ]
 
         for cmd in commands:
@@ -280,12 +285,15 @@ class TestCLIIntegration:
         assert result.exit_code == 0
 
         expected_commands = [
-            "run",
-            "tag",
+            "cache",
+            "deps",
+            "metrics",
             "organize-directories",
+            "run",
             "select-pipelines",
+            "tag",
+            "validate",
             "view-failures",
-            "debug-failures",
         ]
 
         for cmd in expected_commands:
@@ -331,12 +339,15 @@ class TestCLIFast:
         from giflab.cli import main
 
         expected_commands = {
-            "run",
-            "tag",
+            "cache",
+            "deps",
+            "metrics",
             "organize-directories",
+            "run",
             "select-pipelines",
+            "tag",
+            "validate",
             "view-failures",
-            "debug-failures",
         }
 
         registered_commands = set(main.commands.keys())
@@ -368,3 +379,276 @@ class TestCLIFast:
         # Should contain program name and version
         assert "giflab" in result.output
         assert "0.1.0" in result.output
+
+
+class TestDepsCommand:
+    """Tests for deps CLI command and subcommands."""
+
+    def test_deps_help(self):
+        """Test deps command help."""
+        runner = CliRunner()
+        result = runner.invoke(deps, ["--help"])
+
+        assert result.exit_code == 0
+        assert "Check dependencies and system capabilities" in result.output
+        assert "check" in result.output
+        assert "install-help" in result.output
+        assert "status" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_pil_available")
+    @patch("giflab.cli.deps_cmd.is_cv2_available")
+    @patch("giflab.cli.deps_cmd.check_import_available")
+    @patch("giflab.cli.deps_cmd.is_memory_monitoring_available")
+    def test_deps_check_all_available(self, mock_memory, mock_numpy, mock_cv2, mock_pil):
+        """Test deps check when all dependencies are available."""
+        # Mock all dependencies as available
+        mock_pil.return_value = True
+        mock_cv2.return_value = True
+        mock_numpy.return_value = True
+        mock_memory.return_value = True
+
+        with patch("giflab.cli.deps_cmd.is_torch_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_lpips_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_sklearn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_scipy_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_matplotlib_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_seaborn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_plotly_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": True, "error_message": None}):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = True
+            mock_ssim_class.return_value = mock_ssim
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["check"])
+
+            assert result.exit_code == 0
+            assert "GifLab Dependency Check" in result.output
+            assert "✅ Available" in result.output
+            assert "All dependencies are available!" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_pil_available")
+    @patch("giflab.cli.deps_cmd.is_cv2_available") 
+    def test_deps_check_missing_dependencies(self, mock_cv2, mock_pil):
+        """Test deps check when some dependencies are missing."""
+        # Mock some dependencies as missing
+        mock_pil.return_value = False
+        mock_cv2.return_value = True
+
+        with patch("giflab.cli.deps_cmd.check_import_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_memory_monitoring_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_torch_available", return_value=False), \
+             patch("giflab.cli.deps_cmd.is_lpips_available", return_value=False), \
+             patch("giflab.cli.deps_cmd.is_sklearn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_scipy_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_matplotlib_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_seaborn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_plotly_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": False, "error_message": "Some error"}):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = False
+            mock_ssim_class.return_value = mock_ssim
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["check"])
+
+            assert result.exit_code == 0
+            assert "GifLab Dependency Check" in result.output
+            assert "❌ Missing" in result.output
+            assert "Some dependencies are missing" in result.output
+            assert "giflab deps install-help" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_pil_available")
+    def test_deps_check_verbose(self, mock_pil):
+        """Test deps check with verbose flag."""
+        mock_pil.return_value = True
+
+        with patch("giflab.cli.deps_cmd.is_cv2_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.check_import_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_memory_monitoring_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_torch_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_lpips_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_sklearn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_scipy_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_matplotlib_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_seaborn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_plotly_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": True, "error_message": None}), \
+             patch("giflab.cli.deps_cmd.DEFAULT_SSIMULACRA2_PATH", "/usr/local/bin/ssimulacra2"):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = True
+            mock_ssim_class.return_value = mock_ssim
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["check", "--verbose"])
+
+            assert result.exit_code == 0
+            assert "Ready for use" in result.output
+            assert "Path: /usr/local/bin/ssimulacra2" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_pil_available")
+    def test_deps_check_json_output(self, mock_pil):
+        """Test deps check with JSON output."""
+        mock_pil.return_value = True
+
+        with patch("giflab.cli.deps_cmd.is_cv2_available", return_value=False), \
+             patch("giflab.cli.deps_cmd.check_import_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_memory_monitoring_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_torch_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_lpips_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_sklearn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_scipy_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_matplotlib_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_seaborn_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_plotly_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": True, "error_message": None}), \
+             patch("giflab.cli.deps_cmd.MONITORING", {"memory_pressure": {"enabled": True}}):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = True
+            mock_ssim_class.return_value = mock_ssim
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["check", "--json"])
+
+            assert result.exit_code == 0
+            # Should be valid JSON
+            import json
+            data = json.loads(result.output)
+            assert "Core Dependencies" in data
+            assert "PIL/Pillow" in data["Core Dependencies"]
+            assert data["Core Dependencies"]["PIL/Pillow"]["available"] is True
+            assert data["Core Dependencies"]["OpenCV (cv2)"]["available"] is False
+            assert "system" in data
+
+    def test_deps_check_error_handling(self):
+        """Test deps check handles errors gracefully."""
+        with patch("giflab.cli.deps_cmd.is_pil_available", side_effect=Exception("Test error")):
+            runner = CliRunner()
+            result = runner.invoke(deps, ["check"])
+
+            assert result.exit_code == 0
+            assert "❌ Error" in result.output
+            assert "Check failed:" in result.output
+
+    def test_deps_install_help_no_args(self):
+        """Test deps install-help without arguments."""
+        runner = CliRunner()
+        result = runner.invoke(deps, ["install-help"])
+
+        assert result.exit_code == 0
+        assert "Dependency Installation Guide" in result.output
+        assert "pip install" in result.output
+        assert "Installation Tips" in result.output
+        assert "poetry install" in result.output
+
+    def test_deps_install_help_specific_dependency(self):
+        """Test deps install-help for specific dependency."""
+        runner = CliRunner()
+        result = runner.invoke(deps, ["install-help", "pytorch"])
+
+        assert result.exit_code == 0
+        assert "Installation for pytorch" in result.output
+        assert "pip install torch torchvision" in result.output
+
+    def test_deps_install_help_unknown_dependency(self):
+        """Test deps install-help for unknown dependency."""
+        runner = CliRunner()
+        result = runner.invoke(deps, ["install-help", "unknown-dep"])
+
+        assert result.exit_code == 0
+        assert "No installation help available for 'unknown-dep'" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_pil_available")
+    @patch("giflab.cli.deps_cmd.is_cv2_available")
+    @patch("giflab.cli.deps_cmd.is_memory_monitoring_available")
+    def test_deps_status(self, mock_memory, mock_cv2, mock_pil):
+        """Test deps status command."""
+        mock_pil.return_value = True
+        mock_cv2.return_value = False
+        mock_memory.return_value = True
+
+        with patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": False}), \
+             patch("giflab.cli.deps_cmd.MONITORING", {"memory_pressure": {"enabled": True}}), \
+             patch("giflab.cli.deps_cmd.get_system_memory_monitor") as mock_get_monitor, \
+             patch("giflab.cli.deps_cmd.get_import_status", return_value={"torch": (True, False), "cv2": (False, False)}):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = True
+            mock_ssim_class.return_value = mock_ssim
+
+            # Mock memory monitor and stats
+            from giflab.monitoring.memory_monitor import MemoryStats, MemoryPressureLevel
+            mock_monitor = MagicMock()
+            mock_stats = MemoryStats(
+                process_memory_mb=100.0,
+                process_memory_percent=1.0,
+                system_memory_mb=6000.0,
+                system_memory_percent=0.6,
+                system_available_mb=4000.0,
+                total_system_mb=10000.0,
+                pressure_level=MemoryPressureLevel.NORMAL,
+                timestamp=time.time()
+            )
+            mock_monitor.collect_memory_stats.return_value = mock_stats
+            mock_get_monitor.return_value = mock_monitor
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["status"])
+
+            assert result.exit_code == 0
+            assert "Quick Status" in result.output
+            assert "✅ PIL" in result.output
+            assert "❌ OpenCV" in result.output
+            assert "Caching: Disabled" in result.output
+            assert "Memory monitoring:" in result.output
+            assert "Lazy imports: 0/2 loaded" in result.output
+
+    @patch("giflab.cli.deps_cmd.is_memory_monitoring_available")
+    def test_deps_status_memory_monitoring_disabled(self, mock_memory):
+        """Test deps status with memory monitoring disabled."""
+        mock_memory.return_value = True
+
+        with patch("giflab.cli.deps_cmd.is_pil_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.is_cv2_available", return_value=True), \
+             patch("giflab.cli.deps_cmd.Ssimulacra2Validator") as mock_ssim_class, \
+             patch("giflab.cli.deps_cmd.get_caching_status", return_value={"enabled": True}), \
+             patch("giflab.cli.deps_cmd.MONITORING", {"memory_pressure": {"enabled": False}}), \
+             patch("giflab.cli.deps_cmd.get_import_status", return_value={}):
+
+            mock_ssim = MagicMock()
+            mock_ssim.is_available.return_value = False
+            mock_ssim_class.return_value = mock_ssim
+
+            runner = CliRunner()
+            result = runner.invoke(deps, ["status"])
+
+            assert result.exit_code == 0
+            assert "Memory monitoring: 💤 Disabled" in result.output
+
+    def test_deps_main_command_registration(self):
+        """Test that deps command is registered in main CLI."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["--help"])
+
+        assert result.exit_code == 0
+        assert "deps" in result.output
+        assert "Check dependencies and system capabilities" in result.output
+
+    def test_deps_subcommand_help_access(self):
+        """Test accessing help for all deps subcommands."""
+        runner = CliRunner()
+        
+        subcommands = ["check", "install-help", "status"]
+        for subcmd in subcommands:
+            result = runner.invoke(deps, [subcmd, "--help"])
+            assert result.exit_code == 0, f"Help for {subcmd} subcommand failed"
+            assert "Usage:" in result.output, f"Help for {subcmd} missing usage info"

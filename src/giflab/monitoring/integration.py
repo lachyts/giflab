@@ -487,6 +487,18 @@ def instrument_all_systems():
     instrument_lazy_imports()
     instrument_metrics_calculation()
     
+    # Initialize memory monitoring if enabled
+    try:
+        systems_config = MONITORING.get("systems", {})
+        if systems_config.get("memory_pressure", True):
+            from .memory_integration import initialize_memory_monitoring
+            if initialize_memory_monitoring():
+                logger.info("Memory monitoring integration initialized")
+            else:
+                logger.warning("Memory monitoring initialization failed")
+    except Exception as e:
+        logger.error(f"Error initializing memory monitoring: {e}")
+    
     logger.info("All systems instrumented successfully")
 
 

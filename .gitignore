@@ -204,3 +204,6 @@ docs/archive/
 
 # Additional experimental outputs (legacy)
 elimination_results
+
+# Benchmark results and performance analysis data
+benchmark_results/

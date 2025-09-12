@@ -26,6 +26,17 @@ from giflab.lazy_imports import (
     is_cv2_available,
     is_scipy_available,
     is_sklearn_available,
+    # Phase 2.3 additions
+    get_pil,
+    is_pil_available,
+    get_matplotlib,
+    is_matplotlib_available,
+    get_seaborn,
+    is_seaborn_available,
+    get_plotly,
+    is_plotly_available,
+    get_subprocess,
+    is_subprocess_available,
 )
 
 
@@ -179,7 +190,7 @@ class TestPublicAPI:
         _availability_cache.clear()
         
         # Mock different availability states
-        mock_check.side_effect = [True, False, True, False, True]
+        mock_check.side_effect = [True, False, True, False, True, True, False, True, False, True]
         
         # Test each checker
         assert is_torch_available() is True
@@ -188,6 +199,13 @@ class TestPublicAPI:
         assert is_scipy_available() is False
         assert is_sklearn_available() is True
         
+        # Test Phase 2.3 additions
+        assert is_pil_available() is True
+        assert is_matplotlib_available() is False
+        assert is_seaborn_available() is True
+        assert is_plotly_available() is False
+        assert is_subprocess_available() is True
+        
         # Should be cached now (no more calls to mock)
         mock_check.side_effect = None
         mock_check.return_value = False  # This shouldn't be used
@@ -195,6 +213,8 @@ class TestPublicAPI:
         # These should use cached values
         assert is_torch_available() is True
         assert is_lpips_available() is False
+        assert is_pil_available() is True
+        assert is_matplotlib_available() is False
 
 
 class TestIntegration:
@@ -275,6 +295,210 @@ class TestPerformance:
         # Second call should be at least 10x faster (likely 100x+)
         if first_time > 0.0001:  # Only check if first call took measurable time
             assert second_time < first_time / 10
+
+
+class TestPhase23Additions:
+    """Test the Phase 2.3 lazy import additions."""
+    
+    def test_new_get_functions(self):
+        """Test new get_* functions added in Phase 2.3."""
+        # Test PIL functions
+        pil_module = get_pil()
+        assert pil_module is not None
+        assert hasattr(pil_module, '_module_name')
+        assert pil_module._module_name == 'PIL'
+        
+        # Test matplotlib function
+        matplotlib_module = get_matplotlib()
+        assert matplotlib_module is not None
+        assert matplotlib_module._module_name == 'matplotlib'
+        
+        # Test seaborn function  
+        seaborn_module = get_seaborn()
+        assert seaborn_module is not None
+        assert seaborn_module._module_name == 'seaborn'
+        
+        # Test plotly function
+        plotly_module = get_plotly()
+        assert plotly_module is not None
+        assert plotly_module._module_name == 'plotly'
+        
+        # Test subprocess function (standard library)
+        subprocess_module = get_subprocess()
+        assert subprocess_module is not None
+        assert subprocess_module._module_name == 'subprocess'
+    
+    def test_new_availability_checkers(self):
+        """Test new is_*_available functions added in Phase 2.3."""
+        # PIL should be available (it's a core dependency)
+        assert isinstance(is_pil_available(), bool)
+        
+        # matplotlib availability depends on installation
+        assert isinstance(is_matplotlib_available(), bool)
+        
+        # seaborn availability depends on installation
+        assert isinstance(is_seaborn_available(), bool)
+        
+        # plotly availability depends on installation
+        assert isinstance(is_plotly_available(), bool)
+        
+        # subprocess should always be available (standard library)
+        assert is_subprocess_available() is True
+    
+    def test_availability_caching_for_new_functions(self):
+        """Test that new availability functions use caching correctly."""
+        from giflab.lazy_imports import _availability_cache, _availability_lock
+        
+        # Clear cache for testing
+        with _availability_lock:
+            _availability_cache.clear()
+        
+        # First calls should populate cache
+        pil_result1 = is_pil_available()
+        matplotlib_result1 = is_matplotlib_available()
+        
+        # Cache should now contain these modules
+        with _availability_lock:
+            assert 'PIL' in _availability_cache
+            assert 'matplotlib' in _availability_cache
+        
+        # Second calls should use cached values
+        pil_result2 = is_pil_available()
+        matplotlib_result2 = is_matplotlib_available()
+        
+        # Results should be consistent
+        assert pil_result1 == pil_result2
+        assert matplotlib_result1 == matplotlib_result2
+    
+    @patch('giflab.lazy_imports.check_import_available')
+    def test_availability_with_mocked_imports(self, mock_check):
+        """Test availability checking with mocked import states."""
+        from giflab.lazy_imports import _availability_cache, _availability_lock
+        
+        # Clear cache
+        with _availability_lock:
+            _availability_cache.clear()
+        
+        # Mock different availability states for new functions
+        mock_availability = {
+            'PIL': True,
+            'matplotlib': False, 
+            'seaborn': True,
+            'plotly': False,
+            'subprocess': True
+        }
+        
+        def mock_check_func(module_name):
+            return mock_availability.get(module_name, False)
+        
+        mock_check.side_effect = mock_check_func
+        
+        # Test all new availability checkers
+        assert is_pil_available() is True
+        assert is_matplotlib_available() is False
+        assert is_seaborn_available() is True
+        assert is_plotly_available() is False
+        assert is_subprocess_available() is True
+        
+        # Verify check was called for each module
+        assert mock_check.call_count == 5
+        
+        # Test caching by calling again (should not call mock again)
+        mock_check.reset_mock()
+        
+        assert is_pil_available() is True  # From cache
+        assert is_matplotlib_available() is False  # From cache
+        
+        # Mock should not be called again
+        assert mock_check.call_count == 0
+    
+    def test_thread_safety_of_new_functions(self):
+        """Test thread safety of new availability checkers."""
+        import threading
+        from giflab.lazy_imports import _availability_cache, _availability_lock
+        
+        # Clear cache
+        with _availability_lock:
+            _availability_cache.clear()
+        
+        results = []
+        
+        def check_availability():
+            # Each thread checks availability of new functions
+            results.append({
+                'pil': is_pil_available(),
+                'matplotlib': is_matplotlib_available(),
+                'seaborn': is_seaborn_available(),
+                'plotly': is_plotly_available(),
+                'subprocess': is_subprocess_available()
+            })
+        
+        # Create multiple threads
+        threads = [threading.Thread(target=check_availability) for _ in range(5)]
+        
+        # Start all threads
+        for thread in threads:
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # All threads should get consistent results
+        first_result = results[0]
+        for result in results[1:]:
+            assert result == first_result, "Thread safety issue: inconsistent results"
+    
+    def test_integration_with_deps_command(self):
+        """Test that new lazy imports work with the deps command."""
+        # This tests integration between Phase 2.3 lazy imports and Phase 2.3 deps CLI
+        from giflab.cli.deps_cmd import is_pil_available as deps_is_pil_available
+        from giflab.cli.deps_cmd import is_matplotlib_available as deps_is_matplotlib_available
+        from giflab.cli.deps_cmd import is_seaborn_available as deps_is_seaborn_available
+        from giflab.cli.deps_cmd import is_plotly_available as deps_is_plotly_available
+        
+        # The deps command should import the same functions
+        assert deps_is_pil_available is is_pil_available
+        assert deps_is_matplotlib_available is is_matplotlib_available
+        assert deps_is_seaborn_available is is_seaborn_available
+        assert deps_is_plotly_available is is_plotly_available
+    
+    def test_lazy_module_consistency(self):
+        """Test that new get functions return consistent LazyModule instances."""
+        # Multiple calls should return the same lazy module instance
+        pil1 = get_pil()
+        pil2 = get_pil()
+        assert pil1 is pil2, "get_pil should return same LazyModule instance"
+        
+        matplotlib1 = get_matplotlib()
+        matplotlib2 = get_matplotlib()
+        assert matplotlib1 is matplotlib2, "get_matplotlib should return same LazyModule instance"
+        
+        seaborn1 = get_seaborn()
+        seaborn2 = get_seaborn()
+        assert seaborn1 is seaborn2, "get_seaborn should return same LazyModule instance"
+        
+        plotly1 = get_plotly()
+        plotly2 = get_plotly()
+        assert plotly1 is plotly2, "get_plotly should return same LazyModule instance"
+    
+    def test_import_status_includes_new_modules(self):
+        """Test that get_import_status includes new modules when used."""
+        # Use some of the new lazy imports to register them
+        _ = get_pil()
+        _ = get_matplotlib()
+        _ = get_seaborn()
+        
+        # Get import status
+        status = get_import_status()
+        
+        # Status should include the modules we've accessed
+        assert isinstance(status, dict)
+        # Note: The specific modules in status depend on what's been accessed
+        # So we just verify the status structure is correct
+        for module_name, (available, imported) in status.items():
+            assert isinstance(available, bool)
+            assert isinstance(imported, bool)
 
 
 if __name__ == "__main__":

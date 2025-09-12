@@ -207,7 +207,7 @@ class BenchmarkValidationCache:
         frames = self.generate_test_frames(10, size=(200, 200))
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", config):
+            with patch("giflab.config.VALIDATION_CACHE", config):
                 # Mock actual calculations with delays
                 def mock_ms_ssim(f1, f2, scales=5):
                     time.sleep(0.01)  # Simulate 10ms calculation

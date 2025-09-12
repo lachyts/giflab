@@ -75,7 +75,7 @@ class ParallelMetricsCalculator:
     def calculate_frame_metrics_parallel(
         self,
         aligned_pairs: list[tuple[np.ndarray, np.ndarray]],
-        metric_functions: dict[str, Callable],
+        metric_functions: dict[str, Callable | None],
         config: Any = None,
     ) -> dict[str, list[float]]:
         """Calculate frame-level metrics in parallel.

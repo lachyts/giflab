@@ -431,7 +431,7 @@ class TestValidationCache:
     
     def test_singleton_instance(self):
         """Test singleton pattern for get_validation_cache."""
-        with patch("giflab.caching.validation_cache.VALIDATION_CACHE", {
+        with patch("giflab.config.VALIDATION_CACHE", {
             "enabled": True,
             "memory_limit_mb": 50,
         }):

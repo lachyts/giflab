@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -949,3 +949,32 @@ class SyntheticFrameGenerator:
             (frame * 5, frame * 5, frame * 5 + 20, frame * 5 + 20), fill=(255, 255, 255)
         )
         return img
+
+def generate_gradient_frames(num_frames: int, width: int, height: int) -> List:
+    """
+    Compatibility function for existing benchmarking code.
+    
+    Generates a sequence of gradient frames using the SyntheticFrameGenerator.
+    
+    Args:
+        num_frames: Number of frames to generate
+        width: Frame width in pixels
+        height: Frame height in pixels
+        
+    Returns:
+        List of numpy arrays representing frames
+    """
+    generator = SyntheticFrameGenerator()
+    frames = []
+    
+    for frame_idx in range(num_frames):
+        pil_frame = generator.create_frame(
+            content_type="gradient",
+            size=(width, height),
+            frame=frame_idx,
+            total_frames=num_frames
+        )
+        # Convert PIL to numpy array for compatibility
+        frames.append(np.array(pil_frame))
+    
+    return frames

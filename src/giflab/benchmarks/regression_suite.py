@@ -23,10 +23,11 @@ import numpy as np
 from contextlib import contextmanager
 
 # Local imports
-from giflab.config import get_config
+from giflab.config import DEFAULT_METRICS_CONFIG, ENABLE_EXPERIMENTAL_CACHING
 from giflab.monitoring import get_metrics_collector, MetricType
 from giflab.caching import get_frame_cache, get_validation_cache
-from giflab.utils import generate_test_gif_with_noise, Timer
+from giflab.synthetic_gifs import generate_gradient_frames
+import cv2
 
 
 class PerformanceMetric(Enum):
@@ -423,12 +424,11 @@ class BenchmarkSuite:
             gif_path = Path(tmpdir) / "test.gif"
             compressed_path = Path(tmpdir) / "compressed.gif"
             
-            # Create test GIF
-            frames = generate_test_gif_with_noise(
+            # Create test GIF using available synthetic generation
+            frames = generate_gradient_frames(
                 num_frames=scenario.frame_count,
                 width=scenario.frame_size[0],
-                height=scenario.frame_size[1],
-                noise_level=0.1
+                height=scenario.frame_size[1]
             )
             
             # Save as GIF (mock compression)

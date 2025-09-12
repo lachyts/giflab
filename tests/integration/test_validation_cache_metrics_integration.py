@@ -66,7 +66,7 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock the actual MS-SSIM calculation
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
@@ -90,7 +90,7 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock the actual SSIM calculation
                 with patch("skimage.metrics.structural_similarity") as mock_ssim:
                     mock_ssim.return_value = 0.88
@@ -110,10 +110,10 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock the actual LPIPS calculation
-                with patch("giflab.deep_perceptual_metrics.calculate_lpips_frames") as mock_lpips:
-                    mock_lpips.return_value = [0.12]
+                with patch("giflab.deep_perceptual_metrics.calculate_deep_perceptual_quality_metrics") as mock_lpips:
+                    mock_lpips.return_value = {"lpips_quality_mean": 0.12}
                     
                     # First call should calculate
                     result1 = calculate_lpips_cached(frame1, frame2, net="alex")
@@ -126,7 +126,7 @@ class TestMetricsIntegration:
                     assert mock_lpips.call_count == 1  # No additional call
                     
                     # Different network should trigger new calculation
-                    mock_lpips.return_value = [0.15]
+                    mock_lpips.return_value = {"lpips_quality_mean": 0.15}
                     result3 = calculate_lpips_cached(frame1, frame2, net="vgg")
                     assert result3 == 0.15
                     assert mock_lpips.call_count == 2
@@ -137,7 +137,7 @@ class TestMetricsIntegration:
         frames2 = sample_frames[1:4]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock the actual calculation
                 mock_result = {
                     "gradient_score": 0.85,
@@ -164,7 +164,7 @@ class TestMetricsIntegration:
         frames2 = sample_frames[1:4]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock the actual calculation
                 mock_result = {
                     "mean_score": 75.5,
@@ -219,7 +219,7 @@ class TestMetricsIntegration:
         }
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", config):
+            with patch("giflab.config.VALIDATION_CACHE", config):
                 # MS-SSIM should not cache
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
@@ -241,7 +241,7 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
                     
@@ -269,7 +269,7 @@ class TestMetricsIntegration:
             mock_metrics = MagicMock()
             mock_metrics.calculate_ms_ssim = MagicMock(return_value=0.95)
             
-            with patch("giflab.caching.metrics_integration.metrics", mock_metrics):
+            with patch("giflab.metrics", mock_metrics):
                 # Call integration function
                 integrate_validation_cache_with_metrics()
                 
@@ -281,7 +281,7 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 # Mock with delay to simulate computation
                 def slow_calculation(f1, f2, scales=5):
                     time.sleep(0.01)  # 10ms delay
@@ -315,7 +315,7 @@ class TestMetricsIntegration:
         
         # First "run" - calculate and cache
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", config):
+            with patch("giflab.config.VALIDATION_CACHE", config):
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
                     
@@ -327,7 +327,7 @@ class TestMetricsIntegration:
         
         # Second "run" - should load from disk cache
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", config):
+            with patch("giflab.config.VALIDATION_CACHE", config):
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
                     
@@ -344,7 +344,7 @@ class TestMetricsIntegration:
         call_counts = []
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
                     
@@ -378,7 +378,7 @@ class TestMetricsIntegration:
         frame1, frame2 = sample_frames[0], sample_frames[1]
         
         with patch("giflab.caching.metrics_integration.VALIDATION_CACHE", cache_config):
-            with patch("giflab.caching.validation_cache.VALIDATION_CACHE", cache_config):
+            with patch("giflab.config.VALIDATION_CACHE", cache_config):
                 with patch("giflab.metrics.calculate_ms_ssim") as mock_ms_ssim:
                     mock_ms_ssim.return_value = 0.95
                     
